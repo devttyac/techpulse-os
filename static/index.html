@@ -2267,94 +2267,76 @@
 
       // Conversational Greeting
       if (['hi', 'hello', 'hey', 'how are you', 'who are you', 'what can you do', 'what\'s up', 'good morning', 'good evening', 'help'].some(g => q === g || q.startsWith(g + ' ') || q.endsWith(' ' + g))) {
+        const domainBadges = Object.values(takeaways).slice(0, 4).map(d => `<span class="p-1.5 rounded-lg bg-black/40 border border-white/5">${escapeHtml(d.badge || 'DOMAIN')}</span>`).join('');
         response = `
           <div class="space-y-2.5">
             <p class="text-slate-200 leading-relaxed text-xs">
-              Hello Aaron! I am your <strong>Lead Enterprise Architect & Socratic Sparring Copilot</strong>, strictly grounded in <strong>Episode #${epNum} (${escapeHtml(ep.title || 'Technical Briefing')})</strong>.
+              Hello Aaron! I am your <strong>Lead Enterprise Architect & Socratic Copilot</strong>, strictly grounded in <strong>Episode #${epNum} (${escapeHtml(ep.title || 'Technical Briefing')})</strong>.
             </p>
             <p class="text-slate-300 text-[11px] leading-relaxed">
-              I can help you evaluate production trade-offs, inspect low-level system mechanisms, analyze regulatory risk (MAS TRM & FEAT), or conduct a mock interview across today's 8 architecture domains.
+              I can evaluate production trade-offs, inspect low-level system mechanisms, or conduct a system design interview across today's topics:
             </p>
             <div class="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-cyan-300 pt-1">
-              <span class="p-1.5 rounded-lg bg-black/40 border border-white/5">🤖 Agent Workflows</span>
-              <span class="p-1.5 rounded-lg bg-black/40 border border-white/5">☁️ Multi-Region Clouds</span>
-              <span class="p-1.5 rounded-lg bg-black/40 border border-white/5">📊 Lakehouse Tables</span>
-              <span class="p-1.5 rounded-lg bg-black/40 border border-white/5">🛡️ Zero-Trust SPIFFE</span>
+              ${domainBadges}
             </div>
             <p class="text-slate-400 text-[10px] mt-1">
-              Ask any technical question or type <strong>"Interview Me"</strong> for a system design challenge.
+              Ask any question or type <strong>"Interview Me"</strong> for a system design challenge.
             </p>
           </div>
         `;
       } else if (['interview', 'challenge', 'question', 'quiz', 'coach', 'spar', 'test me'].some(k => q.includes(k))) {
+        const topDom = Object.values(takeaways)[0] || {};
         response = `
           <div class="space-y-3">
             <div>
               <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">🎯 Socratic System Design Challenge (Ep #${epNum})</span>
-              <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">Scenario (Tier-1 Architecture): You are designing a cross-region payment gateway across Azure East US and West US (RTO &lt; 60s, RPO &lt; 5s). Why choose Active-Passive Anycast traffic shedding with Azure Front Door over synchronous Multi-Region Active-Active database clustering?</h4>
+              <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">${escapeHtml(topDom.title || ep.title || 'System Architecture')}</h4>
             </div>
             <div class="p-2.5 rounded-xl bg-black/40 border border-white/10 text-slate-300 text-[11px] space-y-1">
-              <strong class="text-cyan-300 font-mono text-[10px]">Evaluation Rubric / Focal Points:</strong>
-              <p class="leading-relaxed">Address Anycast health probe cutover, WAN latency penalties (~70ms RTT on 2PC commits), and blast-radius containment.</p>
+              <strong class="text-cyan-300 font-mono text-[10px]">Architectural Prompt:</strong>
+              <p class="leading-relaxed">${escapeHtml(topDom.interview_framing || 'Explain the production trade-offs and failure modes.')}</p>
             </div>
             <p class="text-slate-400 text-[10px]">Reply with your architectural rationale.</p>
           </div>
         `;
-      } else if (['azure', 'aws', 'cloud', 'multi-region', 'failover', 'anycast', 'front door', 'resiliency', 'rto', 'rpo', 'landing zone'].some(k => q.includes(k))) {
-        response = `
-          <div class="space-y-3">
-            <div>
-              <h4 class="font-bold text-cyan-300 text-xs sm:text-sm">Architectural Deep Dive: Multi-Region High-Availability & Resilient Cloud Topology</h4>
-              <p class="text-slate-400 text-[10px] font-mono mt-0.5">Primary Sources: Azure Architecture Center & AWS Well-Architected Framework</p>
-            </div>
-            <div class="space-y-1 text-slate-300 text-[11px] sm:text-xs">
-              <p class="font-semibold text-slate-100">1. Problem: Disaster Recovery vs WAN Latency</p>
-              <p class="leading-relaxed text-slate-300">Synchronous Active-Active database clustering across distant cloud regions adds prohibitive round-trip latency (~70ms RTT) to every transactional commit and risks split-brain partitioned states.</p>
-            </div>
-            <div class="space-y-1 text-slate-300 text-[11px] sm:text-xs">
-              <p class="font-semibold text-slate-100">2. Mechanism: Anycast Edge Routing & Automated Failover</p>
-              <ul class="list-disc list-inside space-y-1 pl-1 text-slate-300">
-                <li><strong>BGP Anycast Ingress:</strong> Azure Front Door / AWS Global Accelerator ingests traffic at edge POPs directly onto private global backbones.</li>
-                <li><strong>Sub-60s Automated Failover:</strong> Dynamic health probes re-route traffic without waiting for client DNS TTL cache expiration.</li>
-                <li><strong>Asynchronous Log Streaming:</strong> Keeps RPO &lt; 5s without penalizing write transaction throughput.</li>
-              </ul>
-            </div>
-            <div class="p-2 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-[11px] text-cyan-200">
-              <strong class="text-cyan-300">🎯 Staff Architect Interview Framing:</strong>
-              <p class="mt-0.5 leading-relaxed">"Decoupling edge ingress routing from compute failover using Anycast acceleration protects write consistency while delivering sub-minute disaster recovery."</p>
-            </div>
-          </div>
-        `;
       } else {
-        // Dynamic search in active episode takeaways
-        let matchedDom = null;
-        const queryWords = q.split(/\s+/).filter(w => w.length > 2);
+        // Universal Dynamic Semantic Search across active episode
+        const stopwords = new Set(['what', 'is', 'the', 'about', 'tell', 'me', 'how', 'does', 'work', 'in', 'and', 'for', 'of', 'a', 'an', 'to', 'with', 'on', 'can', 'you', 'explain']);
+        const queryWords = q.split(/[^a-z0-9\-]+/).filter(w => !stopwords.has(w) && w.length > 1);
+        
+        let bestHits = [];
         for (const [dom, d] of Object.entries(takeaways)) {
-          const domStr = (dom + ' ' + (d.title || '') + ' ' + (d.badge || '') + ' ' + (d.bullets || []).join(' ')).toLowerCase();
-          if (queryWords.some(w => domStr.includes(w))) {
-            matchedDom = { dom, ...d };
-            break;
+          for (const b of (d.bullets || [])) {
+            const bLower = b.toLowerCase();
+            const score = queryWords.reduce((acc, w) => acc + (bLower.includes(w) ? 3 : 0), 0);
+            if (score > 0) {
+              bestHits.push({ score, dom, d, text: b });
+            }
           }
         }
 
-        if (matchedDom) {
-          const bulletsHtml = (matchedDom.bullets || []).map(b => `<li class="leading-relaxed">${escapeHtml(b)}</li>`).join('');
+        bestHits.sort((a, b) => b.score - a.score);
+
+        if (bestHits.length > 0) {
+          const matched = bestHits[0];
+          const topBullets = bestHits.slice(0, 3).map(h => `<li class="leading-relaxed">${escapeHtml(h.text)}</li>`).join('');
+          
           response = `
             <div class="space-y-3">
               <div>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-cyan-300 border border-white/10">${escapeHtml(matchedDom.badge || matchedDom.dom.toUpperCase())}</span>
-                <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">${escapeHtml(matchedDom.title)}</h4>
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-cyan-300 border border-white/10">${escapeHtml(matched.d.badge || matched.dom.toUpperCase())}</span>
+                <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">${escapeHtml(matched.d.title)}</h4>
               </div>
               <div class="space-y-1.5 text-slate-300 text-[11px] sm:text-xs">
-                <p class="font-semibold text-slate-100">Key Architectural Mechanisms (Episode #${epNum}):</p>
-                <ul class="list-disc list-inside space-y-1 pl-1 text-slate-300">
-                  ${bulletsHtml}
+                <p class="font-semibold text-slate-100">Grounded Technical Analysis (Episode #${epNum}):</p>
+                <ul class="list-disc list-inside space-y-1.5 pl-1 text-slate-300">
+                  ${topBullets}
                 </ul>
               </div>
-              ${matchedDom.interview_framing ? `
+              ${matched.d.interview_framing ? `
               <div class="p-2 rounded-lg bg-black/40 border border-white/10 text-[11px] text-slate-300">
                 <strong class="text-amber-300">💡 Interview Framing:</strong>
-                <p class="mt-0.5 leading-relaxed">${escapeHtml(matchedDom.interview_framing)}</p>
+                <p class="mt-0.5 leading-relaxed">${escapeHtml(matched.d.interview_framing)}</p>
               </div>` : ''}
             </div>
           `;
