@@ -1333,10 +1333,13 @@
     }
 
     // ==========================================
-    // REAL HTML5 NEURAL AUDIO ENGINE
+    // ROBUST HTML5 DUAL-HOST AUDIO ENGINE
     // ==========================================
-    let audioPlayer = document.getElementById('native-audio') || new Audio('/audio/ep-142.mp3');
     let isPlaying = false;
+
+    function getAudio() {
+      return document.getElementById('native-audio');
+    }
 
     function showAudioStatus(msg, isError = false) {
       const el = document.getElementById('audio-status-msg');
@@ -1348,32 +1351,30 @@
     }
 
     function initAudioSource(epId) {
-      audioPlayer = document.getElementById('native-audio') || audioPlayer;
-      // Append version parameter to prevent stale cache
-      const audioUrl = '/audio/' + epId + '.mp3?v=' + Date.now();
-      audioPlayer.src = audioUrl;
-      audioPlayer.load();
-      showAudioStatus('Audio loaded: ' + epId + '.mp3 (5:20 deep-dive)');
+      const audio = getAudio();
+      if (!audio) return;
+      audio.src = '/audio/' + epId + '.mp3';
+      audio.load();
+      showAudioStatus('Ready: ' + epId + '.mp3 (5:20 dual-host)');
     }
 
     function togglePlay() {
-      audioPlayer = document.getElementById('native-audio') || audioPlayer;
-      if (audioPlayer.paused) {
-        showAudioStatus('Connecting audio stream...');
-        const playPromise = audioPlayer.play();
-        if (playPromise !== undefined) {
-          playPromise.then(() => {
-            isPlaying = true;
-            document.getElementById('play-icon').classList.add('hidden');
-            document.getElementById('pause-icon').classList.remove('hidden');
-            showAudioStatus('▶ Playing Neural Briefing');
-          }).catch(err => {
-            console.error("Audio playback error:", err);
-            showAudioStatus('Click native audio player play button below if browser blocked autoplay', true);
-          });
-        }
+      const audio = getAudio();
+      if (!audio) return;
+
+      if (audio.paused) {
+        showAudioStatus('Streaming dual-host audio...');
+        audio.play().then(() => {
+          isPlaying = true;
+          document.getElementById('play-icon').classList.add('hidden');
+          document.getElementById('pause-icon').classList.remove('hidden');
+          showAudioStatus('▶ Playing: Episode #142 (Host A & Host B)');
+        }).catch(err => {
+          console.error("Play error:", err);
+          showAudioStatus('Tap play button on native player bar below', true);
+        });
       } else {
-        audioPlayer.pause();
+        audio.pause();
         isPlaying = false;
         document.getElementById('play-icon').classList.remove('hidden');
         document.getElementById('pause-icon').classList.add('hidden');
@@ -1382,25 +1383,42 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
-      audioPlayer = document.getElementById('native-audio');
-      initAudioSource('ep-142');
+      const audio = getAudio();
+      if (audio) {
+        initAudioSource('ep-142');
 
-      audioPlayer.addEventListener('play', () => {
-        isPlaying = true;
-        document.getElementById('play-icon').classList.add('hidden');
-        document.getElementById('pause-icon').classList.remove('hidden');
-      });
+        audio.addEventListener('play', () => {
+          isPlaying = true;
+          document.getElementById('play-icon').classList.add('hidden');
+          document.getElementById('pause-icon').classList.remove('hidden');
+          showAudioStatus('▶ Playing: Host A (Architect) & Host B (SRE)');
+        });
 
-      audioPlayer.addEventListener('pause', () => {
-        isPlaying = false;
-        document.getElementById('play-icon').classList.remove('hidden');
-        document.getElementById('pause-icon').classList.add('hidden');
-      });
+        audio.addEventListener('pause', () => {
+          isPlaying = false;
+          document.getElementById('play-icon').classList.remove('hidden');
+          document.getElementById('pause-icon').classList.add('hidden');
+        });
 
-      audioPlayer.addEventListener('error', (e) => {
-        console.error("Audio tag error:", e);
-        showAudioStatus('Error loading audio stream from server', true);
-      });
+        audio.addEventListener('timeupdate', () => {
+          if (!isNaN(audio.duration) && audio.duration > 0) {
+            const curSecs = Math.floor(audio.currentTime);
+            const mins = Math.floor(curSecs / 60).toString().padStart(2, '0');
+            const secs = (curSecs % 60).toString().padStart(2, '0');
+            document.getElementById('current-time').innerText = `${mins}:${secs}`;
+            
+            const pct = (audio.currentTime / audio.duration) * 100;
+            document.getElementById('progress-bar').style.width = pct + '%';
+          }
+        });
+
+        audio.addEventListener('ended', () => {
+          isPlaying = false;
+          document.getElementById('play-icon').classList.remove('hidden');
+          document.getElementById('pause-icon').classList.add('hidden');
+          document.getElementById('progress-bar').style.width = '0%';
+        });
+      }
     });
 
     audioPlayer.addEventListener('timeupdate', () => {
@@ -1423,7 +1441,7 @@
     });
 
     function setSpeed(speed) {
-      audioPlayer.playbackRate = speed;
+      const a = getAudio(); if (a) a.playbackRate = speed;
       document.querySelectorAll('.speed-btn').forEach(b => {
         b.className = 'speed-btn px-2 sm:px-2.5 py-1 rounded-lg text-slate-400 hover:text-white text-[11px]';
         if (b.innerText === speed + 'x') {
@@ -1434,7 +1452,7 @@
 
     function jumpTo(seconds, label) {
       document.getElementById('current-time').innerText = label;
-      audioPlayer.currentTime = seconds;
+      const a = getAudio(); if (a) { a.currentTime = seconds; if (a.paused) a.play(); }
       if (audioPlayer.paused) {
         togglePlay();
       }
@@ -1446,7 +1464,7 @@
       const pct = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
       document.getElementById('progress-bar').style.width = pct + '%';
       if (!isNaN(audioPlayer.duration) && audioPlayer.duration > 0) {
-        audioPlayer.currentTime = (pct / 100) * audioPlayer.duration;
+        const a = getAudio(); if (a && !isNaN(a.duration)) a.currentTime = (pct / 100) * a.duration;
       }
     }
 
