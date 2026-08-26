@@ -32,9 +32,18 @@ async def generate_episode_podcast_audio(episode_data: Dict[str, Any], output_di
     logger.info(f"Generating multi-host neural audio briefing for {episode_id} via Edge-TTS...")
     script_segments = episode_data.get("script_segments", [])
     
+    # If script_segments missing, construct from summary and chapters
     if not script_segments:
-        logger.warning("No script segments provided to TTS engine.")
-        return "", []
+        summary = episode_data.get("summary", "Daily technical intelligence briefing.")
+        title = episode_data.get("title", "Executive Technical Briefing")
+        script_segments = [
+            {"speaker": "Host A", "text": f"Welcome to TechPulse OS. Today we review: {title}."},
+            {"speaker": "Host B", "text": summary}
+        ]
+        for c in episode_data.get("chapters", []):
+            script_segments.append({"speaker": "Host A", "text": f"Covering {c.get('title')}, sourced from {c.get('source_name')}."})
+        script_segments.append({"speaker": "Host B", "text": "Visit the dashboard to test your knowledge with interactive flashcards."})
+
 
     with tempfile.TemporaryDirectory() as temp_dir:
         segment_files = []
