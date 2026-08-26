@@ -57,6 +57,20 @@ You MUST return a strictly valid JSON object matching this schema:
 }
 """
 
+def extract_full_articles_corpus(domain_corpus: Dict[str, List[Dict[str, Any]]]) -> Dict[str, str]:
+    corpus_map = {}
+    for domain, articles in domain_corpus.items():
+        if articles:
+            blob = f"DOMAIN: {domain.upper()}\n"
+            for a in articles[:4]:
+                title = a.get('title', 'Untitled')
+                src = a.get('source_name', 'Source')
+                summary = a.get('summary', '')
+                url = a.get('url', '')
+                blob += f"• [{src}] {title}\n  Summary: {summary}\n  Link: {url}\n\n"
+            corpus_map[domain] = blob.strip()
+    return corpus_map
+
 def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]]], episode_num: int) -> Dict[str, Any]:
     logger.info("Generating structured deterministic intelligence payload from ingested corpus...")
     
@@ -65,6 +79,8 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
     data_item = domain_corpus.get("data", [{}])[0] if domain_corpus.get("data") else {}
     sec_item = domain_corpus.get("sec", [{}])[0] if domain_corpus.get("sec") else {}
     gov_item = domain_corpus.get("gov", [{}])[0] if domain_corpus.get("gov") else {}
+
+    full_articles = extract_full_articles_corpus(domain_corpus)
 
     return {
         "id": f"ep-{episode_num}",
@@ -76,6 +92,7 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
         "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal SRE & Governance Lead)",
         "duration": "05:20",
         "total_seconds": 320,
+        "full_articles": full_articles,
         "script_segments": [
             {
                 "speaker": "Host A",
@@ -295,9 +312,13 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
 
 async def synthesize_briefing(domain_corpus: Dict[str, List[Dict[str, Any]]], episode_num: int = 142) -> Dict[str, Any]:
     api_key = os.getenv("GEMINI_API_KEY")
+    full_articles = extract_full_articles_corpus(domain_corpus)
+
     if not api_key:
         logger.info("GEMINI_API_KEY not configured. Using deterministic synthesis pipeline.")
         return generate_deterministic_fallback(domain_corpus, episode_num)
+
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
     try:
         from google import genai
@@ -313,7 +334,7 @@ async def synthesize_briefing(domain_corpus: Dict[str, List[Dict[str, Any]]], ep
         prompt = f"{SYSTEM_SYNTHESIS_PROMPT}\n\n## INGESTED ARTICLE CORPUS:\n{corpus_text}"
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=model_name,
             contents=prompt,
             config={'response_mime_type': 'application/json'}
         )
@@ -323,9 +344,10 @@ async def synthesize_briefing(domain_corpus: Dict[str, List[Dict[str, Any]]], ep
         parsed["episode_number"] = episode_num
         parsed["date"] = datetime.now(timezone.utc).strftime("%b %d, %Y")
         parsed["created_at"] = datetime.now(timezone.utc).isoformat()
-        parsed["duration"] = "05:20"
-        parsed["total_seconds"] = 320
+        parsed["duration"] = parsed.get("duration", "05:20")
+        parsed["total_seconds"] = parsed.get("total_seconds", 320)
+        parsed["full_articles"] = full_articles
         return parsed
     except Exception as e:
-        logger.error(f"Error calling Gemini API for synthesis: {e}. Falling back to deterministic pipeline.")
+        logger.error(f"Error calling Gemini API for synthesis ({model_name}): {e}. Falling back to deterministic pipeline.")
         return generate_deterministic_fallback(domain_corpus, episode_num)

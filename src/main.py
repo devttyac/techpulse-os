@@ -4,8 +4,11 @@ import logging
 import os
 import shutil
 import xml.etree.ElementTree as ET
+import email.utils
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, FileResponse
@@ -16,25 +19,13 @@ from apscheduler.triggers.cron import CronTrigger
 
 from src.ingestion import ingest_all_domains
 from src.synthesizer import synthesize_briefing
-from src.tts_engine import generate_episode_podcast_audio
+from src.tts_engine import generate_episode_podcast_audio, generate_all_domain_audios
 from src.grounded_chat import process_grounded_chat
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("techpulse.main")
-
-app = FastAPI(
-    title="TechPulse OS",
-    description="Multi-Domain Technical Intelligence & Socratic Sparring Platform",
-    version="3.4.0"
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 EPISODES_DIR = os.path.join(STORAGE_DIR, "episodes")
@@ -45,6 +36,49 @@ os.makedirs(EPISODES_DIR, exist_ok=True)
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
 scheduler = AsyncIOScheduler()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    cron_expr = os.getenv("CRON_SCHEDULE", "0 6 * * *")
+    try:
+        parts = cron_expr.split()
+        if len(parts) == 5:
+            trigger = CronTrigger(minute=parts[0], hour=parts[1], day=parts[2], month=parts[3], day_of_week=parts[4], timezone="Asia/Singapore")
+            scheduler.add_job(run_daily_pipeline, trigger)
+            scheduler.start()
+            logger.info(f"Scheduled daily pipeline with cron [{cron_expr}] SGT")
+    except Exception as e:
+        logger.warning(f"Could not parse cron expression: {e}")
+
+    # Pre-generate seed episode audio in background if missing
+    try:
+        ep142_mp3 = os.path.join(AUDIO_DIR, "ep-142.mp3")
+        if not os.path.exists(ep142_mp3):
+            with open(os.path.join(EPISODES_DIR, "ep-142.json"), "r") as fp:
+                ep142_data = json.load(fp)
+            asyncio.create_task(generate_episode_podcast_audio(ep142_data, AUDIO_DIR))
+    except Exception as e:
+        logger.error(f"Error checking seed audio on startup: {e}")
+
+    yield
+
+    if scheduler.running:
+        scheduler.shutdown()
+
+app = FastAPI(
+    title="TechPulse OS",
+    description="Multi-Domain Technical Intelligence & Socratic Sparring Platform",
+    version="3.4.0",
+    lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Seed episodes for instant out-of-the-box readiness
 SEED_EPISODES = {
@@ -183,6 +217,16 @@ def init_seed_data():
 
 init_seed_data()
 
+def get_sorted_episode_files() -> List[str]:
+    def sort_key(filename: str) -> int:
+        try:
+            base = filename.replace("ep-", "").replace(".json", "")
+            return int(base)
+        except ValueError:
+            return 0
+    files = [f for f in os.listdir(EPISODES_DIR) if f.endswith(".json")]
+    return sorted(files, key=sort_key, reverse=True)
+
 async def run_daily_pipeline():
     logger.info("Executing scheduled TechPulse daily ingestion and synthesis pipeline...")
     try:
@@ -194,40 +238,24 @@ async def run_daily_pipeline():
         
         briefing_data = await synthesize_briefing(corpus, next_num)
         
-        # Generate neural TTS audio
-        await generate_episode_podcast_audio(briefing_data, AUDIO_DIR)
+        # Generate neural TTS audio and calculate dynamic chapter offsets
+        final_mp3, dyn_chapters, duration_str, total_secs = await generate_episode_podcast_audio(briefing_data, AUDIO_DIR)
+        briefing_data["duration"] = duration_str
+        briefing_data["total_seconds"] = total_secs
+        if dyn_chapters:
+            briefing_data["chapters"] = dyn_chapters
+
+        # Generate standalone per-domain audio files
+        await generate_all_domain_audios(briefing_data, AUDIO_DIR)
         
         # Save episode JSON
         ep_path = os.path.join(EPISODES_DIR, f"{briefing_data['id']}.json")
         with open(ep_path, "w") as f:
             json.dump(briefing_data, f, indent=2)
             
-        logger.info(f"Successfully generated Episode #{next_num}: {briefing_data['title']}")
+        logger.info(f"Successfully generated Episode #{next_num}: {briefing_data['title']} ({duration_str})")
     except Exception as e:
         logger.error(f"Error executing daily pipeline: {e}")
-
-@app.on_event("startup")
-async def startup_event():
-    cron_expr = os.getenv("CRON_SCHEDULE", "0 6 * * *")
-    try:
-        parts = cron_expr.split()
-        if len(parts) == 5:
-            trigger = CronTrigger(minute=parts[0], hour=parts[1], day=parts[2], month=parts[3], day_of_week=parts[4], timezone="Asia/Singapore")
-            scheduler.add_job(run_daily_pipeline, trigger)
-            scheduler.start()
-            logger.info(f"Scheduled daily pipeline with cron [{cron_expr}] SGT")
-    except Exception as e:
-        logger.warning(f"Could not parse cron expression: {e}")
-
-    # Pre-generate seed episode audio in background if missing
-    try:
-        ep142_mp3 = os.path.join(AUDIO_DIR, "ep-142.mp3")
-        if not os.path.exists(ep142_mp3):
-            with open(os.path.join(EPISODES_DIR, "ep-142.json"), "r") as fp:
-                ep142_data = json.load(fp)
-            asyncio.create_task(generate_episode_podcast_audio(ep142_data, AUDIO_DIR))
-    except Exception as e:
-        logger.error(f"Error checking seed audio on startup: {e}")
 
 class ChatRequest(BaseModel):
     query: str
@@ -248,10 +276,9 @@ async def health_check():
 @app.get("/api/episodes")
 async def get_episodes():
     episodes = []
-    for f in sorted(os.listdir(EPISODES_DIR), reverse=True):
-        if f.endswith(".json"):
-            with open(os.path.join(EPISODES_DIR, f), "r") as fp:
-                episodes.append(json.load(fp))
+    for f in get_sorted_episode_files():
+        with open(os.path.join(EPISODES_DIR, f), "r") as fp:
+            episodes.append(json.load(fp))
     return {"episodes": episodes}
 
 @app.get("/api/episodes/{episode_id}")
@@ -284,6 +311,9 @@ async def export_vault(req: Dict[str, Any]):
     ep_id = req.get("episode_id", "ep-142")
     ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
     if not os.path.exists(ep_file):
+        ep_file = os.path.join(EPISODES_DIR, "ep-142.json")
+    
+    if not os.path.exists(ep_file):
         raise HTTPException(status_code=404, detail="Episode not found")
 
     with open(ep_file, "r") as fp:
@@ -314,9 +344,17 @@ status: permanent
         md_content += f"\n### {dom.upper()}: {data.get('title')}\n"
         for b in data.get("bullets", []):
             md_content += f"- {b}\n"
-        md_content += f"\n> [!TIP]\n> **How to Frame in an Interview:** {data.get('interview_framing')}\n"
+        if data.get('interview_framing'):
+            md_content += f"\n> [!TIP]\n> **How to Frame in an Interview:** {data.get('interview_framing')}\n"
 
-    return Response(content=md_content, media_type="text/markdown")
+    return Response(
+        content=md_content,
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f'attachment; filename="{ep_id}.md"',
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
 
 @app.get("/audio/{filename}")
 async def serve_audio(filename: str):
@@ -339,7 +377,7 @@ async def serve_audio(filename: str):
                 )
 
     # 2. Serve from volume if valid
-    if os.path.exists(file_path) and os.path.getsize(file_path) > 10000:
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 1000:
         return FileResponse(
             file_path,
             media_type="audio/mpeg",
@@ -347,7 +385,7 @@ async def serve_audio(filename: str):
         )
 
     # 3. Serve from seed_data
-    if os.path.exists(seed_path) and os.path.getsize(seed_path) > 10000:
+    if os.path.exists(seed_path) and os.path.getsize(seed_path) > 1000:
         return FileResponse(
             seed_path,
             media_type="audio/mpeg",
@@ -374,16 +412,6 @@ async def serve_audio(filename: str):
 
     raise HTTPException(status_code=404, detail="Audio file not found")
 
-    return FileResponse(
-        file_path,
-        media_type="audio/mpeg",
-        headers={
-            "Accept-Ranges": "bytes",
-            "Cache-Control": "public, max-age=86400",
-            "Access-Control-Allow-Origin": "*"
-        }
-    )
-
 @app.get("/feed.xml")
 async def podcast_rss(request: Request):
     host_url = os.getenv("HOST_URL", str(request.base_url).rstrip("/"))
@@ -404,47 +432,80 @@ async def podcast_rss(request: Request):
     ET.SubElement(channel, "itunes:category", {"text": "Technology"})
     ET.SubElement(channel, "itunes:explicit").text = "false"
 
-    for f in sorted(os.listdir(EPISODES_DIR), reverse=True):
-        if f.endswith(".json"):
-            with open(os.path.join(EPISODES_DIR, f), "r") as fp:
-                ep = json.load(fp)
+    for f in get_sorted_episode_files():
+        with open(os.path.join(EPISODES_DIR, f), "r") as fp:
+            ep = json.load(fp)
 
-            item = ET.SubElement(channel, "item")
-            ET.SubElement(item, "title").text = f"Episode #{ep.get('episode_number', 142)}: {ep.get('title')}"
-            ET.SubElement(item, "link").text = f"{host_url}/#/{ep.get('id')}"
-            ET.SubElement(item, "guid").text = ep.get("id")
-            ET.SubElement(item, "pubDate").text = ep.get("date")
-            ET.SubElement(item, "description").text = ep.get("summary")
-            
-            # HTML Show notes with direct article links
-            show_notes_html = f"<p>{ep.get('summary')}</p><h3>Podcast Chapters & Source Links:</h3><ul>"
-            for c in ep.get("chapters", []):
-                show_notes_html += f"<li><strong>{c.get('time')}</strong>: <a href='{c.get('source_url')}'>{c.get('title')} ({c.get('source_name')})</a></li>"
-            show_notes_html += "</ul>"
-            
-            content_encoded = ET.SubElement(item, "content:encoded")
-            content_encoded.text = show_notes_html
-            
-            ET.SubElement(item, "itunes:duration").text = ep.get("duration", "05:20")
-            
-            audio_url = f"{host_url}/audio/{ep.get('id')}.mp3"
-            ET.SubElement(item, "enclosure", {
-                "url": audio_url,
-                "length": "5242880",
-                "type": "audio/mpeg"
+        item = ET.SubElement(channel, "item")
+        ET.SubElement(item, "title").text = f"Episode #{ep.get('episode_number', 142)}: {ep.get('title')}"
+        ET.SubElement(item, "link").text = f"{host_url}/#/{ep.get('id')}"
+        ET.SubElement(item, "guid").text = ep.get("id")
+        
+        # Format RFC 822 pubDate
+        date_str = ep.get("date", "")
+        try:
+            dt = datetime.strptime(date_str, "%b %d, %Y").replace(tzinfo=timezone.utc)
+            pub_date_rfc = email.utils.format_datetime(dt)
+        except Exception:
+            pub_date_rfc = email.utils.formatdate(usegmt=True)
+
+        ET.SubElement(item, "pubDate").text = pub_date_rfc
+        ET.SubElement(item, "description").text = ep.get("summary")
+        
+        # HTML Show notes with direct article links
+        show_notes_html = f"<p>{ep.get('summary')}</p><h3>Podcast Chapters & Source Links:</h3><ul>"
+        for c in ep.get("chapters", []):
+            show_notes_html += f"<li><strong>{c.get('time')}</strong>: <a href='{c.get('source_url')}'>{c.get('title')} ({c.get('source_name')})</a></li>"
+        show_notes_html += "</ul>"
+        
+        content_encoded = ET.SubElement(item, "content:encoded")
+        content_encoded.text = show_notes_html
+        
+        ET.SubElement(item, "itunes:duration").text = ep.get("duration", "05:20")
+        
+        audio_url = f"{host_url}/audio/{ep.get('id')}.mp3"
+        audio_length = "5242880"
+        audio_file_path = os.path.join(AUDIO_DIR, f"{ep.get('id')}.mp3")
+        if os.path.exists(audio_file_path):
+            audio_length = str(os.path.getsize(audio_file_path))
+        else:
+            seed_audio_path = os.path.join(os.path.dirname(__file__), "..", "seed_data", "audio", f"{ep.get('id')}.mp3")
+            if os.path.exists(seed_audio_path):
+                audio_length = str(os.path.getsize(seed_audio_path))
+
+        ET.SubElement(item, "enclosure", {
+            "url": audio_url,
+            "length": audio_length,
+            "type": "audio/mpeg"
+        })
+        
+        # Podlove Simple Chapters for mobile lock screens
+        psc = ET.SubElement(item, "psc:chapters", {"version": "1.2"})
+        for c in ep.get("chapters", []):
+            ET.SubElement(psc, "psc:chapter", {
+                "start": c.get("time", "00:00"),
+                "title": c.get("title", ""),
+                "href": c.get("source_url", "")
             })
-            
-            # Podlove Simple Chapters for mobile lock screens
-            psc = ET.SubElement(item, "psc:chapters", {"version": "1.2"})
-            for c in ep.get("chapters", []):
-                ET.SubElement(psc, "psc:chapter", {
-                    "start": c.get("time", "00:00"),
-                    "title": c.get("title", ""),
-                    "href": c.get("source_url", "")
-                })
 
     xml_str = ET.tostring(rss, encoding="utf-8", method="xml")
     return Response(content=xml_str, media_type="application/rss+xml")
+
+# Root Route with No-Cache headers to prevent stale UI caching
+@app.get("/", response_class=FileResponse)
+async def serve_root():
+    index_file = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(
+            index_file,
+            media_type="text/html",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+    raise HTTPException(status_code=404, detail="Frontend index.html not found")
 
 # Mount PWA Static Frontend
 if os.path.exists(STATIC_DIR):

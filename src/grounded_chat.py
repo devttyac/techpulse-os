@@ -23,22 +23,36 @@ Guidelines:
 async def process_grounded_chat(query: str, active_episode: Dict[str, Any], chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
     api_key = os.getenv("GEMINI_API_KEY")
     full_articles = active_episode.get("full_articles", {})
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     
-    # 1. Live LLM Grounding (If GEMINI_API_KEY is configured in Dockge)
+    # 1. Live LLM Grounding
     if api_key and len(api_key.strip()) > 10 and not api_key.startswith("${"):
         try:
             from google import genai
             client = genai.Client(api_key=api_key)
 
+            corpus_content = ""
+            if full_articles:
+                for domain, text in full_articles.items():
+                    corpus_content += f"\n--- [DOMAIN: {domain.upper()}] ---\n{text}\n"
+            else:
+                # Fallback to takeaways and chapters
+                takeaways = active_episode.get("takeaways", {})
+                for dom, data in takeaways.items():
+                    corpus_content += f"\n--- [DOMAIN: {dom.upper()}: {data.get('title')}] ---\n"
+                    for b in data.get("bullets", []):
+                        corpus_content += f"• {b}\n"
+                    if data.get("interview_framing"):
+                        corpus_content += f"Interview Framing: {data.get('interview_framing')}\n"
+
             episode_context = f"""
-EPISODE: {active_episode.get('title')}
+EPISODE #{active_episode.get('episode_number', '')}: {active_episode.get('title')}
 DATE: {active_episode.get('date')}
 SUMMARY: {active_episode.get('summary')}
 
-=== COMPLETE UNABRIDGED TECHNICAL PAPERS CORPUS ===
+=== TECHNICAL PAPERS & ARCHITECTURE CORPUS ===
+{corpus_content}
 """
-            for domain, text in full_articles.items():
-                episode_context += f"\n--- [DOMAIN: {domain.upper()}] ---\n{text}\n"
 
             prompt = f"""{GROUNDED_CHAT_SYSTEM_PROMPT}
 
@@ -48,16 +62,16 @@ SUMMARY: {active_episode.get('summary')}
 {query}
 """
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model=model_name,
                 contents=prompt
             )
             return {
                 "response": response.text,
-                "model": "gemini-2.5-flash (live-grounded-corpus)",
+                "model": f"{model_name} (live-grounded-corpus)",
                 "grounded_episode_id": active_episode.get("id")
             }
         except Exception as e:
-            logger.error(f"Error calling Gemini in grounded chat: {e}. Using multi-section synthesis.")
+            logger.error(f"Error calling Gemini in grounded chat ({model_name}): {e}. Using multi-section synthesis.")
 
     # 2. Comprehensive Multi-Section Synthesis (Fallback Engine)
     q = query.lower()

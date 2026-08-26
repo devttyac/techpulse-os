@@ -14,7 +14,7 @@ logger = logging.getLogger("techpulse.ingestion")
 
 DOMAIN_FEEDS: Dict[str, List[Dict[str, str]]] = {
     "ai": [
-        {"name": "Anthropic Engineering", "url": "https://simonwillison.net/atom/everything/"},
+        {"name": "Simon Willison (AI Architecture)", "url": "https://simonwillison.net/atom/everything/"},
         {"name": "OpenAI News", "url": "https://openai.com/news/rss.xml"},
         {"name": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"}
     ],

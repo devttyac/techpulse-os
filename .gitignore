@@ -5,5 +5,5 @@ __pycache__/
 .venv
 env/
 venv/
-data/cache/
+data/
 .DS_Store
