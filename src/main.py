@@ -263,11 +263,16 @@ class ChatRequest(BaseModel):
 
 @app.get("/healthz")
 async def health_check():
+    raw_key = os.getenv("GEMINI_API_KEY", "")
+    clean_key = raw_key.strip().strip('"').strip("'")
+    key_configured = bool(clean_key and len(clean_key) > 10 and not clean_key.startswith("${"))
     ep_count = len([f for f in os.listdir(EPISODES_DIR) if f.endswith(".json")])
     return {
         "status": "healthy",
         "service": "techpulse-os",
         "version": "3.4.0",
+        "gemini_api_key_configured": key_configured,
+        "gemini_api_key_length": len(clean_key) if key_configured else 0,
         "episodes_count": ep_count,
         "scheduler_running": scheduler.running,
         "timestamp": datetime.now(timezone.utc).isoformat()
@@ -285,7 +290,11 @@ async def get_episodes():
 async def get_episode_detail(episode_id: str):
     ep_file = os.path.join(EPISODES_DIR, f"{episode_id}.json")
     if not os.path.exists(ep_file):
-        raise HTTPException(status_code=404, detail="Episode not found")
+        seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{episode_id}.json")
+        if os.path.exists(seed_f):
+            ep_file = seed_f
+        else:
+            raise HTTPException(status_code=404, detail="Episode not found")
     with open(ep_file, "r") as fp:
         return json.load(fp)
 
@@ -293,7 +302,11 @@ async def get_episode_detail(episode_id: str):
 async def chat_endpoint(req: ChatRequest):
     ep_file = os.path.join(EPISODES_DIR, f"{req.episode_id}.json")
     if not os.path.exists(ep_file):
-        ep_file = os.path.join(EPISODES_DIR, "ep-142.json")
+        seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{req.episode_id}.json")
+        if os.path.exists(seed_f):
+            ep_file = seed_f
+        else:
+            ep_file = os.path.join(EPISODES_DIR, "ep-142.json")
     
     with open(ep_file, "r") as fp:
         active_ep = json.load(fp)

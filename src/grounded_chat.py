@@ -25,7 +25,10 @@ Guidelines:
 async def call_gemini_llm(api_key: str, prompt: str) -> Optional[str]:
     clean_key = api_key.strip().strip('"').strip("'")
     if not clean_key or len(clean_key) < 10 or clean_key.startswith("${"):
+        logger.warning(f"GEMINI_API_KEY is not configured or is a placeholder in container: '{clean_key[:8]}...' (len={len(clean_key)})")
         return None
+
+    logger.info(f"Initiating live Gemini generation with API key length: {len(clean_key)}")
 
     models_to_try = [
         os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
