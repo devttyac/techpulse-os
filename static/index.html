@@ -475,11 +475,17 @@
                 </div>
               </div>
 
+              <!-- Native HTML5 Audio Element (Direct Browser Control) -->
+              <div class="pt-1">
+                <audio id="native-audio" controls class="w-full h-8 rounded-lg opacity-90 brightness-95" preload="metadata" src="/audio/ep-142.mp3"></audio>
+                <div id="audio-status-msg" class="text-[10px] font-mono text-cyan-400 mt-1 hidden"></div>
+              </div>
+
               <!-- Speed Toolbar -->
               <div class="flex items-center justify-between pt-1 text-xs">
                 <div class="flex items-center gap-1.5 text-slate-300 text-[10px] sm:text-[11px] truncate mr-2">
                   <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"></span>
-                  <span class="truncate">Microsoft Neural Edge-TTS</span>
+                  <span class="truncate">Microsoft Neural Edge-TTS (GuyNeural & AriaNeural)</span>
                 </div>
                 <div class="flex items-center bg-black/50 rounded-xl p-0.5 sm:p-1 border border-white/10 font-mono text-xs flex-shrink-0">
                   <button onclick="setSpeed(1.0)" class="speed-btn px-2 sm:px-2.5 py-1 rounded-lg text-white font-bold bg-white/15 text-[11px]">1.0x</button>
@@ -1324,37 +1330,72 @@
     // ==========================================
     // REAL HTML5 NEURAL AUDIO ENGINE
     // ==========================================
-    const audioPlayer = new Audio();
-    audioPlayer.preload = 'metadata';
+    let audioPlayer = document.getElementById('native-audio') || new Audio('/audio/ep-142.mp3');
     let isPlaying = false;
 
-    function initAudioSource(epId) {
-      audioPlayer.src = '/audio/' + epId + '.mp3';
-      audioPlayer.load();
+    function showAudioStatus(msg, isError = false) {
+      const el = document.getElementById('audio-status-msg');
+      if (el) {
+        el.classList.remove('hidden');
+        el.className = isError ? 'text-[10px] font-mono text-rose-400 mt-1' : 'text-[10px] font-mono text-cyan-400 mt-1';
+        el.innerText = msg;
+      }
     }
 
-    initAudioSource('ep-142');
+    function initAudioSource(epId) {
+      audioPlayer = document.getElementById('native-audio') || audioPlayer;
+      const audioUrl = '/audio/' + epId + '.mp3';
+      audioPlayer.src = audioUrl;
+      audioPlayer.load();
+      showAudioStatus('Audio ready: ' + epId + '.mp3');
+    }
 
     function togglePlay() {
+      audioPlayer = document.getElementById('native-audio') || audioPlayer;
       if (audioPlayer.paused) {
-        audioPlayer.play().then(() => {
-          isPlaying = true;
-          document.getElementById('play-icon').classList.add('hidden');
-          document.getElementById('pause-icon').classList.remove('hidden');
-        }).catch(err => {
-          console.error("Audio playback error:", err);
-          // Fallback UI toggle if audio file is still synthesizing
-          isPlaying = !isPlaying;
-          document.getElementById('play-icon').classList.toggle('hidden', isPlaying);
-          document.getElementById('pause-icon').classList.toggle('hidden', !isPlaying);
-        });
+        showAudioStatus('Connecting audio stream...');
+        const playPromise = audioPlayer.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            isPlaying = true;
+            document.getElementById('play-icon').classList.add('hidden');
+            document.getElementById('pause-icon').classList.remove('hidden');
+            showAudioStatus('▶ Playing Neural Briefing');
+          }).catch(err => {
+            console.error("Audio playback error:", err);
+            showAudioStatus('Click native audio player play button below if browser blocked autoplay', true);
+          });
+        }
       } else {
         audioPlayer.pause();
         isPlaying = false;
         document.getElementById('play-icon').classList.remove('hidden');
         document.getElementById('pause-icon').classList.add('hidden');
+        showAudioStatus('⏸ Paused');
       }
     }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      audioPlayer = document.getElementById('native-audio');
+      initAudioSource('ep-142');
+
+      audioPlayer.addEventListener('play', () => {
+        isPlaying = true;
+        document.getElementById('play-icon').classList.add('hidden');
+        document.getElementById('pause-icon').classList.remove('hidden');
+      });
+
+      audioPlayer.addEventListener('pause', () => {
+        isPlaying = false;
+        document.getElementById('play-icon').classList.remove('hidden');
+        document.getElementById('pause-icon').classList.add('hidden');
+      });
+
+      audioPlayer.addEventListener('error', (e) => {
+        console.error("Audio tag error:", e);
+        showAudioStatus('Error loading audio stream from server', true);
+      });
+    });
 
     audioPlayer.addEventListener('timeupdate', () => {
       if (!isNaN(audioPlayer.duration) && audioPlayer.duration > 0) {
