@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
