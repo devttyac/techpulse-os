@@ -1350,6 +1350,23 @@
       }
     }
 
+        function playArticleAudio(domain, domainTitle) {
+      const audio = getAudio();
+      if (!audio) return;
+      audio.src = '/audio/article-' + domain + '.mp3';
+      audio.load();
+      showAudioStatus('▶ Playing Full Paper Readout: ' + domainTitle);
+      audio.play().then(() => {
+        isPlaying = true;
+        document.getElementById('play-icon').classList.add('hidden');
+        document.getElementById('pause-icon').classList.remove('hidden');
+      }).catch(err => {
+        console.error("Audio error:", err);
+      });
+      // Scroll to player smoothly
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     function initAudioSource(epId) {
       const audio = getAudio();
       if (!audio) return;

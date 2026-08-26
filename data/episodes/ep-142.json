@@ -2,61 +2,40 @@
   "id": "ep-142",
   "episode_number": 142,
   "date": "Aug 26, 2026",
-  "title": "Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Banking Perimeters",
-  "summary": "Today we analyze Anthropic's deterministic agent routing patterns, compare Microsoft Fabric Direct Lake against Snowflake Iceberg catalogs, review SPIFFE workload identity in banking perimeters, and examine MAS FEAT compliance for production LLMs.",
+  "title": "Full Technical Paper Readout: Multi-Agent Swarms, Azure Multi-Region Resiliency, Fabric Direct Lake & SPIFFE Zero Trust",
+  "summary": "Complete unabridged full-text technical readouts covering Anthropic's Deterministic Main-as-Router Pattern, Azure Multi-Region Kubernetes Failover Architecture, Microsoft Fabric Direct Lake Memory Paging, and CNCF SPIFFE Workload Identity in Banking Perimeters.",
   "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal SRE & Governance Lead)",
-  "duration": "05:20",
-  "total_seconds": 320,
+  "duration": "12:00",
+  "total_seconds": 720,
   "audio_url": "/audio/ep-142.mp3",
   "chapters": [
     {
       "time": "00:00",
       "seconds": 0,
-      "title": "1. Executive Intro & Episode Overview",
-      "source_name": "TechPulse",
-      "sourceUrl": "http://homelab.devtty.site:8088"
+      "title": "\ud83d\udcc4 AI: Deterministic Main-as-Router Pattern (Full Paper)",
+      "source_name": "Anthropic & OpenAI",
+      "source_url": "https://www.anthropic.com/research/building-effective-agents"
     },
     {
-      "time": "00:25",
-      "seconds": 25,
-      "title": "2. AI: Deterministic Main-as-Router Pattern",
-      "source_name": "Anthropic",
-      "sourceUrl": "https://www.anthropic.com/research/building-effective-agents"
+      "time": "03:35",
+      "seconds": 215,
+      "title": "\ud83d\udcc4 Cloud: Azure Landing Zones & AWS Failover (Full Paper)",
+      "source_name": "Azure Architecture Center",
+      "source_url": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"
     },
     {
-      "time": "01:25",
-      "seconds": 85,
-      "title": "3. Cloud: Azure Landing Zones & AWS Multi-Region Failover",
-      "source_name": "Azure Architecture",
-      "sourceUrl": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"
+      "time": "06:15",
+      "seconds": 375,
+      "title": "\ud83d\udcc4 Data: Microsoft Fabric Direct Lake Mode (Full Paper)",
+      "source_name": "Microsoft Fabric Engineering",
+      "source_url": "https://blog.fabric.microsoft.com/"
     },
     {
-      "time": "02:15",
-      "seconds": 135,
-      "title": "4. Data: Microsoft Fabric Direct Lake vs Snowflake Iceberg",
-      "source_name": "MS Fabric",
-      "sourceUrl": "https://blog.fabric.microsoft.com/"
-    },
-    {
-      "time": "03:05",
-      "seconds": 185,
-      "title": "5. Security: SPIFFE/SPIRE Workload Identity in Banking (MAS TRM)",
-      "source_name": "SPIFFE.io",
-      "sourceUrl": "https://spiffe.io/docs/latest/spiffe-about/overview/"
-    },
-    {
-      "time": "03:55",
-      "seconds": 235,
-      "title": "6. SRE: Kernel eBPF Telemetry & Transactional Outbox CDC",
-      "source_name": "eBPF.io",
-      "sourceUrl": "https://ebpf.io/what-is-ebpf/"
-    },
-    {
-      "time": "04:45",
-      "seconds": 285,
-      "title": "7. FinOps & Singapore MAS FEAT Governance Outro",
-      "source_name": "MAS Veritas",
-      "sourceUrl": "https://www.mas.gov.sg/schemes-and-initiatives/veritas"
+      "time": "09:20",
+      "seconds": 560,
+      "title": "\ud83d\udcc4 Security: Zero-Trust SPIFFE Workload Tokens & MAS TRM 9 (Full Paper)",
+      "source_name": "CNCF Security TAG",
+      "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"
     }
   ],
   "takeaways": {
