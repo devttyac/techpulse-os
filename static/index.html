@@ -1405,7 +1405,7 @@
               <span class="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-white/10 text-slate-400 border border-white/10">ARCHIVED BRIEFING</span>
               <h4 class="text-sm font-semibold text-slate-200">${escapeHtml(ep.title)}</h4>
               <p class="text-xs text-slate-400 max-w-lg mx-auto leading-relaxed">${escapeHtml(ep.summary)}</p>
-              <p class="text-[11px] text-cyan-400 font-mono">Switch to Episode #142 for today's active ${dom.toUpperCase()} architecture brief.</p>
+              <p class="text-[11px] text-cyan-400 font-mono">Switch to Episode #142 for today\'s active ${dom.toUpperCase()} architecture brief.</p>
             </div>
           `;
         }
@@ -1416,7 +1416,7 @@
       'ep-142': [
         { label: '💡 Fabric Direct Lake', prompt: 'Explain the memory trade-offs of Microsoft Fabric Direct Lake mode vs VertiPaq.' },
         { label: '🛡️ MAS & SPIFFE', prompt: 'How does SPIFFE/SPIRE workload identity satisfy Singapore MAS TRM Section 9 compliance?' },
-        { label: '🎯 Interview Me', prompt: 'Act as an Enterprise AI Hiring Manager. Ask me 1 challenging system design question based on today's Anthropic agent paper.' }
+        { label: '🎯 Interview Me', prompt: 'Act as an Enterprise AI Hiring Manager. Ask me 1 challenging system design question based on today\'s Anthropic agent paper.' }
       ],
       'ep-141': [
         { label: '🤖 Agentic RAG Caching', prompt: 'Explain how HNSW vector index cache warming reduces P99 latency in production agent systems.' },
@@ -1464,7 +1464,7 @@
                 Active Grounding switched to <strong>Episode #${epNum} (${escapeHtml(ep.title)})</strong>.
               </p>
               <p class="text-slate-400 text-[10px] sm:text-[11px]">
-                Ask questions, compare architectures, or tap a starter chip below to evaluate today's papers.
+                Ask questions, compare architectures, or tap a starter chip below to evaluate today\'s papers.
               </p>
             </div>
           </div>
@@ -1562,6 +1562,22 @@
       }, 1000);
     }
 
+    // ==========================================
+    // THEMES & TABS
+    // ==========================================
+    const themes = ['tokyo-night', 'cyberpunk', 'midnight', 'oled', 'cobalt', 'nordic', 'amber'];
+    function setTheme(themeName) {
+      document.documentElement.setAttribute('data-theme', themeName);
+      localStorage.setItem('techpulse-theme', themeName);
+      themes.forEach(t => {
+        const btn = document.getElementById('btn-theme-' + t);
+        if (btn) {
+          if (t === themeName) {
+            btn.className = 'theme-pill px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white/20 text-white transition shadow-sm whitespace-nowrap';
+          } else {
+            btn.className = 'theme-pill px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition whitespace-nowrap';
+          }
+        }
       });
     }
 
