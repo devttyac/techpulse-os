@@ -1,81 +1,109 @@
 # ⚡ TechPulse OS
 
-> **Automated Multi-Domain Technical Intelligence, Neural Podcast Generation & Grounded Socratic Sparring Platform**
+> **Self-Hosted AI Technical Intelligence, Autonomous Neural Podcast Generation & Grounded Architectural Sparring Platform**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
-[![TTS: Edge--TTS](https://img.shields.io/badge/Audio-Microsoft%20Edge--TTS-5D3FD3.svg)](https://github.com/rany2/edge-tts)
-[![LLM: Gemini 2.5](https://img.shields.io/badge/LLM-Gemini%202.5%20Flash-4285F4.svg)](https://ai.google.dev/)
+[![Docker Ready](https://img.shields.io/badge/Docker-Compose%20%7C%20Dockge-2496ED.svg)](https://www.docker.com/)
+[![Audio: Edge--TTS](https://img.shields.io/badge/Neural%20Audio-Edge--TTS%20(Zero%20Cost)-5D3FD3.svg)](https://github.com/rany2/edge-tts)
+[![LLM: Gemini 2.0](https://img.shields.io/badge/LLM-Gemini%202.0%20Flash-4285F4.svg)](https://ai.google.dev/)
+[![Feed: RSS 2.0](https://img.shields.io/badge/Podcast%20RSS-Apple%20%7C%20Pocket%20Casts-FFA500.svg)](#-mobile-podcast-app-sync)
 
 ---
 
-## 📖 Overview
+## 🌟 Why TechPulse OS?
 
-**TechPulse OS** is an enterprise-grade, self-hosted platform designed for Solutions Architects, Principal Engineers, and Technology Leaders. It automatically ingests primary vendor publications and research papers across **8 technology domains**, synthesizes them into multi-host dialogue briefings, generates neural broadcast-quality audio with timecoded chapters, serves a private **Podcast RSS 2.0 feed** (`/feed.xml`), and provides a **NotebookLM-style Grounded AI Chat** for interview sparring and architectural deep-dives.
+Staying ahead in modern software architecture is overwhelming. Hundreds of whitepapers, RFCs, and engineering blogs are published daily across AI, Cloud, Distributed Systems, SRE, and Security. 
+
+**TechPulse OS turns the firehose of technical documentation into an automated, bite-sized daily briefing platform.**
+
+Every morning, TechPulse OS autonomously scrapes vendor engineering blogs and primary research papers across **8 technology domains**, synthesizes deep technical insights with Google Gemini, produces a **broadcast-quality dual-host neural podcast**, serves a private **Podcast RSS 2.0 feed** to your mobile podcast app, and provides an interactive **NotebookLM-style grounded AI sparring partner** to prep you for system design interviews and architectural debates.
 
 ```
  ┌────────────────────────────────────────────────────────────────────────────────────────┐
  │                               TECHPULSE OS ARCHITECTURE                                │
  ├────────────────────────────────────────────────────────────────────────────────────────┤
  │                                                                                        │
- │   [ 8-Domain RSS Feeds ] ──► [ Feed Ingester & Deduplicator ]                          │
- │                                             │                                          │
- │                                             ▼                                          │
- │   [ LLM Synthesizer ]     ──► [ Executive Script + Domain Takeaways + Citations ]       │
- │   (Gemini API)                              │                                          │
- │                                             ▼                                          │
- │   [ Neural Audio Engine ] ──► [ Multi-Host MP3 Audio + Timecoded Chapter Metadata ]    │
- │   (Edge-TTS)                                │                                          │
- │                                             ▼                                          │
- │   [ FastAPI Core Server ] ──► 1. PWA Web Interface (7 Theme Palettes)                  │
- │                               2. Grounded AI Socratic Chat Endpoint                    │
- │                               3. Podcast RSS 2.0 Endpoint (/feed.xml)                  │
- │                               4. Markdown Knowledge Vault Exporter                     │
+ │   [ 8-Domain RSS Feeds ] ──► [ Async Ingestion & Content Deduplicator ]                │
+ │   (Anthropic, AWS, Azure,    │                                                         │
+ │    Fabric, SPIFFE, CNCF)     ▼                                                         │
+ │   [ Gemini 2.0 Flash ]   ──► [ 8-Domain Deep Takeaways + Dialogue Script + Citations ] │
+ │                              │                                                         │
+ │                              ▼                                                         │
+ │   [ Edge-TTS Engine ]    ──► [ Dual-Host Neural MP3 Audio + Timecoded Chapter Offsets] │
+ │                              │                                                         │
+ │                              ▼                                                         │
+ │   [ FastAPI Backend ]    ──► 1. Responsive PWA Frontend (7 Glassmorphic Themes)        │
+ │                              2. Private Podcast RSS 2.0 Feed (/feed.xml)               │
+ │                              3. Grounded Socratic AI Chat (Zero Hallucination)         │
+ │                              4. Spaced-Repetition Recall Flashcards                    │
+ │                              5. Configurable Episode Retention & Storage Manager       │
+ │                              6. 1-Click Markdown / Obsidian Vault Exporter             │
  │                                                                                        │
  └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ✨ Key Features
+## ✨ Feature Highlights
 
-### 🌐 1. 8-Domain Technical Ingestion
-Continuously monitors and cleanses feeds across:
+### 🌐 1. 8 Deep-Tech Domains (Full-Spectrum Coverage)
+Monitors, filters, and synthesizes primary sources daily:
 - 🤖 **AI & Agentic Systems**: Anthropic Research, OpenAI Engineering, Hugging Face, Simon Willison.
-- ☁️ **Cloud Platforms & Resiliency**: Microsoft Azure Architecture & Infrastructure Blogs, AWS Architecture Blog, Google Cloud Blog.
-- 📊 **Data & Modern Lakehouse**: Microsoft Fabric Updates, Databricks Engineering.
-- 🛡️ **Zero Trust & Security**: SPIFFE/SPIRE, Cloudflare Engineering, CNCF Security, KrebsOnSecurity.
-- ⚙️ **DevOps, SRE & eBPF**: Kubernetes Official Blog, SRE Weekly.
-- ⚡ **Distributed Systems & APIs**: Martin Fowler, InfoQ Architecture.
-- 💰 **Cloud Economics & FinOps**: FinOps Foundation, AWS Compute Optimization.
-- ⚖️ **AI Governance & Regulatory Risk**: NIST AI RMF, Regulatory Safety Guidelines.
+- ☁️ **Cloud Platforms & Resiliency**: Azure Architecture Center, AWS Architecture, Google Cloud.
+- 📊 **Data & Modern Lakehouse**: Microsoft Fabric Engineering, Databricks, Apache Iceberg.
+- 🛡️ **Zero Trust & Security**: SPIFFE/SPIRE, NIST SP 800-207, Cloudflare Engineering, CNCF Security.
+- ⚙️ **SRE & Kernel Observability**: eBPF.io, Kubernetes Blog, SRE Weekly.
+- ⚡ **Distributed Systems & Microservices**: Martin Fowler, Debezium CDC, InfoQ Architecture.
+- 💰 **Cloud FinOps & GPU Economics**: FinOps Foundation, Spot GPU Scheduling, AWS Compute.
+- ⚖️ **AI Governance & Risk**: NIST AI RMF 1.0, ISO/IEC 42001, Regulatory Safety Frameworks.
 
-### 🎙️ 2. Dual-Host Neural Audio & Private Podcast RSS
-- **Dual-Voice Dialogue**: Enterprise Cloud Architect (Host A) & Principal SRE / Governance Lead (Host B) via Microsoft Neural Edge-TTS (`en-US-GuyNeural` & `en-US-AriaNeural`).
-- **Private Podcast RSS 2.0 (`/feed.xml`)**: Listen in **Apple Podcasts**, **Pocket Casts**, or **AntennaPod** over home LAN or WireGuard/Tailscale VPN with synchronized `<psc:chapters>` timecode jumping and HTML show notes.
+### 🎙️ 2. Autonomous Dual-Host Neural Podcast
+- **Natural conversational banter** between an Enterprise Cloud Architect (*Host A — GuyNeural*) and a Principal SRE & Governance Lead (*Host B — AriaNeural*).
+- Zero paid voice API keys needed — powered 100% by high-fidelity Microsoft Edge Neural TTS.
+- Generated with **accurate timecoded chapter markers** and live source attribution.
 
-### 🧠 3. Grounded Socratic AI Chat & Interview Sparring
-- **Zero-Hallucination Guardrail**: Grounded strictly in active episode papers and official release notes.
-- **Socratic Interview Coach**: Generates high-frequency system design and architectural trade-off questions based on today's ingested papers.
-- **Verifiable Citations**: Every answer includes primary vendor documentation links.
+### 📱 3. Private Mobile Podcast RSS Feed (`/feed.xml`)
+- Turn your commute into learning time: subscribe to your private feed URL inside **Apple Podcasts**, **Pocket Casts**, **Overcast**, or **AntennaPod**.
+- Features **Podlove Simple Chapters (`<psc:chapters>`)** allowing you to jump between topics directly from your lock screen or car display.
+- Works securely over home Wi-Fi or via **Tailscale / WireGuard VPN**.
 
-### ⚡ 4. Spaced-Repetition Recall Flashcards
-- Interactive 3D flip card deck testing domain competency and architectural rationales.
-- Self-evaluation buttons (`Hard`, `Good`, `Mastered`) that track your weekly interview readiness score.
+### 🧠 4. Grounded Socratic AI Sparring Partner
+- **Zero Hallucination Guardrails**: Chat responses are strictly grounded in active episode papers and official release notes.
+- **Architectural Interview Sparring**: Put yourself in the hot seat. Ask the AI to grill you on system design trade-offs, multi-region failover, or zero-trust identity token lifecycles.
+- **Verifiable Citations**: Every response references verified vendor docs.
 
-### 🎨 5. Responsive PWA with 7 Curated Themes
-- **Themes**: Tokyo Night 🌸, Cyberpunk 2077 ⚡, Midnight 🌌, OLED 🖤, Cobalt 🌊, Nordic ❄️, and Amber 🏺.
-- Mobile-first responsive design with touch-friendly 44px tap targets and safe-area padding.
+### 💾 5. Configurable Retention Policy & Storage Engine
+- **Automated Storage Management**: Set retention rules (7, 14, 30, 60, or 90 episodes) to automatically prune older audio and datasets.
+- **Runtime Storage Monitor**: Real-time persistent disk usage dashboard with a 1-click **"Purge Excess Episodes Now"** action.
+- **Granular Settings Page**: Configure chapter density (4, 6, or 8 domains), Gemini model selection, and daily ingestion cron schedules.
+
+### 🛡️ 6. Robust Pipeline Control & Emergency Stop
+- Live visual progress tracker (`Scanning Feeds` ➔ `Synthesizing` ➔ `Generating Audio`).
+- Dedicated **`⏹ Stop`** button allows instant abort of running ingestion tasks.
+- Hard timeout guards across all network and LLM stages prevent background hangs.
+
+### 📝 7. 1-Click Markdown / Obsidian Knowledge Export
+- Export complete daily intelligence packages with YAML frontmatter, executive summary, chapters, domain takeaways, and interview cheat sheets into `.md` format.
+
+### 🎨 8. 7 Glassmorphic Cyberpunk Theme Palettes
+- Responsive UI designed for both mobile touch and wide desktop displays:
+  - 🌸 **Tokyo Night**
+  - ⚡ **Cyberpunk 2077**
+  - 🖤 **Pure OLED**
+  - 🌌 **Midnight**
+  - 🌊 **Cobalt**
+  - ❄️ **Nordic**
+  - 🏺 **Amber Terminal**
 
 ---
 
-## 🚀 Quickstart (Docker Compose)
+## 🚀 Quickstart (Docker Compose / Dockge)
 
-### 1. Clone Repository
+### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/techpulse-os.git
+git clone https://github.com/devttyac/techpulse-os.git
 cd techpulse-os
 ```
 
@@ -83,69 +111,68 @@ cd techpulse-os
 ```bash
 cp .env.example .env
 ```
-Edit `.env` to supply your configuration:
+Edit `.env` with your settings:
 ```env
-# Optional: Set Gemini API key (defaults to deterministic synthesis if unset)
+# Google Gemini API Key (Free tier supported: https://aistudio.google.com/)
 GEMINI_API_KEY=your_gemini_api_key_here
 
-# Your server IP or domain (used for Podcast audio links in /feed.xml)
-HOST_URL=http://localhost:8000
+# Your host IP / LAN IP / Domain (used for mobile podcast streaming links)
+HOST_URL=http://192.168.1.100:8000
 
-# Daily automated ingestion schedule (Singapore Time UTC+8)
-CRON_SCHEDULE=0 6 * * *
+# Daily automated ingestion schedule (Cron format, SGT UTC+8)
+CRON_SCHEDULE=0 7 * * *
 
 # Port
 PORT=8000
 ```
 
-### 3. Launch 24/7 Service
+### 3. Launch with Docker Compose
 ```bash
 docker compose up -d --build
 ```
 
-Access the web interface at `http://localhost:8000`.
+Access the interactive web dashboard at **`http://localhost:8000`** (or your server's LAN IP).
 
 ---
 
-## 📱 Mobile Podcast App Sync
+## 📱 Mobile Podcast App Setup
 
-To listen to daily audio briefings on your phone:
-1. Ensure your phone is on the same local network or connected via Tailscale/WireGuard.
-2. Open **Apple Podcasts** / **Pocket Casts** / **Spotify** / **AntennaPod**.
-3. Choose **"Add by URL"** and enter:
+1. Connect your phone to your home network (or active Tailscale/WireGuard VPN).
+2. Open your podcast player of choice (**Apple Podcasts**, **Pocket Casts**, **AntennaPod**, etc.).
+3. Choose **"Add by URL"** / **"Add RSS Feed"**:
    ```
    http://<YOUR_SERVER_IP>:8000/feed.xml
    ```
+4. New daily episodes will automatically download to your phone with show notes and chapter markers!
 
 ---
 
-## 🛠️ API Reference
+## 🔌 API Reference
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/` | `GET` | Interactive Single-Page PWA Frontend |
+| `/` | `GET` | Single-Page Responsive PWA Interface |
 | `/feed.xml` | `GET` | Podcast RSS 2.0 XML with Podlove Chapters |
-| `/api/episodes` | `GET` | Returns list of all daily synthesized briefings |
-| `/api/episodes/{id}` | `GET` | Returns full details (script, chapters, takeaways) |
+| `/api/episodes` | `GET` | List all synthesized daily episodes |
+| `/api/episodes/{id}` | `GET` | Full episode metadata (script, chapters, takeaways) |
 | `/api/chat` | `POST` | Grounded Q&A and Socratic interview sparring |
-| `/api/refresh` | `POST` | Force immediate manual feed scrape & synthesis |
-| `/api/export-vault` | `POST` | Exports briefing note in Markdown format |
-| `/healthz` | `GET` | Automated Docker container healthcheck |
+| `/api/refresh` | `POST` | Trigger manual ingestion & synthesis |
+| `/api/refresh/cancel`| `POST` | Instantly cancel and abort running ingestion task |
+| `/api/refresh/status`| `GET`  | Real-time pipeline status and progress percentage |
+| `/api/settings` | `GET/POST` | Read or update retention limits, models & cron |
+| `/api/settings/cleanup` | `POST` | Manually purge excess episodes per retention policy |
+| `/api/export-vault` | `POST` | Download structured episode Markdown file |
+| `/healthz` | `GET` | Docker healthcheck and subsystem monitor |
 
 ---
 
-## 🧪 Testing & CI
+## 🛠️ Tech Stack
 
-Run unit and ASGI endpoint test suites locally:
-```bash
-# Setup virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# Run ASGI endpoint tests
-python tests/test_endpoints.py
-```
+- **Backend**: FastAPI (Python 3.11+), Uvicorn, APScheduler, httpx, BeautifulSoup4, Feedparser.
+- **Synthesis**: Google Gemini 2.0 Flash / 1.5 Flash via `google-genai`.
+- **Audio Generation**: Microsoft Edge Neural TTS (`edge-tts`), Mutagen ID3 / MP3 chapter tagger.
+- **Frontend**: Vanilla ES6+, Tailwind CSS, HTML5 Audio API, Glassmorphic CSS.
+- **Containerization**: Docker, Docker Compose, Dockge compatible.
 
 ---
 
