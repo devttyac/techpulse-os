@@ -22,13 +22,15 @@ Guidelines:
 4. If the user asks casual or conversational questions (e.g. greetings), respond naturally and authoritatively as their Lead Architect copilot without forcing a rigid template.
 """
 
-async def call_gemini_llm(api_key: str, prompt: str) -> Optional[str]:
+async def call_gemini_llm(api_key: str, prompt: str) -> tuple[Optional[str], Optional[str]]:
     clean_key = api_key.strip().strip('"').strip("'")
     if not clean_key or len(clean_key) < 10 or clean_key.startswith("${"):
-        logger.warning(f"GEMINI_API_KEY is not configured or is a placeholder in container: '{clean_key[:8]}...' (len={len(clean_key)})")
-        return None
+        msg = f"GEMINI_API_KEY is not configured or is a placeholder in container: '{clean_key[:8]}...' (len={len(clean_key)})"
+        logger.warning(msg)
+        return None, msg
 
     logger.info(f"Initiating live Gemini generation with API key length: {len(clean_key)}")
+    errors = []
 
     models_to_try = [
         os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
@@ -38,7 +40,7 @@ async def call_gemini_llm(api_key: str, prompt: str) -> Optional[str]:
     ]
     models_to_try = list(dict.fromkeys(models_to_try))
 
-    # 1. Try google.genai SDK
+    # Tier 1: google.genai SDK
     try:
         from google import genai
         client = genai.Client(api_key=clean_key)
@@ -47,13 +49,37 @@ async def call_gemini_llm(api_key: str, prompt: str) -> Optional[str]:
                 res = client.models.generate_content(model=m, contents=prompt)
                 if res and res.text:
                     logger.info(f"Gemini live grounding succeeded via SDK ({m})")
-                    return res.text
+                    return res.text, None
             except Exception as ex:
-                logger.warning(f"google.genai call with model {m} failed: {ex}")
+                err_msg = f"google.genai model {m} error: {ex}"
+                logger.warning(err_msg)
+                errors.append(err_msg)
     except Exception as e:
-        logger.warning(f"google.genai SDK initialization: {e}")
+        err_msg = f"google.genai SDK initialization failed: {e}"
+        logger.warning(err_msg)
+        errors.append(err_msg)
 
-    # 2. Try direct httpx async REST call
+    # Tier 2: google.generativeai SDK
+    try:
+        import google.generativeai as genai_legacy
+        genai_legacy.configure(api_key=clean_key)
+        for m in models_to_try:
+            try:
+                model = genai_legacy.GenerativeModel(m)
+                res = model.generate_content(prompt)
+                if res and res.text:
+                    logger.info(f"Gemini live grounding succeeded via legacy SDK ({m})")
+                    return res.text, None
+            except Exception as ex:
+                err_msg = f"google.generativeai model {m} error: {ex}"
+                logger.warning(err_msg)
+                errors.append(err_msg)
+    except Exception as e:
+        err_msg = f"google.generativeai SDK error: {e}"
+        logger.warning(err_msg)
+        errors.append(err_msg)
+
+    # Tier 3: Direct httpx async REST call
     for m in models_to_try:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={clean_key}"
@@ -69,13 +95,18 @@ async def call_gemini_llm(api_key: str, prompt: str) -> Optional[str]:
                         text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                         if text:
                             logger.info(f"Direct REST Gemini call succeeded ({m})")
-                            return text
+                            return text, None
                 else:
-                    logger.warning(f"REST Gemini call ({m}) HTTP {r.status_code}: {r.text[:180]}")
+                    err_msg = f"REST Gemini call ({m}) HTTP {r.status_code}: {r.text[:200]}"
+                    logger.warning(err_msg)
+                    errors.append(err_msg)
         except Exception as ex:
-            logger.warning(f"REST Gemini call ({m}) network error: {ex}")
+            err_msg = f"REST Gemini call ({m}) network error: {ex}"
+            logger.warning(err_msg)
+            errors.append(err_msg)
 
-    return None
+    combined_errors = "; ".join(errors)
+    return None, combined_errors
 
 def dynamic_rag_synthesize(query: str, active_episode: Dict[str, Any]) -> str:
     q = query.strip().lower()
@@ -248,13 +279,15 @@ SUMMARY: {active_episode.get('summary')}
 === USER QUESTION ===
 {query}
 """
-        llm_response = await call_gemini_llm(api_key, prompt)
+        llm_response, error_detail = await call_gemini_llm(api_key, prompt)
         if llm_response:
             return {
                 "response": llm_response,
                 "model": "gemini-2.0-flash (live-grounded-corpus)",
                 "grounded_episode_id": active_episode.get("id")
             }
+        else:
+            logger.error(f"Live Gemini LLM failed across all tiers: {error_detail}")
 
     # 2. Universal Dynamic Semantic RAG Synthesizer (Offline / Zero-API-Key Fallback)
     fallback_response = dynamic_rag_synthesize(query, active_episode)
