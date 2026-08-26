@@ -5,6 +5,5 @@ __pycache__/
 .venv
 env/
 venv/
-data/audio/*.mp3
 data/cache/
 .DS_Store
