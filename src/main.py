@@ -323,13 +323,13 @@ async def serve_audio(filename: str):
     file_path = os.path.join(AUDIO_DIR, filename)
     seed_path = os.path.join(os.path.dirname(__file__), "..", "seed_data", "audio", filename)
     
-    # Always ensure volume file is up to date with full-article seed audio
+    # 1. Always ensure volume file is up to date with full-article seed audio
     if os.path.exists(seed_path):
         if not os.path.exists(file_path) or os.path.getsize(file_path) < os.path.getsize(seed_path):
             try:
                 os.makedirs(AUDIO_DIR, exist_ok=True)
                 shutil.copyfile(seed_path, file_path)
-                logger.info(f"Overwrote stale audio {filename} with full-paper audio ({os.path.getsize(seed_path)} bytes)")
+                logger.info(f"Updated audio {filename} from seed ({os.path.getsize(seed_path)} bytes)")
             except Exception as e:
                 logger.warning(f"Could not overwrite volume ({e}). Serving seed file directly.")
                 return FileResponse(
@@ -338,19 +338,39 @@ async def serve_audio(filename: str):
                     headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
                 )
 
-    if os.path.exists(file_path) and os.path.getsize(file_path) > 1000:
+    # 2. Serve from volume if valid
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 10000:
         return FileResponse(
             file_path,
             media_type="audio/mpeg",
             headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
         )
 
-    if os.path.exists(seed_path):
+    # 3. Serve from seed_data
+    if os.path.exists(seed_path) and os.path.getsize(seed_path) > 10000:
         return FileResponse(
             seed_path,
             media_type="audio/mpeg",
             headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
         )
+
+    # 4. On-demand Edge-TTS Synthesis Fallback if missing
+    ep_id = filename.replace(".mp3", "")
+    ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
+    if os.path.exists(ep_file):
+        try:
+            with open(ep_file, "r") as fp:
+                ep_data = json.load(fp)
+            logger.info(f"Synthesizing missing audio on-demand for {filename}...")
+            await generate_episode_podcast_audio(ep_data, AUDIO_DIR)
+            if os.path.exists(file_path):
+                return FileResponse(
+                    file_path,
+                    media_type="audio/mpeg",
+                    headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
+                )
+        except Exception as e:
+            logger.error(f"On-demand synthesis failed for {filename}: {e}")
 
     raise HTTPException(status_code=404, detail="Audio file not found")
 
