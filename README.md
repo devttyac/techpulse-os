@@ -44,7 +44,7 @@
 ### 🌐 1. 8-Domain Technical Ingestion
 Continuously monitors and cleanses feeds across:
 - 🤖 **AI & Agentic Systems**: Anthropic Research, OpenAI Engineering, Hugging Face, Simon Willison.
-- ☁️ **Cloud Platforms & Resiliency**: AWS Architecture Blog, Google Cloud Blog.
+- ☁️ **Cloud Platforms & Resiliency**: Microsoft Azure Architecture & Infrastructure Blogs, AWS Architecture Blog, Google Cloud Blog.
 - 📊 **Data & Modern Lakehouse**: Microsoft Fabric Updates, Databricks Engineering.
 - 🛡️ **Zero Trust & Security**: SPIFFE/SPIRE, Cloudflare Engineering, CNCF Security, KrebsOnSecurity.
 - ⚙️ **DevOps, SRE & eBPF**: Kubernetes Official Blog, SRE Weekly.
