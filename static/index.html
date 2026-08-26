@@ -2739,7 +2739,13 @@
         });
         if (res.ok) {
           const data = await res.json();
-          return data.response;
+          let html = data.response || '';
+          if (data.model && data.model.includes('gemini')) {
+            html += `<div class="mt-2 pt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono text-emerald-400"><span>⚡ ${escapeHtml(data.model)}</span><span>Grounded in ${escapeHtml(data.grounded_episode_id || currentEpisodeId)}</span></div>`;
+          } else {
+            html += `<div class="mt-2 pt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono text-amber-400"><span>⚠️ Offline Keyword Fallback (Live LLM not responding)</span><span>${escapeHtml(data.grounded_episode_id || currentEpisodeId)}</span></div>`;
+          }
+          return html;
         }
       } catch (e) {
         console.log('Chat API fallback.');
