@@ -424,7 +424,10 @@ pipeline_state = {
     "error": None
 }
 
+current_pipeline_task: Optional[asyncio.Task] = None
+
 async def run_daily_pipeline():
+    global current_pipeline_task
     logger.info("Executing scheduled TechPulse daily ingestion and synthesis pipeline...")
     pipeline_state["running"] = True
     pipeline_state["stage"] = "checking"
@@ -433,7 +436,8 @@ async def run_daily_pipeline():
     pipeline_state["error"] = None
 
     try:
-        corpus = await ingest_all_domains()
+        # Step 1: Ingestion with 30s hard timeout
+        corpus = await asyncio.wait_for(ingest_all_domains(), timeout=30.0)
         all_corpus_urls = sorted([item["url"] for items in corpus.values() for item in items if item.get("url")])
         current_corpus_hash = hashlib.sha256("".join(all_corpus_urls).encode("utf-8")).hexdigest()
         
@@ -481,7 +485,8 @@ async def run_daily_pipeline():
         pipeline_state["progress"] = 50
         pipeline_state["message"] = f"New papers found! Synthesizing briefing for Episode #{next_num}..."
 
-        briefing_data = await synthesize_briefing(corpus, next_num)
+        # Step 2: Synthesis with 60s hard timeout
+        briefing_data = await asyncio.wait_for(synthesize_briefing(corpus, next_num), timeout=60.0)
         briefing_data["corpus_hash"] = current_corpus_hash
         briefing_data["ingested_urls"] = all_corpus_urls
         
@@ -489,15 +494,15 @@ async def run_daily_pipeline():
         pipeline_state["progress"] = 75
         pipeline_state["message"] = "Synthesizing Neural Edge-TTS podcast dialogue (GuyNeural & AriaNeural)..."
 
-        # Generate neural TTS audio and calculate dynamic chapter offsets
-        final_mp3, dyn_chapters, duration_str, total_secs = await generate_episode_podcast_audio(briefing_data, AUDIO_DIR)
+        # Step 3: Audio TTS with 60s hard timeout
+        final_mp3, dyn_chapters, duration_str, total_secs = await asyncio.wait_for(generate_episode_podcast_audio(briefing_data, AUDIO_DIR), timeout=60.0)
         briefing_data["duration"] = duration_str
         briefing_data["total_seconds"] = total_secs
         if dyn_chapters:
             briefing_data["chapters"] = dyn_chapters
 
         # Generate standalone per-domain audio files
-        await generate_all_domain_audios(briefing_data, AUDIO_DIR)
+        await asyncio.wait_for(generate_all_domain_audios(briefing_data, AUDIO_DIR), timeout=60.0)
         
         # Save episode JSON
         ep_path = os.path.join(EPISODES_DIR, f"{briefing_data['id']}.json")
@@ -511,13 +516,33 @@ async def run_daily_pipeline():
         pipeline_state["last_run"] = datetime.now(timezone.utc).isoformat()
         pipeline_state["running"] = False
 
+        # Enforce retention policy automatically
+        cfg = load_config()
+        enforce_retention_policy(cfg.get("max_episodes_retained", 14))
+
         logger.info(f"Successfully generated Episode #{next_num}: {briefing_data['title']} ({duration_str})")
+    except asyncio.CancelledError:
+        logger.info("Pipeline task cancelled by user.")
+        pipeline_state["running"] = False
+        pipeline_state["stage"] = "idle"
+        pipeline_state["progress"] = 0
+        pipeline_state["message"] = "Pipeline stopped by user."
+        pipeline_state["error"] = None
+        raise
+    except asyncio.TimeoutError:
+        pipeline_state["running"] = False
+        pipeline_state["stage"] = "error"
+        pipeline_state["error"] = "Operation timed out."
+        pipeline_state["message"] = "Pipeline execution timed out. Aborted."
+        logger.error("Pipeline timed out.")
     except Exception as e:
         pipeline_state["running"] = False
         pipeline_state["stage"] = "error"
         pipeline_state["error"] = str(e)
         pipeline_state["message"] = f"Pipeline failed: {e}"
         logger.error(f"Error executing daily pipeline: {e}")
+    finally:
+        pipeline_state["running"] = False
 
 class ChatRequest(BaseModel):
     query: str
@@ -578,19 +603,47 @@ async def chat_endpoint(req: ChatRequest):
     return result
 
 @app.post("/api/refresh")
-async def manual_refresh(background_tasks: BackgroundTasks):
-    if pipeline_state.get("running"):
+async def manual_refresh():
+    global current_pipeline_task
+    if pipeline_state.get("running") and current_pipeline_task and not current_pipeline_task.done():
         return {"status": "busy", "message": "Ingestion pipeline is already actively running.", "state": pipeline_state}
     
-    # Immediate state reset before background dispatch
     pipeline_state["running"] = True
     pipeline_state["stage"] = "checking"
     pipeline_state["progress"] = 10
     pipeline_state["message"] = "Scanning RSS feeds for newly published technical whitepapers..."
     pipeline_state["error"] = None
 
-    background_tasks.add_task(run_daily_pipeline)
+    current_pipeline_task = asyncio.create_task(run_daily_pipeline())
     return {"status": "ok", "message": "Ingestion and synthesis pipeline triggered in background.", "state": pipeline_state}
+
+@app.post("/api/refresh/cancel")
+async def cancel_refresh():
+    global current_pipeline_task
+    if current_pipeline_task and not current_pipeline_task.done():
+        current_pipeline_task.cancel()
+        current_pipeline_task = None
+    pipeline_state["running"] = False
+    pipeline_state["stage"] = "idle"
+    pipeline_state["progress"] = 0
+    pipeline_state["message"] = "Pipeline stopped by user."
+    pipeline_state["error"] = None
+    logger.info("Pipeline explicitly cancelled via /api/refresh/cancel")
+    return {"status": "cancelled", "message": "Pipeline cancelled successfully.", "state": pipeline_state}
+
+@app.post("/api/refresh/reset")
+async def reset_refresh():
+    global current_pipeline_task
+    if current_pipeline_task and not current_pipeline_task.done():
+        current_pipeline_task.cancel()
+        current_pipeline_task = None
+    pipeline_state["running"] = False
+    pipeline_state["stage"] = "idle"
+    pipeline_state["progress"] = 0
+    pipeline_state["message"] = "Ready"
+    pipeline_state["error"] = None
+    logger.info("Pipeline state explicitly reset via /api/refresh/reset")
+    return {"status": "reset", "message": "Pipeline state reset to ready.", "state": pipeline_state}
 
 @app.get("/api/settings")
 async def get_settings():

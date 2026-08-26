@@ -817,13 +817,19 @@
               </span>
               <span class="font-mono text-[10px] sm:text-[11px] text-slate-400 group-hover:text-white">.md</span>
             </button>
-            <button onclick="triggerManualRun()" id="manual-run-btn" class="tap-target w-full py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-xl theme-card-bg border text-slate-200 hover:text-white flex items-center justify-between transition group active:scale-95">
-              <span class="flex items-center gap-2 font-medium text-xs">
-                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                Force Re-Fetch Feeds Now
-              </span>
-              <span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>
-            </button>
+            <div id="refresh-action-container" class="flex items-center gap-2">
+              <button onclick="triggerManualRun()" id="manual-run-btn" class="tap-target flex-1 py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-xl theme-card-bg border text-slate-200 hover:text-white flex items-center justify-between transition group active:scale-95">
+                <span class="flex items-center gap-2 font-medium text-xs">
+                  <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  <span>Force Re-Fetch Feeds Now</span>
+                </span>
+                <span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>
+              </button>
+              <button onclick="cancelManualRun()" id="cancel-run-btn" class="hidden tap-target py-2.5 sm:py-3 px-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition flex-shrink-0" title="Stop & Cancel Ingestion">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <span>Stop</span>
+              </button>
+            </div>
           </div>
         </section>
 
@@ -1030,12 +1036,17 @@
           <input id="setting-cron" type="text" value="0 7 * * *" class="w-full bg-black/60 text-white font-mono text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 placeholder:text-slate-500">
         </div>
 
-        <!-- Action Button -->
+        <!-- Action Button & Emergency Reset -->
         <div class="pt-3 border-t border-white/10 flex items-center justify-between gap-2">
-          <span id="settings-status-msg" class="text-[11px] font-mono text-emerald-400"></span>
-          <button onclick="saveSettings()" id="btn-save-settings" class="px-4 py-2 rounded-xl theme-accent-btn font-bold text-xs shadow-lg active:scale-95 transition">
-            Save Settings
+          <button onclick="resetPipelineState()" id="btn-reset-pipeline" class="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 text-[11px] font-semibold transition active:scale-95 flex items-center gap-1">
+            <span>🔄 Reset Ingestion Lock</span>
           </button>
+          <div class="flex items-center gap-2">
+            <span id="settings-status-msg" class="text-[11px] font-mono text-emerald-400"></span>
+            <button onclick="saveSettings()" id="btn-save-settings" class="px-4 py-2 rounded-xl theme-accent-btn font-bold text-xs shadow-lg active:scale-95 transition">
+              Save Settings
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2947,16 +2958,19 @@
 
     async function triggerManualRun() {
       const btn = document.getElementById('manual-run-btn');
+      const cancelBtn = document.getElementById('cancel-run-btn');
       if (!btn) return;
 
       const resetButton = () => {
         if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
         if (refreshSafetyTimer) { clearTimeout(refreshSafetyTimer); refreshSafetyTimer = null; }
-        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Force Re-Fetch Feeds Now</span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Force Re-Fetch Feeds Now</span></span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
       };
 
       try {
-        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Scanning Feeds (15%)...</span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
+        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Scanning Feeds (15%)...</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
         
         await fetch('/api/refresh', { method: 'POST' });
 
@@ -2974,18 +2988,21 @@
             if (statusRes.ok) {
               const state = await statusRes.json();
               if (state.running) {
+                if (cancelBtn) cancelBtn.classList.remove('hidden');
                 const stageText = state.stage === 'checking' ? 'Scanning Feeds (15%)' :
                                   state.stage === 'ingesting' ? 'Ingesting Feeds (25%)' :
                                   state.stage === 'synthesizing' ? 'Synthesizing (60%)' :
                                   state.stage === 'audio_tts' ? 'Generating Audio (85%)' : 'Processing...';
-                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> ${stageText}</span><span class="font-mono text-[10px] text-cyan-400 font-bold">${state.progress || 20}%</span>`;
+                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>${stageText}</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">${state.progress || 20}%</span>`;
               } else if (state.stage === 'up_to_date') {
                 if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
-                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-300 text-xs"><span class="font-bold text-sm">ℹ</span> Feeds up-to-date! No new papers published yet.</span><span class="font-mono text-[10px] text-cyan-400 font-bold">Current</span>`;
+                if (cancelBtn) cancelBtn.classList.add('hidden');
+                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-300 text-xs"><span class="font-bold text-sm">ℹ</span> <span>Feeds up-to-date! No new papers published yet.</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">Current</span>`;
                 setTimeout(resetButton, 3500);
               } else if (state.stage === 'complete') {
                 if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
-                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-emerald-400 text-xs"><span class="font-bold text-sm">✓</span> ${escapeHtml(state.message || 'Episode Ready!')}</span><span class="font-mono text-[10px] text-emerald-400 font-bold">100%</span>`;
+                if (cancelBtn) cancelBtn.classList.add('hidden');
+                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-emerald-400 text-xs"><span class="font-bold text-sm">✓</span> <span>${escapeHtml(state.message || 'Episode Ready!')}</span></span><span class="font-mono text-[10px] text-emerald-400 font-bold">100%</span>`;
                 await loadEpisodesFromBackend();
                 if (state.last_episode_id) {
                   changeEpisode(state.last_episode_id);
@@ -2993,10 +3010,10 @@
                 setTimeout(resetButton, 4000);
               } else if (state.stage === 'error') {
                 if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
-                btn.innerHTML = `<span class="text-rose-400 text-xs font-semibold">⚠️ Pipeline Error</span>`;
-                setTimeout(resetButton, 3000);
+                if (cancelBtn) cancelBtn.classList.add('hidden');
+                btn.innerHTML = `<span class="text-rose-400 text-xs font-semibold">⚠️ ${escapeHtml(state.message || 'Pipeline Error')}</span>`;
+                setTimeout(resetButton, 3500);
               } else {
-                // If not running and idle, reset
                 resetButton();
               }
             }
@@ -3005,13 +3022,59 @@
           }
         };
 
-        // Immediate first check
         await checkStatus();
         refreshPollTimer = setInterval(checkStatus, 1500);
 
       } catch (err) {
         console.error("Trigger manual run error:", err);
         resetButton();
+      }
+    }
+
+    async function cancelManualRun() {
+      const btn = document.getElementById('manual-run-btn');
+      const cancelBtn = document.getElementById('cancel-run-btn');
+      if (cancelBtn) cancelBtn.innerHTML = 'Stopping...';
+      try {
+        await fetch('/api/refresh/cancel', { method: 'POST' });
+        if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
+        if (refreshSafetyTimer) { clearTimeout(refreshSafetyTimer); refreshSafetyTimer = null; }
+        if (btn) {
+          btn.innerHTML = `<span class="text-rose-300 font-medium text-xs">⏹ Pipeline Cancelled</span>`;
+          setTimeout(() => {
+            if (cancelBtn) {
+              cancelBtn.classList.add('hidden');
+              cancelBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg> <span>Stop</span>';
+            }
+            btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Force Re-Fetch Feeds Now</span></span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
+          }, 2000);
+        }
+      } catch (e) {
+        console.error("Error cancelling pipeline:", e);
+      }
+    }
+
+    async function resetPipelineState() {
+      const resetBtn = document.getElementById('btn-reset-pipeline');
+      const statusMsg = document.getElementById('settings-status-msg');
+      if (resetBtn) resetBtn.innerText = 'Resetting...';
+      try {
+        await fetch('/api/refresh/reset', { method: 'POST' });
+        if (statusMsg) {
+          statusMsg.innerText = '✓ Ingestion Lock Reset!';
+          setTimeout(() => { statusMsg.innerText = ''; }, 3000);
+        }
+        await loadSettings();
+        const cancelBtn = document.getElementById('cancel-run-btn');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+        const btn = document.getElementById('manual-run-btn');
+        if (btn) {
+          btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Force Re-Fetch Feeds Now</span></span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
+        }
+      } catch (e) {
+        console.error("Error resetting pipeline:", e);
+      } finally {
+        if (resetBtn) resetBtn.innerHTML = '<span>🔄 Reset Ingestion Lock</span>';
       }
     }
 
@@ -3118,6 +3181,18 @@
       updateMasteryUI();
       renderChapters(episodes['ep-142']);
       loadEpisodesFromBackend();
+
+      // Check initial pipeline state
+      fetch('/api/refresh/status').then(r => r.json()).then(state => {
+        if (state && state.running) {
+          const btn = document.getElementById('manual-run-btn');
+          const cancelBtn = document.getElementById('cancel-run-btn');
+          if (cancelBtn) cancelBtn.classList.remove('hidden');
+          if (btn) {
+            btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Processing (${state.progress || 20}%)...</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
+          }
+        }
+      }).catch(() => {});
     });
 
   </script>
