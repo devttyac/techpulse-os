@@ -32,15 +32,45 @@ STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.join(os.path.dirname(__file__), "
 EPISODES_DIR = os.path.join(STORAGE_DIR, "episodes")
 AUDIO_DIR = os.path.join(STORAGE_DIR, "audio")
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+CONFIG_FILE = os.path.join(STORAGE_DIR, "config.json")
 
 os.makedirs(EPISODES_DIR, exist_ok=True)
 os.makedirs(AUDIO_DIR, exist_ok=True)
+
+DEFAULT_CONFIG = {
+    "max_episodes_retained": 14,
+    "chapters_per_episode": 8,
+    "gemini_model": "gemini-2.0-flash",
+    "cron_schedule": "0 7 * * *"
+}
+
+def load_config() -> Dict[str, Any]:
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                cfg = json.load(f)
+                for k, v in DEFAULT_CONFIG.items():
+                    if k not in cfg:
+                        cfg[k] = v
+                return cfg
+        except Exception as e:
+            logger.error(f"Error loading config: {e}")
+    return DEFAULT_CONFIG.copy()
+
+def save_config(cfg: Dict[str, Any]) -> None:
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+        logger.info(f"Saved configuration to {CONFIG_FILE}")
+    except Exception as e:
+        logger.error(f"Error saving config: {e}")
 
 scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    cron_expr = os.getenv("CRON_SCHEDULE", "0 6 * * *")
+    cfg = load_config()
+    cron_expr = cfg.get("cron_schedule", os.getenv("CRON_SCHEDULE", "0 7 * * *"))
     try:
         parts = cron_expr.split()
         if len(parts) == 5:
@@ -50,6 +80,13 @@ async def lifespan(app: FastAPI):
             logger.info(f"Scheduled daily pipeline with cron [{cron_expr}] SGT")
     except Exception as e:
         logger.warning(f"Could not parse cron expression: {e}")
+
+    # Run in-place historical episode sanitizer and retention policy
+    try:
+        sanitize_existing_episodes()
+        enforce_retention_policy()
+    except Exception as e:
+        logger.error(f"Error in startup sanitization/retention: {e}")
 
     # Pre-generate seed episode audio in background if missing
     try:
@@ -207,6 +244,117 @@ def init_seed_data():
                     shutil.copyfile(src_f, dst_f)
                     logger.info(f"Upgraded episode JSON with full paper corpus: {dst_f}")
 
+def sanitize_existing_episodes():
+    """Scans EPISODES_DIR and in-place sanitizes any stale MAS/TRM references in saved JSON files."""
+    if not os.path.exists(EPISODES_DIR):
+        return
+    for fn in os.listdir(EPISODES_DIR):
+        if not fn.endswith(".json"):
+            continue
+        fp = os.path.join(EPISODES_DIR, fn)
+        try:
+            with open(fp, "r") as f:
+                content = f.read()
+            
+            if any(k in content for k in ["MAS FEAT", "MAS TRM", "Singapore MAS", "Singapore PDPC", "mas.gov.sg", "SR 11-7", "in banking perimeters"]):
+                updated = (
+                    content.replace("4. MAS FEAT Model Risk Compliance & Socratic QA", "4. NIST AI Risk Management & Enterprise Model Safety")
+                    .replace("MAS FEAT Model Risk Compliance & Socratic QA", "NIST AI Risk Management & Enterprise Model Safety")
+                    .replace("Zero-Trust SPIFFE Workload Tokens in Banking", "Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation")
+                    .replace("Zero-Trust SPIFFE Workload Tokens & MAS TRM 9 (Full Paper)", "Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation (Full Paper)")
+                    .replace("Zero-Trust SPIFFE Workload Identity in Banking & MAS TRM Sec 9", "Zero-Trust SPIFFE Workload Identity in Microservices & NIST SP 800-207")
+                    .replace("Singapore MAS FEAT Principles & US Fed SR 11-7 Model Governance", "NIST AI Risk Management Framework (AI RMF 1.0) & ISO/IEC 42001 Governance")
+                    .replace("Singapore PDPC Guidelines on Synthetic Data & Privacy-Preserving AI", "Enterprise Privacy-Preserving AI & Synthetic Data Governance")
+                    .replace("https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines", "https://csrc.nist.gov/publications/detail/sp/800-207/final")
+                    .replace("https://www.mas.gov.sg/publications/monographs-or-information-paper/2018/FEAT", "https://www.nist.gov/itl/ai-risk-management-framework")
+                    .replace("https://www.pdpc.gov.sg/help-and-resources/2020/01/model-ai-governance-framework", "https://www.nist.gov/privacy-framework")
+                    .replace("MAS Technology Risk Management Guidelines (TRM Sec 9)", "NIST SP 800-207: Zero Trust Architecture")
+                    .replace("Monetary Authority of Singapore FEAT Principles", "NIST AI Risk Management Framework")
+                    .replace("Singapore PDPC AI Governance Framework", "NIST Privacy Framework & Synthetic Data")
+                    .replace("Singapore MAS Technology Risk Management", "NIST SP 800-207")
+                    .replace("MAS TRM Section 9.2 Compliance: Meets strict regulatory mandates for end-to-end mTLS encryption and automated 60-minute secret rotation.", "Zero-Trust Compliance: Meets strict mandates for end-to-end mTLS encryption and automated 60-minute secret rotation.")
+                    .replace("MAS TRM Section 9", "NIST SP 800-207")
+                    .replace("MAS TRM 9", "Zero Trust")
+                    .replace("MAS FEAT", "NIST AI RMF")
+                    .replace("Singapore MAS", "Enterprise Governance")
+                    .replace("Singapore PDPC", "Data Privacy Standards")
+                    .replace("in Banking", "in Microservices")
+                    .replace("in banking perimeters", "in zero-trust perimeters")
+                )
+                with open(fp, "w") as f:
+                    f.write(updated)
+                logger.info(f"Sanitized historical episode {fn} of stale regional references.")
+        except Exception as e:
+            logger.error(f"Error sanitizing episode {fn}: {e}")
+
+def enforce_retention_policy():
+    """Purges older episodes and audio files beyond the configured retention limit."""
+    cfg = load_config()
+    limit = int(cfg.get("max_episodes_retained", 14))
+    if limit <= 0 or not os.path.exists(EPISODES_DIR):
+        return {"purged_episodes": 0, "freed_bytes": 0}
+
+    files = [f for f in os.listdir(EPISODES_DIR) if f.startswith("ep-") and f.endswith(".json")]
+    def sort_key(fn: str) -> int:
+        try:
+            return int(fn.replace("ep-", "").replace(".json", ""))
+        except:
+            return 0
+    sorted_files = sorted(files, key=sort_key, reverse=True)
+
+    freed_bytes = 0
+    purged_count = 0
+
+    if len(sorted_files) > limit:
+        to_purge = sorted_files[limit:]
+        for fn in to_purge:
+            fp = os.path.join(EPISODES_DIR, fn)
+            try:
+                freed_bytes += os.path.getsize(fp)
+                os.remove(fp)
+                purged_count += 1
+                logger.info(f"Retention policy: purged old episode JSON {fn}")
+            except Exception as e:
+                logger.error(f"Failed to purge episode {fn}: {e}")
+
+            audio_fn = fn.replace(".json", ".mp3")
+            audio_fp = os.path.join(AUDIO_DIR, audio_fn)
+            if os.path.exists(audio_fp):
+                try:
+                    freed_bytes += os.path.getsize(audio_fp)
+                    os.remove(audio_fp)
+                    logger.info(f"Retention policy: purged old episode audio {audio_fn}")
+                except Exception as e:
+                    logger.error(f"Failed to purge audio {audio_fn}: {e}")
+
+    return {"purged_episodes": purged_count, "freed_bytes": freed_bytes}
+
+def get_storage_stats() -> Dict[str, Any]:
+    episodes_count = 0
+    audio_count = 0
+    total_bytes = 0
+
+    if os.path.exists(EPISODES_DIR):
+        for f in os.listdir(EPISODES_DIR):
+            if f.endswith(".json"):
+                episodes_count += 1
+                total_bytes += os.path.getsize(os.path.join(EPISODES_DIR, f))
+
+    if os.path.exists(AUDIO_DIR):
+        for f in os.listdir(AUDIO_DIR):
+            if f.endswith(".mp3"):
+                audio_count += 1
+                total_bytes += os.path.getsize(os.path.join(AUDIO_DIR, f))
+
+    cfg = load_config()
+    return {
+        "total_episodes": episodes_count,
+        "total_audio": audio_count,
+        "disk_usage_bytes": total_bytes,
+        "disk_usage_mb": round(total_bytes / (1024 * 1024), 2),
+        "max_episodes_retained": cfg.get("max_episodes_retained", 14)
+    }
+
 def cleanup_duplicate_episodes():
     """Scans EPISODES_DIR and purges any duplicate episodes with identical titles or summaries."""
     if not os.path.exists(EPISODES_DIR):
@@ -252,6 +400,8 @@ def cleanup_duplicate_episodes():
 
 init_seed_data()
 cleanup_duplicate_episodes()
+sanitize_existing_episodes()
+enforce_retention_policy()
 
 def get_sorted_episode_files() -> List[str]:
     cleanup_duplicate_episodes()
@@ -442,27 +592,54 @@ async def manual_refresh(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_daily_pipeline)
     return {"status": "ok", "message": "Ingestion and synthesis pipeline triggered in background.", "state": pipeline_state}
 
-@app.get("/api/refresh/status")
-async def get_refresh_status():
-    return pipeline_state
+@app.get("/api/settings")
+async def get_settings():
+    cfg = load_config()
+    stats = get_storage_stats()
+    return {
+        "config": cfg,
+        "storage": stats
+    }
 
-@app.post("/api/export-vault")
-async def export_vault(req: Dict[str, Any]):
-    ep_id = req.get("episode_id", "ep-142")
-    ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
-    if not os.path.exists(ep_file):
-        seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{ep_id}.json")
-        if os.path.exists(seed_f):
-            ep_file = seed_f
-        else:
-            ep_file = os.path.join(EPISODES_DIR, "ep-142.json")
-    
-    if not os.path.exists(ep_file):
-        raise HTTPException(status_code=404, detail="Episode not found")
+class SettingsUpdate(BaseModel):
+    max_episodes_retained: Optional[int] = None
+    chapters_per_episode: Optional[int] = None
+    gemini_model: Optional[str] = None
+    cron_schedule: Optional[str] = None
 
-    with open(ep_file, "r") as fp:
-        ep = json.load(fp)
+@app.post("/api/settings")
+async def update_settings(payload: SettingsUpdate):
+    cfg = load_config()
+    if payload.max_episodes_retained is not None:
+        cfg["max_episodes_retained"] = payload.max_episodes_retained
+    if payload.chapters_per_episode is not None:
+        cfg["chapters_per_episode"] = payload.chapters_per_episode
+    if payload.gemini_model is not None:
+        cfg["gemini_model"] = payload.gemini_model
+    if payload.cron_schedule is not None:
+        cfg["cron_schedule"] = payload.cron_schedule
 
+    save_config(cfg)
+    cleanup_res = enforce_retention_policy()
+    stats = get_storage_stats()
+    return {
+        "status": "success",
+        "config": cfg,
+        "storage": stats,
+        "cleanup": cleanup_res
+    }
+
+@app.post("/api/settings/cleanup")
+async def trigger_storage_cleanup():
+    cleanup_res = enforce_retention_policy()
+    stats = get_storage_stats()
+    return {
+        "status": "success",
+        "cleanup": cleanup_res,
+        "storage": stats
+    }
+
+def generate_markdown_content(ep: Dict[str, Any], ep_id: str) -> str:
     md_content = f"""---
 title: "{ep.get('title')}"
 date: {ep.get('date')}
@@ -514,15 +691,61 @@ type: literature-note
 - **Study Notes Index**: [[Research Notes MOC]]
 - **Tags**: #techpulse/daily-briefing #architecture/enterprise #ai/agent-governance
 """
+    return md_content
 
+@app.get("/api/export-markdown/{episode_id}")
+async def export_markdown_file(episode_id: str):
+    ep_file = os.path.join(EPISODES_DIR, f"{episode_id}.json")
+    if not os.path.exists(ep_file):
+        seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{episode_id}.json")
+        if os.path.exists(seed_f):
+            ep_file = seed_f
+        else:
+            ep_file = os.path.join(EPISODES_DIR, "ep-142.json")
+    
+    if not os.path.exists(ep_file):
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    with open(ep_file, "r") as fp:
+        ep = json.load(fp)
+
+    md_content = generate_markdown_content(ep, episode_id)
     return Response(
         content=md_content,
         media_type="text/markdown",
         headers={
-            "Content-Disposition": f'attachment; filename="{ep_id}.md"',
+            "Content-Disposition": f'attachment; filename="techpulse-{episode_id}.md"',
             "Access-Control-Allow-Origin": "*"
         }
     )
+
+@app.post("/api/export-vault")
+async def export_vault(req: Dict[str, Any]):
+    ep_id = req.get("episode_id", "ep-142")
+    ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
+    if not os.path.exists(ep_file):
+        seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{ep_id}.json")
+        if os.path.exists(seed_f):
+            ep_file = seed_f
+        else:
+            ep_file = os.path.join(EPISODES_DIR, "ep-142.json")
+    
+    if not os.path.exists(ep_file):
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    with open(ep_file, "r") as fp:
+        ep = json.load(fp)
+
+    md_content = generate_markdown_content(ep, ep_id)
+    filename = f"techpulse-{ep_id}.md"
+
+    return {
+        "status": "success",
+        "episode_id": ep_id,
+        "filename": filename,
+        "markdown": md_content,
+        "message": f"Successfully exported Episode #{ep.get('episode_number', ep_id)} as Markdown note ({filename})."
+    }
 
 @app.get("/audio/{filename}")
 async def serve_audio(filename: str):

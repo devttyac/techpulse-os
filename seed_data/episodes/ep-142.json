@@ -12,30 +12,58 @@
     {
       "time": "00:00",
       "seconds": 0,
-      "title": "\ud83d\udcc4 AI: Deterministic Main-as-Router Pattern (Full Paper)",
-      "source_name": "Anthropic & OpenAI",
+      "title": "1. 🤖 AI & Multi-Agent Deterministic Routing",
+      "source_name": "Anthropic Research",
       "source_url": "https://www.anthropic.com/research/building-effective-agents"
     },
     {
-      "time": "03:35",
-      "seconds": 215,
-      "title": "\ud83d\udcc4 Cloud: Azure Landing Zones & AWS Failover (Full Paper)",
-      "source_name": "Azure Architecture Center",
-      "source_url": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"
+      "time": "01:15",
+      "seconds": 75,
+      "title": "2. ☁️ Multi-Region Resiliency & Azure Landing Zones",
+      "source_name": "Azure Architecture",
+      "source_url": "https://learn.microsoft.com/azure/architecture/"
     },
     {
-      "time": "06:15",
-      "seconds": 375,
-      "title": "\ud83d\udcc4 Data: Microsoft Fabric Direct Lake Mode (Full Paper)",
-      "source_name": "Microsoft Fabric Engineering",
+      "time": "02:25",
+      "seconds": 145,
+      "title": "3. 📊 Microsoft Fabric Direct Lake vs Snowflake Iceberg",
+      "source_name": "MS Fabric Blog",
       "source_url": "https://blog.fabric.microsoft.com/"
     },
     {
-      "time": "09:20",
-      "seconds": 560,
-      "title": "\ud83d\udcc4 Security: Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation (Full Paper)",
-      "source_name": "CNCF Security TAG",
+      "time": "03:40",
+      "seconds": 220,
+      "title": "4. 🛡️ Zero-Trust SPIFFE Workload Tokens & Attestation",
+      "source_name": "SPIFFE Foundation",
       "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"
+    },
+    {
+      "time": "04:55",
+      "seconds": 295,
+      "title": "5. ⚙️ SRE Kernel eBPF Observability & Tracing",
+      "source_name": "eBPF.io",
+      "source_url": "https://ebpf.io/what-is-ebpf/"
+    },
+    {
+      "time": "06:10",
+      "seconds": 370,
+      "title": "6. ⚡ Distributed Systems Architecture & Outbox CDC",
+      "source_name": "Debezium Community",
+      "source_url": "https://debezium.io/"
+    },
+    {
+      "time": "07:25",
+      "seconds": 445,
+      "title": "7. 💰 Spot GPU Orchestration & LLM Token FinOps",
+      "source_name": "FinOps Foundation",
+      "source_url": "https://www.finops.org/"
+    },
+    {
+      "time": "08:35",
+      "seconds": 515,
+      "title": "8. ⚖️ NIST AI Risk Management & ISO 42001 Governance",
+      "source_name": "NIST AI & Cybersecurity",
+      "source_url": "https://www.nist.gov/itl/ai-risk-management-framework"
     }
   ],
   "takeaways": {

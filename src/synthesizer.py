@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("techpulse.synthesizer")
 
 SYSTEM_SYNTHESIS_PROMPT = """You are the Principal AI Synthesis Engine for TechPulse OS.
-Your task is to analyze today's ingested engineering articles across 8 technology domains and generate an executive multi-host technical podcast briefing, structured interview takeaways, timecoded chapters, and spaced-repetition flashcards.
+Your task is to analyze today's ingested engineering articles across 8 technology domains and generate an executive multi-host technical podcast briefing, structured interview takeaways, 8 timecoded chapters (one per technology domain), and spaced-repetition flashcards.
 
 The briefing hosts are:
 - Host A: Enterprise Cloud Architect & AI Systems Specialist
@@ -20,14 +20,18 @@ You MUST return a strictly valid JSON object matching this schema:
   "summary": "2-3 sentence executive synopsis of today's briefing",
   "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal Systems Architect & Governance Lead)",
   "script_segments": [
-    {"speaker": "Host A", "text": "...", "chapter_title": "1. Intro & Multi-Agent Deterministic Routing"},
-    {"speaker": "Host B", "text": "...", "chapter_title": "1. Intro & Multi-Agent Deterministic Routing"}
+    {"speaker": "Host A", "text": "...", "chapter_title": "1. 🤖 AI & Multi-Agent Deterministic Routing"},
+    {"speaker": "Host B", "text": "...", "chapter_title": "1. 🤖 AI & Multi-Agent Deterministic Routing"}
   ],
   "chapters": [
-    {"title": "1. Intro & Multi-Agent Deterministic Routing", "source_name": "Anthropic Engineering", "source_url": "https://www.anthropic.com/research/building-effective-agents"},
-    {"title": "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg", "source_name": "MS Fabric Team Blog", "source_url": "https://blog.fabric.microsoft.com/"},
-    {"title": "3. Zero-Trust SPIFFE Workload Identity in Microservices", "source_name": "SPIFFE Foundation", "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"},
-    {"title": "4. Enterprise AI Risk Governance (NIST AI RMF & ISO 42001)", "source_name": "NIST AI Safety", "source_url": "https://www.nist.gov/itl/ai-risk-management-framework"}
+    {"title": "1. 🤖 AI & Multi-Agent Deterministic Routing", "source_name": "Anthropic Engineering", "source_url": "https://www.anthropic.com/research/building-effective-agents"},
+    {"title": "2. ☁️ Multi-Region Resiliency & Azure Landing Zones", "source_name": "Azure Architecture", "source_url": "https://learn.microsoft.com/azure/architecture/"},
+    {"title": "3. 📊 Microsoft Fabric Direct Lake vs Snowflake Iceberg", "source_name": "MS Fabric Team Blog", "source_url": "https://blog.fabric.microsoft.com/"},
+    {"title": "4. 🛡️ Zero-Trust SPIFFE Workload Tokens & Attestation", "source_name": "SPIFFE Foundation", "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"},
+    {"title": "5. ⚙️ SRE Kernel eBPF Observability & Distributed Tracing", "source_name": "eBPF.io", "source_url": "https://ebpf.io/what-is-ebpf/"},
+    {"title": "6. ⚡ Distributed Systems Architecture & Outbox CDC", "source_name": "Debezium Community", "source_url": "https://debezium.io/"},
+    {"title": "7. 💰 Spot GPU Orchestration & LLM Token FinOps", "source_name": "FinOps Foundation", "source_url": "https://www.finops.org/"},
+    {"title": "8. ⚖️ NIST AI Risk Management & ISO 42001 Governance", "source_name": "NIST AI & Cybersecurity", "source_url": "https://www.nist.gov/itl/ai-risk-management-framework"}
   ],
   "takeaways": {
     "ai": {
@@ -72,12 +76,16 @@ def extract_full_articles_corpus(domain_corpus: Dict[str, List[Dict[str, Any]]])
     return corpus_map
 
 def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]]], episode_num: int) -> Dict[str, Any]:
-    logger.info("Generating structured deterministic intelligence payload from ingested corpus...")
+    logger.info("Generating structured deterministic intelligence payload from ingested corpus across all 8 domains...")
     
     # Extract top article titles per domain
     ai_item = domain_corpus.get("ai", [{}])[0] if domain_corpus.get("ai") else {}
+    cloud_item = domain_corpus.get("cloud", [{}])[0] if domain_corpus.get("cloud") else {}
     data_item = domain_corpus.get("data", [{}])[0] if domain_corpus.get("data") else {}
     sec_item = domain_corpus.get("sec", [{}])[0] if domain_corpus.get("sec") else {}
+    devops_item = domain_corpus.get("devops", [{}])[0] if domain_corpus.get("devops") else {}
+    arch_item = domain_corpus.get("arch", [{}])[0] if domain_corpus.get("arch") else {}
+    finops_item = domain_corpus.get("finops", [{}])[0] if domain_corpus.get("finops") else {}
     gov_item = domain_corpus.get("gov", [{}])[0] if domain_corpus.get("gov") else {}
 
     full_articles = extract_full_articles_corpus(domain_corpus)
@@ -87,70 +95,128 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
         "episode_number": episode_num,
         "date": datetime.now(timezone.utc).strftime("%b %d, %Y"),
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "title": "Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Workload Identity",
-        "summary": "Today we analyze Anthropic's deterministic agent routing patterns, compare Microsoft Fabric Direct Lake against Snowflake Iceberg catalogs, review SPIFFE workload identity in distributed microservices, and examine NIST AI Risk Management Framework standards for production LLMs.",
+        "title": "Executive Briefing: Full-Stack Enterprise Architecture, Agentic Governance & Zero Trust",
+        "summary": "Today's briefing covers all 8 engineering pillars: Anthropic deterministic agent routing, cross-region Kubernetes failover, Fabric Direct Lake, SPIFFE workload attestation, kernel eBPF tracing, Debezium transactional outbox CDC, spot GPU FinOps, and NIST AI Risk Management.",
         "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal Systems Architect & Governance Lead)",
-        "duration": "05:20",
-        "total_seconds": 320,
+        "duration": "09:45",
+        "total_seconds": 585,
         "full_articles": full_articles,
         "script_segments": [
             {
                 "speaker": "Host A",
                 "text": "Good morning and welcome to TechPulse OS. Today, we lead with enterprise multi-agent system design. Anthropic's latest engineering report highlights that autonomous agent swarms without a deterministic router suffer from cascading hallucination loops in high-context tasks.",
-                "chapter_title": "1. Intro & Multi-Agent Deterministic Routing"
+                "chapter_title": "1. 🤖 AI & Multi-Agent Deterministic Routing"
             },
             {
                 "speaker": "Host B",
                 "text": "That's a crucial architectural shift. In enterprise distributed systems, we cannot rely on unbounded prompt loops. The Main-as-Router pattern enforces strict state serialization and pre-execution dry-run approval gates, directly meeting production reliability and safety standards.",
-                "chapter_title": "1. Intro & Multi-Agent Deterministic Routing"
+                "chapter_title": "1. 🤖 AI & Multi-Agent Deterministic Routing"
             },
             {
                 "speaker": "Host A",
-                "text": "Turning to enterprise data architecture, Microsoft Fabric's Direct Lake mode is transforming analytical reporting. Instead of duplicating data into VertiPaq .PBIX files via scheduled batch jobs, it queries Delta Parquet files directly from OneLake into VertiPaq memory on demand.",
-                "chapter_title": "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg"
+                "text": "Moving to Cloud & Platforms: achieving cross-region high availability with RTO under 60 seconds requires decoupling Anycast ingress from asynchronous storage replication across Azure Landing Zones and AWS.",
+                "chapter_title": "2. ☁️ Multi-Region Resiliency & Azure Landing Zones"
+            },
+            {
+                "speaker": "Host B",
+                "text": "Correct. Using Azure Front Door paired with GitOps controllers like FluxCD ensures identical stateless pod topologies while avoiding multi-region synchronous database locking penalties.",
+                "chapter_title": "2. ☁️ Multi-Region Resiliency & Azure Landing Zones"
+            },
+            {
+                "speaker": "Host A",
+                "text": "Turning to enterprise data architecture, Microsoft Fabric's Direct Lake mode is transforming analytical reporting. Instead of duplicating data into VertiPaq files via scheduled batch jobs, it queries Delta Parquet files directly from OneLake into VertiPaq memory on demand.",
+                "chapter_title": "3. 📊 Microsoft Fabric Direct Lake vs Snowflake Iceberg"
             },
             {
                 "speaker": "Host B",
                 "text": "And Snowflake is competing directly with managed Apache Iceberg tables. The advantage for architects is vendor neutrality: an external Iceberg catalog allows Spark, Databricks, and Snowflake engines to operate on the same S3 storage tier without vendor lock-in.",
-                "chapter_title": "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg"
+                "chapter_title": "3. 📊 Microsoft Fabric Direct Lake vs Snowflake Iceberg"
             },
             {
                 "speaker": "Host A",
                 "text": "In infrastructure security, static credentials in CI/CD pipelines are officially obsolete. SPIFFE and SPIRE automated workload identity federation issues ephemeral X.509 SVID certificates rotating every 60 minutes.",
-                "chapter_title": "3. Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation"
+                "chapter_title": "4. 🛡️ Zero-Trust SPIFFE Workload Tokens & Attestation"
             },
             {
                 "speaker": "Host B",
-                "text": "Exactly. This satisfies NIST SP 800-207 Zero Trust credential lifecycle mandates. Finally, on AI governance, the NIST AI Risk Management Framework and ISO 42001 guidelines mandate immutable audit logging capturing prompt snapshots, model temperature, and output for every production GenAI decision.",
-                "chapter_title": "4. NIST AI Risk Management & Enterprise Model Safety"
+                "text": "SPIRE inspects Linux kernel cgroups and container namespaces directly, satisfying NIST SP 800-207 Zero Trust credential lifecycle mandates.",
+                "chapter_title": "4. 🛡️ Zero-Trust SPIFFE Workload Tokens & Attestation"
+            },
+            {
+                "speaker": "Host A",
+                "text": "In SRE and observability: eBPF socket tracing captures TCP latency and packet drops inside kernel space with under 1% CPU overhead, propagating W3C distributed trace context into OpenTelemetry.",
+                "chapter_title": "5. ⚙️ SRE Kernel eBPF Observability & Distributed Tracing"
+            },
+            {
+                "speaker": "Host B",
+                "text": "And in distributed systems architecture, Debezium Change Data Capture reads database Write-Ahead Logs to guarantee Transactional Outbox atomicity without fragile Two-Phase Commit locks.",
+                "chapter_title": "6. ⚡ Distributed Systems Architecture & Outbox CDC"
+            },
+            {
+                "speaker": "Host A",
+                "text": "On Cloud Economics and FinOps: auto-pausing idle Fabric capacities and leveraging Graviton4 spot instance pools reduces batch inference spend by over 35 percent.",
+                "chapter_title": "7. 💰 Spot GPU Orchestration & LLM Token FinOps"
+            },
+            {
+                "speaker": "Host B",
+                "text": "Finally, on AI governance, the NIST AI Risk Management Framework and ISO 42001 guidelines mandate immutable audit logging capturing prompt snapshots, model temperature, and output for every production GenAI decision.",
+                "chapter_title": "8. ⚖️ NIST AI Risk Management & ISO 42001 Governance"
             }
         ],
         "chapters": [
             {
                 "time": "00:00",
                 "seconds": 0,
-                "title": "1. Intro & Multi-Agent Deterministic Routing",
+                "title": "1. 🤖 AI & Multi-Agent Deterministic Routing",
                 "source_name": ai_item.get("source_name", "Anthropic Research"),
                 "source_url": ai_item.get("url", "https://www.anthropic.com/research/building-effective-agents")
             },
             {
                 "time": "01:15",
                 "seconds": 75,
-                "title": "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg",
+                "title": "2. ☁️ Multi-Region Resiliency & Azure Landing Zones",
+                "source_name": cloud_item.get("source_name", "Azure Architecture"),
+                "source_url": cloud_item.get("url", "https://learn.microsoft.com/azure/architecture/")
+            },
+            {
+                "time": "02:25",
+                "seconds": 145,
+                "title": "3. 📊 Microsoft Fabric Direct Lake vs Snowflake Iceberg",
                 "source_name": data_item.get("source_name", "MS Fabric Team Blog"),
                 "source_url": data_item.get("url", "https://blog.fabric.microsoft.com/")
             },
             {
-                "time": "02:35",
-                "seconds": 155,
-                "title": "3. Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation",
+                "time": "03:40",
+                "seconds": 220,
+                "title": "4. 🛡️ Zero-Trust SPIFFE Workload Tokens & Attestation",
                 "source_name": sec_item.get("source_name", "SPIFFE Foundation"),
                 "source_url": sec_item.get("url", "https://spiffe.io/docs/latest/spiffe-about/overview/")
             },
             {
-                "time": "04:00",
-                "seconds": 240,
-                "title": "4. NIST AI Risk Management & Enterprise Model Safety",
+                "time": "04:55",
+                "seconds": 295,
+                "title": "5. ⚙️ SRE Kernel eBPF Observability & Distributed Tracing",
+                "source_name": devops_item.get("source_name", "eBPF.io"),
+                "source_url": devops_item.get("url", "https://ebpf.io/what-is-ebpf/")
+            },
+            {
+                "time": "06:10",
+                "seconds": 370,
+                "title": "6. ⚡ Distributed Systems Architecture & Outbox CDC",
+                "source_name": arch_item.get("source_name", "Debezium Community"),
+                "source_url": arch_item.get("url", "https://debezium.io/")
+            },
+            {
+                "time": "07:25",
+                "seconds": 445,
+                "title": "7. 💰 Spot GPU Orchestration & LLM Token FinOps",
+                "source_name": finops_item.get("source_name", "FinOps Foundation"),
+                "source_url": finops_item.get("url", "https://www.finops.org/")
+            },
+            {
+                "time": "08:35",
+                "seconds": 515,
+                "title": "8. ⚖️ NIST AI Risk Management & ISO 42001 Governance",
                 "source_name": gov_item.get("source_name", "NIST AI & Cybersecurity"),
                 "source_url": gov_item.get("url", "https://www.nist.gov/itl/ai-risk-management-framework")
             }

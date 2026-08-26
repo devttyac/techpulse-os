@@ -283,13 +283,18 @@
           </div>
         </div>
 
-        <!-- Mobile Quick Sync Button -->
-        <button onclick="openPodcastModal()" class="md:hidden p-2 rounded-xl bg-white/5 text-cyan-400 border border-white/10 flex items-center justify-center" title="Podcast RSS Feed">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
-        </button>
+        <!-- Mobile Quick Actions -->
+        <div class="flex items-center gap-1.5 md:hidden">
+          <button onclick="openSettingsModal()" class="p-2 rounded-xl bg-white/5 text-slate-300 hover:text-white border border-white/10 flex items-center justify-center active:scale-95" title="Settings & Retention">
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </button>
+          <button onclick="openPodcastModal()" class="p-2 rounded-xl bg-white/5 text-cyan-400 border border-white/10 flex items-center justify-center active:scale-95" title="Podcast RSS Feed">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
+          </button>
+        </div>
       </div>
 
-      <!-- Theme Selector & Desktop Sync -->
+      <!-- Theme Selector & Desktop Sync / Settings -->
       <div class="flex items-center justify-between md:justify-end gap-2 overflow-x-auto no-scrollbar pb-1 md:pb-0">
         <div class="flex items-center gap-1 p-1 rounded-xl bg-black/50 border border-white/10 text-xs overflow-x-auto no-scrollbar flex-shrink-0">
           <span class="pl-2 pr-1 text-slate-400 text-[11px] font-medium flex items-center gap-1 flex-shrink-0">
@@ -304,9 +309,14 @@
           <button onclick="setTheme('amber')" id="btn-theme-amber" class="theme-pill px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition">🏺 Amber</button>
         </div>
 
+        <button onclick="openSettingsModal()" class="hidden md:flex px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-slate-200 hover:text-white border border-white/10 items-center gap-1.5 transition active:scale-95 flex-shrink-0" title="Settings & Storage Retention">
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span>Settings</span>
+        </button>
+
         <button onclick="openPodcastModal()" class="hidden md:flex px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold theme-accent-text border border-white/10 items-center gap-1.5 transition active:scale-95 flex-shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
-          <span id="rss-btn-text">Podcast RSS Feed</span>
+          <span id="rss-btn-text">Podcast RSS</span>
         </button>
       </div>
     </header>
@@ -420,16 +430,16 @@
             <p class="text-[11px] sm:text-xs text-slate-400">Swipe tabs to explore verified architectural updates and sources</p>
           </div>
 
-          <!-- Restored 8-Domain Horizontal Pill Bar with Smooth Scroll -->
-          <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
-            <button onclick="switchTab('ai')" id="tab-btn-ai" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold bg-white/15 text-white border border-white/20 shadow-sm transition whitespace-nowrap">🤖 AI & Agents</button>
-            <button onclick="switchTab('cloud')" id="tab-btn-cloud" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">☁️ Cloud & Platforms</button>
-            <button onclick="switchTab('data')" id="tab-btn-data" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">📊 Data & Lakehouse</button>
-            <button onclick="switchTab('sec')" id="tab-btn-sec" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">🛡️ Zero Trust</button>
-            <button onclick="switchTab('devops')" id="tab-btn-devops" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">⚙️ SRE & eBPF</button>
-            <button onclick="switchTab('arch')" id="tab-btn-arch" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">⚡ Distributed Systems</button>
-            <button onclick="switchTab('finops')" id="tab-btn-finops" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">💰 FinOps</button>
-            <button onclick="switchTab('gov')" id="tab-btn-gov" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">⚖️ AI Governance & Risk</button>
+          <!-- 8-Domain 2-Row Responsive Grid (No Overlap/Cutoff) -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pb-1">
+            <button onclick="switchTab('ai')" id="tab-btn-ai" class="tab-btn px-2.5 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold bg-white/15 text-white border border-white/20 shadow-sm transition text-center truncate">🤖 AI & Agents</button>
+            <button onclick="switchTab('cloud')" id="tab-btn-cloud" class="tab-btn px-2.5 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition text-center truncate">☁️ Cloud & Platforms</button>
+            <button onclick="switchTab('data')" id="tab-btn-data" class="tab-btn px-2.5 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition text-center truncate">📊 Data & Lakehouse</button>
+            <button onclick="switchTab('sec')" id="tab-btn-sec" class="tab-btn px-2.5 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition text-center truncate">🛡️ Zero Trust</button>
+            <button onclick="switchTab('devops')" id="tab-btn-devops" class="tab-btn px-2.5 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition text-center truncate">⚙️ SRE & eBPF</button>
+            <button onclick="switchTab('arch')" id="tab-btn-arch" class="tab-btn px-2.5 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition text-center truncate">⚡ Distributed</button>
+            <button onclick="switchTab('finops')" id="tab-btn-finops" class="tab-btn px-2.5 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition text-center truncate">💰 FinOps</button>
+            <button onclick="switchTab('gov')" id="tab-btn-gov" class="tab-btn px-2.5 sm:px-3 py-2 rounded-xl text-[11px] sm:text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition text-center truncate">⚖️ AI Governance</button>
           </div>
 
           <!-- Rich Takeaway Cards -->
@@ -796,14 +806,14 @@
 
         </section>
 
-        <!-- Zone 4: VAULT AUTOMATION WIDGET CARD -->
+        <!-- Zone 4: VAULT & MARKDOWN EXPORT CARD -->
         <section class="glass-panel glow-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3">
-          <h4 class="text-[10px] sm:text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">VAULT AUTOMATION</h4>
+          <h4 class="text-[10px] sm:text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">VAULT & MARKDOWN EXPORT</h4>
           <div class="space-y-2 text-xs">
             <button onclick="exportToVault()" id="export-vault-btn" class="tap-target w-full py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-xl theme-card-bg border text-slate-200 hover:text-white flex items-center justify-between transition group active:scale-95">
               <span class="flex items-center gap-2 font-medium text-xs">
                 <span class="text-violet-400 font-bold text-sm sm:text-base">+</span>
-                Export Note to Obsidian
+                Export as Markdown Files
               </span>
               <span class="font-mono text-[10px] sm:text-[11px] text-slate-400 group-hover:text-white">.md</span>
             </button>
@@ -938,6 +948,99 @@
     </div>
   </div>
 
+  <!-- SETTINGS & RETENTION POLICY MODAL -->
+  <div id="settings-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-panel border glow-border rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl relative animate-fade-in max-h-[90vh] overflow-y-auto no-scrollbar">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-bold">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-white">Settings & Retention Policy</h3>
+            <p class="text-[11px] text-slate-400">Configure storage retention, chapter topics, and models</p>
+          </div>
+        </div>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white text-lg font-bold p-1">&times;</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        
+        <!-- Live Storage Stats Card -->
+        <div class="p-3.5 rounded-xl bg-black/50 border border-white/10 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400 text-[11px] font-mono uppercase tracking-wider">💾 Runtime Storage Usage</span>
+            <span id="storage-stats-badge" class="font-mono text-cyan-400 font-bold text-xs">Loading...</span>
+          </div>
+          <p id="storage-stats-detail" class="text-[11px] text-slate-300">Calculating persistent volume usage...</p>
+          <div class="pt-1 flex justify-end">
+            <button onclick="runStorageCleanup()" id="btn-purge-storage" class="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[11px] font-semibold transition active:scale-95 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              <span>Purge Excess Episodes</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Retention Limit Setting -->
+        <div class="space-y-1.5">
+          <label class="font-semibold text-slate-200 text-xs flex items-center justify-between">
+            <span>Episode Retention Limit</span>
+            <span class="text-[10px] text-slate-400 font-mono">Auto-prunes oldest episodes</span>
+          </label>
+          <select id="setting-retention" class="w-full bg-black/60 text-white text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 cursor-pointer">
+            <option value="7">Keep Latest 7 Episodes (1 Week)</option>
+            <option value="14" selected>Keep Latest 14 Episodes (2 Weeks - Recommended)</option>
+            <option value="30">Keep Latest 30 Episodes (1 Month)</option>
+            <option value="60">Keep Latest 60 Episodes (2 Months)</option>
+            <option value="90">Keep Latest 90 Episodes (3 Months)</option>
+          </select>
+        </div>
+
+        <!-- Chapters Per Episode Setting -->
+        <div class="space-y-1.5">
+          <label class="font-semibold text-slate-200 text-xs flex items-center justify-between">
+            <span>Chapter Topics per Episode</span>
+            <span class="text-[10px] text-slate-400 font-mono">Podcast breakdown granularity</span>
+          </label>
+          <select id="setting-chapters" class="w-full bg-black/60 text-white text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 cursor-pointer">
+            <option value="8" selected>8 Chapters (All 8 Technology Domains)</option>
+            <option value="6">6 Chapters (Core Cloud, AI & Data)</option>
+            <option value="4">4 Chapters (Compact Executive)</option>
+          </select>
+        </div>
+
+        <!-- AI Synthesis Model -->
+        <div class="space-y-1.5">
+          <label class="font-semibold text-slate-200 text-xs flex items-center justify-between">
+            <span>AI Synthesis Engine</span>
+            <span class="text-[10px] text-slate-400 font-mono">Google Gemini API</span>
+          </label>
+          <select id="setting-model" class="w-full bg-black/60 text-white text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 cursor-pointer">
+            <option value="gemini-2.0-flash" selected>Gemini 2.0 Flash (Fastest & Structured)</option>
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy Model)</option>
+          </select>
+        </div>
+
+        <!-- Daily Cron Schedule -->
+        <div class="space-y-1.5">
+          <label class="font-semibold text-slate-200 text-xs flex items-center justify-between">
+            <span>Daily Automated Ingestion Schedule (Cron SGT)</span>
+            <span class="text-[10px] text-slate-400 font-mono">Singapore Time</span>
+          </label>
+          <input id="setting-cron" type="text" value="0 7 * * *" class="w-full bg-black/60 text-white font-mono text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 placeholder:text-slate-500">
+        </div>
+
+        <!-- Action Button -->
+        <div class="pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+          <span id="settings-status-msg" class="text-[11px] font-mono text-emerald-400"></span>
+          <button onclick="saveSettings()" id="btn-save-settings" class="px-4 py-2 rounded-xl theme-accent-btn font-bold text-xs shadow-lg active:scale-95 transition">
+            Save Settings
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
 
     // ==========================================
@@ -1059,30 +1162,58 @@
             {
                 "time": "00:00",
                 "seconds": 0,
-                "title": "\ud83d\udcc4 AI: Deterministic Main-as-Router Pattern (Full Paper)",
-                "source_name": "Anthropic & OpenAI",
+                "title": "1. 🤖 AI & Multi-Agent Deterministic Routing",
+                "source_name": "Anthropic Research",
                 "source_url": "https://www.anthropic.com/research/building-effective-agents"
             },
             {
-                "time": "03:35",
-                "seconds": 215,
-                "title": "\ud83d\udcc4 Cloud: Azure Landing Zones & AWS Failover (Full Paper)",
-                "source_name": "Azure Architecture Center",
-                "source_url": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"
+                "time": "01:15",
+                "seconds": 75,
+                "title": "2. ☁️ Multi-Region Resiliency & Azure Landing Zones",
+                "source_name": "Azure Architecture",
+                "source_url": "https://learn.microsoft.com/azure/architecture/"
             },
             {
-                "time": "06:15",
-                "seconds": 375,
-                "title": "\ud83d\udcc4 Data: Microsoft Fabric Direct Lake Mode (Full Paper)",
-                "source_name": "Microsoft Fabric Engineering",
+                "time": "02:25",
+                "seconds": 145,
+                "title": "3. 📊 Microsoft Fabric Direct Lake vs Snowflake Iceberg",
+                "source_name": "MS Fabric Blog",
                 "source_url": "https://blog.fabric.microsoft.com/"
             },
             {
-                "time": "09:20",
-                "seconds": 560,
-                "title": "\ud83d\udcc4 Security: Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation (Full Paper)",
-                "source_name": "CNCF Security TAG",
+                "time": "03:40",
+                "seconds": 220,
+                "title": "4. 🛡️ Zero-Trust SPIFFE Workload Tokens & Attestation",
+                "source_name": "SPIFFE Foundation",
                 "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"
+            },
+            {
+                "time": "04:55",
+                "seconds": 295,
+                "title": "5. ⚙️ SRE Kernel eBPF Observability & Tracing",
+                "source_name": "eBPF.io",
+                "source_url": "https://ebpf.io/what-is-ebpf/"
+            },
+            {
+                "time": "06:10",
+                "seconds": 370,
+                "title": "6. ⚡ Distributed Systems Architecture & Outbox CDC",
+                "source_name": "Debezium Community",
+                "source_url": "https://debezium.io/"
+            },
+            {
+                "time": "07:25",
+                "seconds": 445,
+                "title": "7. 💰 Spot GPU Orchestration & LLM Token FinOps",
+                "source_name": "FinOps Foundation",
+                "source_url": "https://www.finops.org/"
+            },
+            {
+                "time": "08:35",
+                "seconds": 515,
+                "title": "8. ⚖️ NIST AI Risk Management & ISO 42001 Governance",
+                "source_name": "NIST AI & Cybersecurity",
+                "source_url": "https://www.nist.gov/itl/ai-risk-management-framework"
             }
         ],
         "takeaways": {
@@ -2662,10 +2793,116 @@
       }
     }
 
+    // ==========================================
+    // 6. SETTINGS & RETENTION POLICY
+    // ==========================================
+    async function openSettingsModal() {
+      const modal = document.getElementById('settings-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        await loadSettings();
+      }
+    }
+
+    function closeSettingsModal() {
+      const modal = document.getElementById('settings-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        if (res.ok) {
+          const data = await res.json();
+          const cfg = data.config || {};
+          const storage = data.storage || {};
+
+          // Populate inputs
+          const retSel = document.getElementById('setting-retention');
+          if (retSel && cfg.max_episodes_retained) retSel.value = String(cfg.max_episodes_retained);
+
+          const chapSel = document.getElementById('setting-chapters');
+          if (chapSel && cfg.chapters_per_episode) chapSel.value = String(cfg.chapters_per_episode);
+
+          const modelSel = document.getElementById('setting-model');
+          if (modelSel && cfg.gemini_model) modelSel.value = cfg.gemini_model;
+
+          const cronInput = document.getElementById('setting-cron');
+          if (cronInput && cfg.cron_schedule) cronInput.value = cfg.cron_schedule;
+
+          // Populate storage badge
+          const badge = document.getElementById('storage-stats-badge');
+          if (badge) badge.innerText = `${storage.disk_usage_mb || 0} MB Used`;
+
+          const detail = document.getElementById('storage-stats-detail');
+          if (detail) detail.innerText = `Storage active: ${storage.total_episodes || 0} episode datasets, ${storage.total_audio || 0} audio briefs. Retention limit set to ${storage.max_episodes_retained || 14} episodes.`;
+        }
+      } catch (e) {
+        console.error("Error loading settings:", e);
+      }
+    }
+
+    async function saveSettings() {
+      const btn = document.getElementById('btn-save-settings');
+      const msg = document.getElementById('settings-status-msg');
+      try {
+        if (btn) btn.innerHTML = 'Saving...';
+        const payload = {
+          max_episodes_retained: parseInt(document.getElementById('setting-retention').value, 10),
+          chapters_per_episode: parseInt(document.getElementById('setting-chapters').value, 10),
+          gemini_model: document.getElementById('setting-model').value,
+          cron_schedule: document.getElementById('setting-cron').value.trim()
+        };
+
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          if (msg) {
+            msg.innerText = '✓ Settings Saved & Retention Enforced!';
+            setTimeout(() => { msg.innerText = ''; }, 3000);
+          }
+          await loadSettings();
+          await loadEpisodesFromBackend();
+        }
+      } catch (e) {
+        console.error("Save settings error:", e);
+        if (msg) msg.innerText = '⚠️ Failed to save settings';
+      } finally {
+        if (btn) btn.innerHTML = 'Save Settings';
+      }
+    }
+
+    async function runStorageCleanup() {
+      const btn = document.getElementById('btn-purge-storage');
+      const msg = document.getElementById('settings-status-msg');
+      try {
+        if (btn) btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Purging...';
+        const res = await fetch('/api/settings/cleanup', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          const purged = data.cleanup?.purged_episodes || 0;
+          if (msg) {
+            msg.innerText = `✓ Cleaned! Purged ${purged} excess episodes.`;
+            setTimeout(() => { msg.innerText = ''; }, 3500);
+          }
+          await loadSettings();
+          await loadEpisodesFromBackend();
+        }
+      } catch (e) {
+        console.error("Cleanup error:", e);
+      } finally {
+        if (btn) btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg> Purge Excess Episodes';
+      }
+    }
+
     async function exportToVault() {
       const btn = document.getElementById('export-vault-btn');
       try {
-        if (btn) btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Exporting...</span>`;
+        if (btn) btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Generating Markdown...</span>`;
         
         const res = await fetch('/api/export-vault', {
           method: 'POST',
@@ -2674,22 +2911,24 @@
         });
         
         if (!res.ok) throw new Error('Export failed');
-        const markdownText = await res.text();
+        const data = await res.json();
+        const markdownText = data.markdown || '';
+        const filename = data.filename || `techpulse-${currentEpisodeId}.md`;
         
         const blob = new Blob([markdownText], { type: 'text/markdown;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${currentEpisodeId}.md`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
         if (btn) {
-          btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-emerald-400 text-xs"><span class="font-bold text-sm">✓</span> Downloaded ${currentEpisodeId}.md!</span><span class="font-mono text-[10px] text-emerald-400">Saved</span>`;
+          btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-emerald-400 text-xs"><span class="font-bold text-sm">✓</span> Downloaded ${escapeHtml(filename)}!</span><span class="font-mono text-[10px] text-emerald-400">Saved</span>`;
           setTimeout(() => {
-            btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><span class="text-violet-400 font-bold text-sm sm:text-base">+</span> Export Note to Obsidian</span><span class="font-mono text-[10px] sm:text-[11px] text-slate-400 group-hover:text-white">.md</span>`;
+            btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><span class="text-violet-400 font-bold text-sm sm:text-base">+</span> Export as Markdown Files</span><span class="font-mono text-[10px] sm:text-[11px] text-slate-400 group-hover:text-white">.md</span>`;
           }, 2500);
         }
       } catch (err) {
@@ -2697,7 +2936,7 @@
         if (btn) {
           btn.innerHTML = `<span class="text-rose-400 text-xs">Export Failed</span>`;
           setTimeout(() => {
-            btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><span class="text-violet-400 font-bold text-sm sm:text-base">+</span> Export Note to Obsidian</span><span class="font-mono text-[10px] sm:text-[11px] text-slate-400 group-hover:text-white">.md</span>`;
+            btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><span class="text-violet-400 font-bold text-sm sm:text-base">+</span> Export as Markdown Files</span><span class="font-mono text-[10px] sm:text-[11px] text-slate-400 group-hover:text-white">.md</span>`;
           }, 2000);
         }
       }
