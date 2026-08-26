@@ -281,9 +281,9 @@ pipeline_state = {
 async def run_daily_pipeline():
     logger.info("Executing scheduled TechPulse daily ingestion and synthesis pipeline...")
     pipeline_state["running"] = True
-    pipeline_state["stage"] = "ingesting"
-    pipeline_state["progress"] = 20
-    pipeline_state["message"] = "Fetching RSS feeds and technical papers across 8 domains..."
+    pipeline_state["stage"] = "checking"
+    pipeline_state["progress"] = 15
+    pipeline_state["message"] = "Scanning RSS feeds for newly published technical whitepapers..."
     pipeline_state["error"] = None
 
     try:
@@ -318,9 +318,9 @@ async def run_daily_pipeline():
             if not new_urls and fetched_urls:
                 latest_num = latest_ep.get("episode_number", latest_ep.get("id", "142").replace("ep-", ""))
                 logger.info(f"No new papers or articles found in feeds since Episode #{latest_num}. Skipping duplicate synthesis.")
-                pipeline_state["stage"] = "complete"
+                pipeline_state["stage"] = "up_to_date"
                 pipeline_state["progress"] = 100
-                pipeline_state["message"] = f"Feeds already up-to-date! No new papers since Episode #{latest_num}."
+                pipeline_state["message"] = "Feeds are up-to-date! No new whitepapers published as yet."
                 pipeline_state["last_episode_id"] = latest_ep["id"]
                 pipeline_state["last_run"] = datetime.now(timezone.utc).isoformat()
                 pipeline_state["running"] = False
@@ -332,7 +332,7 @@ async def run_daily_pipeline():
         
         pipeline_state["stage"] = "synthesizing"
         pipeline_state["progress"] = 50
-        pipeline_state["message"] = f"Synthesizing briefing & architectural takeaways for Episode #{next_num}..."
+        pipeline_state["message"] = f"New papers found! Synthesizing briefing for Episode #{next_num}..."
 
         briefing_data = await synthesize_briefing(corpus, next_num)
         
@@ -357,7 +357,7 @@ async def run_daily_pipeline():
             
         pipeline_state["stage"] = "complete"
         pipeline_state["progress"] = 100
-        pipeline_state["message"] = f"Episode #{next_num} generated successfully!"
+        pipeline_state["message"] = f"New Episode #{next_num} generated successfully!"
         pipeline_state["last_episode_id"] = briefing_data["id"]
         pipeline_state["last_run"] = datetime.now(timezone.utc).isoformat()
         pipeline_state["running"] = False
@@ -432,6 +432,14 @@ async def chat_endpoint(req: ChatRequest):
 async def manual_refresh(background_tasks: BackgroundTasks):
     if pipeline_state.get("running"):
         return {"status": "busy", "message": "Ingestion pipeline is already actively running.", "state": pipeline_state}
+    
+    # Immediate state reset before background dispatch
+    pipeline_state["running"] = True
+    pipeline_state["stage"] = "checking"
+    pipeline_state["progress"] = 10
+    pipeline_state["message"] = "Scanning RSS feeds for newly published technical whitepapers..."
+    pipeline_state["error"] = None
+
     background_tasks.add_task(run_daily_pipeline)
     return {"status": "ok", "message": "Ingestion and synthesis pipeline triggered in background.", "state": pipeline_state}
 
