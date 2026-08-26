@@ -155,18 +155,19 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
                 ]
             },
             "cloud": {
-                "badge": "MULTI-CLOUD RESILIENCY",
+                "badge": "MULTI-CLOUD & AZURE ARCHITECTURE",
                 "release_date": "Aug 2026",
-                "title": "Cross-Region Multi-Cluster Kubernetes Failover with Anycast Routing",
+                "title": "Cross-Region Multi-Cluster Kubernetes & Azure Landing Zone Failover Patterns",
                 "bullets": [
-                    "Automated active-passive traffic shedding with AWS Global Accelerator and Cloudflare Magic Transit.",
-                    "Stateful persistent volume replication via Rook-Ceph cross-availability-zone mesh.",
-                    "Zero-downtime blue/green ingress cutover with automated health probe circuit breakers."
+                    "Automated active-passive traffic shedding with Azure Front Door, AWS Global Accelerator, and Cloudflare Magic Transit.",
+                    "Stateful persistent volume replication via Azure Managed Disks cross-region replication and Rook-Ceph AZ mesh.",
+                    "Zero-downtime blue/green ingress cutover with automated health probe circuit breakers across hybrid clouds."
                 ],
-                "interview_framing": "Describe trade-offs between Multi-Region Active-Active vs Active-Passive with RPO < 5s.",
+                "interview_framing": "Describe trade-offs between Azure Mission-Critical Multi-Region Active-Active vs Active-Passive architectures with RPO < 5s.",
                 "sources": [
-                    {"title": "AWS Architecture: Multi-Region", "url": "https://aws.amazon.com/blogs/architecture/"},
-                    {"title": "Azure Architecture: Mission-Critical", "url": "https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview"}
+                    {"title": "Microsoft Azure: Mission-Critical Architecture", "url": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"},
+                    {"title": "AWS Architecture: Multi-Region Resilience", "url": "https://aws.amazon.com/blogs/architecture/"},
+                    {"title": "Google Cloud: Cloud Architecture Center", "url": "https://cloudblog.withgoogle.com/rss/"}
                 ]
             },
             "data": {

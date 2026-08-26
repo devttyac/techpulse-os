@@ -19,6 +19,7 @@ DOMAIN_FEEDS: Dict[str, List[Dict[str, str]]] = {
         {"name": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"}
     ],
     "cloud": [
+        {"name": "Microsoft Azure Architecture", "url": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"},
         {"name": "AWS Architecture Blog", "url": "https://aws.amazon.com/blogs/architecture/feed/"},
         {"name": "Google Cloud Blog", "url": "https://cloudblog.withgoogle.com/rss/"}
     ],
