@@ -5,8 +5,8 @@
   "title": "Deep Dive: Agentic RAG Architectures, Vector Cache Warming & Context Window Budgeting",
   "summary": "Explores production caching for vector databases, context window compression techniques, and automated LLM-as-a-Judge evaluation pipelines for high-throughput enterprise systems.",
   "hosts": "Host A (Principal AI Engineer) & Host B (LLMOps Lead)",
-  "duration": "04:45",
-  "total_seconds": 285,
+  "duration": "11:30",
+  "total_seconds": 690,
   "audio_url": "/audio/ep-141.mp3",
   "chapters": [
     {

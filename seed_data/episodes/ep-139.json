@@ -5,8 +5,8 @@
   "title": "Platform Engineering: Kernel eBPF Telemetry & Workload Identity Federation",
   "summary": "Covers kernel-level network tracing with <1% overhead, OpenTelemetry W3C trace context, and MAS TRM Section 9 credential removal.",
   "hosts": "Host A (Principal SRE) & Host B (CISO)",
-  "duration": "04:30",
-  "total_seconds": 270,
+  "duration": "10:45",
+  "total_seconds": 645,
   "audio_url": "/audio/ep-139.mp3",
   "chapters": [
     {

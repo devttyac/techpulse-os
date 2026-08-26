@@ -5,8 +5,8 @@
   "title": "Modern Data Stack: Microsoft Fabric Real-Time Analytics vs Snowflake Iceberg Catalogs",
   "summary": "Deep dive into Delta Parquet on OneLake, open Iceberg metadata management, and enterprise capacity cost modeling across multi-cloud lakehouses.",
   "hosts": "Host A (Data Platform Architect) & Host B (Analytics Engineering Lead)",
-  "duration": "05:10",
-  "total_seconds": 310,
+  "duration": "11:15",
+  "total_seconds": 675,
   "audio_url": "/audio/ep-140.mp3",
   "chapters": [
     {
