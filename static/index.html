@@ -2703,14 +2703,51 @@
       }
     }
 
-    function triggerManualRun() {
+    let refreshPollTimer = null;
+    async function triggerManualRun() {
       const btn = document.getElementById('manual-run-btn');
-      if (btn) {
-        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Ingested!</span><span class="font-mono text-[10px] text-cyan-400 font-bold">Done</span>`;
-        fetch('/api/refresh', { method: 'POST' }).catch(() => {});
-        setTimeout(() => {
-          btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Force Re-Fetch Feeds Now</span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
-        }, 2000);
+      if (!btn) return;
+
+      try {
+        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Ingesting Feeds (20%)...</span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
+        
+        await fetch('/api/refresh', { method: 'POST' });
+        
+        if (refreshPollTimer) clearInterval(refreshPollTimer);
+        refreshPollTimer = setInterval(async () => {
+          try {
+            const statusRes = await fetch('/api/refresh/status');
+            if (statusRes.ok) {
+              const state = await statusRes.json();
+              if (state.running) {
+                const stageText = state.stage === 'ingesting' ? 'Ingesting Feeds (20%)' :
+                                  state.stage === 'synthesizing' ? 'Synthesizing (50%)' :
+                                  state.stage === 'audio_tts' ? 'Generating Audio (75%)' : 'Processing...';
+                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> ${stageText}</span><span class="font-mono text-[10px] text-cyan-400 font-bold">${state.progress || 20}%</span>`;
+              } else if (state.stage === 'complete') {
+                clearInterval(refreshPollTimer);
+                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-emerald-400 text-xs"><span class="font-bold text-sm">✓</span> ${escapeHtml(state.message || 'Episode Ready!')}</span><span class="font-mono text-[10px] text-emerald-400 font-bold">100%</span>`;
+                await loadEpisodesFromBackend();
+                if (state.last_episode_id) {
+                  changeEpisode(state.last_episode_id);
+                }
+                setTimeout(() => {
+                  btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Force Re-Fetch Feeds Now</span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
+                }, 4000);
+              } else if (state.stage === 'error') {
+                clearInterval(refreshPollTimer);
+                btn.innerHTML = `<span class="text-rose-400 text-xs">Pipeline Failed</span>`;
+                setTimeout(() => {
+                  btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Force Re-Fetch Feeds Now</span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
+                }, 3000);
+              }
+            }
+          } catch (e) {
+            console.error("Pipeline poll error:", e);
+          }
+        }, 1500);
+      } catch (err) {
+        console.error("Trigger manual run error:", err);
       }
     }
 

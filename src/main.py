@@ -227,8 +227,24 @@ def get_sorted_episode_files() -> List[str]:
     files = [f for f in os.listdir(EPISODES_DIR) if f.endswith(".json")]
     return sorted(files, key=sort_key, reverse=True)
 
+pipeline_state = {
+    "running": False,
+    "stage": "idle",
+    "progress": 0,
+    "message": "Ready",
+    "last_run": None,
+    "last_episode_id": None,
+    "error": None
+}
+
 async def run_daily_pipeline():
     logger.info("Executing scheduled TechPulse daily ingestion and synthesis pipeline...")
+    pipeline_state["running"] = True
+    pipeline_state["stage"] = "ingesting"
+    pipeline_state["progress"] = 20
+    pipeline_state["message"] = "Fetching RSS feeds and technical papers across 8 domains..."
+    pipeline_state["error"] = None
+
     try:
         corpus = await ingest_all_domains()
         
@@ -236,8 +252,16 @@ async def run_daily_pipeline():
         existing = [f for f in os.listdir(EPISODES_DIR) if f.startswith("ep-") and f.endswith(".json")]
         next_num = 143 if not existing else max([int(f.split("-")[1].split(".")[0]) for f in existing if f.split("-")[1].split(".")[0].isdigit()] + [142]) + 1
         
+        pipeline_state["stage"] = "synthesizing"
+        pipeline_state["progress"] = 50
+        pipeline_state["message"] = f"Synthesizing briefing & architectural takeaways for Episode #{next_num}..."
+
         briefing_data = await synthesize_briefing(corpus, next_num)
         
+        pipeline_state["stage"] = "audio_tts"
+        pipeline_state["progress"] = 75
+        pipeline_state["message"] = "Synthesizing Neural Edge-TTS podcast dialogue (GuyNeural & AriaNeural)..."
+
         # Generate neural TTS audio and calculate dynamic chapter offsets
         final_mp3, dyn_chapters, duration_str, total_secs = await generate_episode_podcast_audio(briefing_data, AUDIO_DIR)
         briefing_data["duration"] = duration_str
@@ -253,8 +277,19 @@ async def run_daily_pipeline():
         with open(ep_path, "w") as f:
             json.dump(briefing_data, f, indent=2)
             
+        pipeline_state["stage"] = "complete"
+        pipeline_state["progress"] = 100
+        pipeline_state["message"] = f"Episode #{next_num} generated successfully!"
+        pipeline_state["last_episode_id"] = briefing_data["id"]
+        pipeline_state["last_run"] = datetime.now(timezone.utc).isoformat()
+        pipeline_state["running"] = False
+
         logger.info(f"Successfully generated Episode #{next_num}: {briefing_data['title']} ({duration_str})")
     except Exception as e:
+        pipeline_state["running"] = False
+        pipeline_state["stage"] = "error"
+        pipeline_state["error"] = str(e)
+        pipeline_state["message"] = f"Pipeline failed: {e}"
         logger.error(f"Error executing daily pipeline: {e}")
 
 class ChatRequest(BaseModel):
@@ -275,6 +310,7 @@ async def health_check():
         "gemini_api_key_length": len(clean_key) if key_configured else 0,
         "episodes_count": ep_count,
         "scheduler_running": scheduler.running,
+        "pipeline_status": pipeline_state,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
@@ -316,15 +352,25 @@ async def chat_endpoint(req: ChatRequest):
 
 @app.post("/api/refresh")
 async def manual_refresh(background_tasks: BackgroundTasks):
+    if pipeline_state.get("running"):
+        return {"status": "busy", "message": "Ingestion pipeline is already actively running.", "state": pipeline_state}
     background_tasks.add_task(run_daily_pipeline)
-    return {"status": "ok", "message": "Manual ingestion and synthesis pipeline triggered in background."}
+    return {"status": "ok", "message": "Ingestion and synthesis pipeline triggered in background.", "state": pipeline_state}
+
+@app.get("/api/refresh/status")
+async def get_refresh_status():
+    return pipeline_state
 
 @app.post("/api/export-vault")
 async def export_vault(req: Dict[str, Any]):
     ep_id = req.get("episode_id", "ep-142")
     ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
     if not os.path.exists(ep_file):
-        ep_file = os.path.join(EPISODES_DIR, "ep-142.json")
+        seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{ep_id}.json")
+        if os.path.exists(seed_f):
+            ep_file = seed_f
+        else:
+            ep_file = os.path.join(EPISODES_DIR, "ep-142.json")
     
     if not os.path.exists(ep_file):
         raise HTTPException(status_code=404, detail="Episode not found")
@@ -333,32 +379,56 @@ async def export_vault(req: Dict[str, Any]):
         ep = json.load(fp)
 
     md_content = f"""---
-created: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}
+title: "{ep.get('title')}"
+date: {ep.get('date')}
+duration: "{ep.get('duration')}"
+hosts: "{ep.get('hosts')}"
 tags:
   - techpulse/daily-briefing
   - episode/{ep_id}
+  - architecture/enterprise
+  - cloud/resiliency
+  - ai/agent-governance
 status: permanent
+type: literature-note
 ---
 
 # {ep.get('title')}
 
-**Date**: {ep.get('date')} | **Duration**: {ep.get('duration')} | **Hosts**: {ep.get('hosts')}
+**Date**: {ep.get('date')} | **Duration**: {ep.get('duration')} | **Hosts**: {ep.get('hosts')} | **Series**: [[TechPulse Daily Briefings MOC]]
+
+---
 
 ## Executive Summary
 {ep.get('summary')}
 
-## Timecoded Chapters & Primary Sources
+---
+
+## Timecoded Chapters & Primary Whitepapers
 """
     for c in ep.get("chapters", []):
         md_content += f"- **[{c.get('time')}]** {c.get('title')} — [{c.get('source_name')}]({c.get('source_url')})\n"
 
-    md_content += "\n## Domain Takeaways\n"
+    md_content += "\n---\n\n## Domain Takeaways\n"
     for dom, data in ep.get("takeaways", {}).items():
-        md_content += f"\n### {dom.upper()}: {data.get('title')}\n"
+        md_content += f"\n### {data.get('badge', dom.upper())}: {data.get('title')}\n"
         for b in data.get("bullets", []):
-            md_content += f"- {b}\n"
+            if ":" in b:
+                hdr, body = b.split(":", 1)
+                md_content += f"- **{hdr.strip()}**: {body.strip()}\n"
+            else:
+                md_content += f"- {b}\n"
         if data.get('interview_framing'):
-            md_content += f"\n> [!TIP]\n> **How to Frame in an Interview:** {data.get('interview_framing')}\n"
+            md_content += f"\n> [!TIP]\n> **Staff Architect Interview & Regulatory Framing:**\n> {data.get('interview_framing')}\n"
+
+    md_content += f"""
+---
+
+## Related Notes & Vault Navigation
+- **Series Index**: [[TechPulse Daily Briefings MOC]]
+- **Study Notes Index**: [[Research Notes MOC]]
+- **Tags**: #techpulse/daily-briefing #architecture/enterprise #ai/agent-governance
+"""
 
     return Response(
         content=md_content,
