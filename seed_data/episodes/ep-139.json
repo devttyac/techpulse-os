@@ -32,20 +32,151 @@
     }
   ],
   "takeaways": {
-    "devops": {
-      "badge": "KERNEL TELEMETRY",
-      "release_date": "Aug 2026",
-      "title": "eBPF Kernel Socket Tracing & OpenTelemetry W3C Context",
+    "ai": {
+      "badge": "KNOWLEDGE DISTILLATION",
+      "release_date": "Aug 23, 2026",
+      "title": "Teacher-Student Knowledge Distillation for Edge SLM Inference",
       "bullets": [
-        "Hooks into Linux kernel kprobes and tracepoints to capture TCP socket latency with under 1% CPU overhead.",
-        "Propagates OpenTelemetry W3C trace headers across asynchronous message queues and service meshes.",
-        "Provides real-time packet-level visibility into container ingress packet drops."
+        "Compact Model Specialization: Distills reasoning capabilities from 70B teacher models into 3B small language models (SLMs) for on-device deployment.",
+        "Logit & Feature Alignment: Optimizes student models using Kullback-Leibler divergence loss on intermediate transformer attention layers.",
+        "Sub-50ms Edge Execution: Runs quantized 4-bit models locally on edge devices with under 2GB RAM footprint."
       ],
-      "interview_framing": "How does eBPF kernel tracing eliminate sidecar proxy CPU overhead in high-throughput Kubernetes clusters?",
+      "interview_framing": "Discuss how distilling frontier models into task-specific SLMs reduces cloud inference API costs by 90% while providing offline capabilities.",
       "sources": [
         {
-          "title": "eBPF.io: Production Kernel Tracing",
+          "title": "DistilBERT & Knowledge Distillation Principles",
+          "url": "https://arxiv.org/abs/1910.01108"
+        }
+      ]
+    },
+    "cloud": {
+      "badge": "SERVICE MESH ARCHITECTURE",
+      "release_date": "Aug 23, 2026",
+      "title": "Sidecarless Ambient Service Mesh vs Traditional Envoy Injection",
+      "bullets": [
+        "Layer 4 ztunnel Proxying: Node-level zero-trust tunnel proxies handle mTLS encryption and identity attestation with near-zero latency overhead.",
+        "Layer 7 Waypoint Proxies: Dynamically provisions standalone Envoy proxies only for namespaces requiring advanced HTTP routing or authorization policies.",
+        "Simplified Upgrade Lifecycle: Eliminates pod restarts during service mesh version upgrades."
+      ],
+      "interview_framing": "Contrast Istio Ambient mesh with traditional sidecar proxies, emphasizing how separating Layer 4 transport from Layer 7 policy simplifies day-2 operations.",
+      "sources": [
+        {
+          "title": "Istio Ambient Mesh Architecture",
+          "url": "https://istio.io/latest/docs/ops/ambient/architecture/"
+        }
+      ]
+    },
+    "data": {
+      "badge": "STREAM PROCESSING",
+      "release_date": "Aug 23, 2026",
+      "title": "Apache Flink Statefun & Exactly-Once Stateful Stream Processing",
+      "bullets": [
+        "Chandy-Lamport Checkpointing: Periodically snapshots distributed streaming state to object storage with sub-second alignment barriers.",
+        "RocksDB State Backend: Manages terabyte-scale streaming state out of RAM to prevent JVM garbage collection pauses.",
+        "Exactly-Once Two-Phase Sinks: Coordinates with transactional Kafka sinks to guarantee no duplicate processing during worker recovery."
+      ],
+      "interview_framing": "Explain the mechanics of Flink distributed checkpointing and how it guarantees exactly-once processing semantics for financial fraud detection pipelines.",
+      "sources": [
+        {
+          "title": "Apache Flink Checkpointing Guide",
+          "url": "https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/stateful-stream-processing/"
+        }
+      ]
+    },
+    "sec": {
+      "badge": "KERNEL WORKLOAD IDENTITY",
+      "release_date": "Aug 23, 2026",
+      "title": "Zero-Trust SPIFFE/SPIRE Attestation & MAS TRM Section 9 Compliance",
+      "bullets": [
+        "Cryptographic cgroup Attestation: Validates container process binary paths, namespaces, and Kubernetes tokens directly inside the Linux kernel.",
+        "Ephemeral SVID Credential Injection: Delivers X.509 certificates to workloads via UNIX domain sockets, removing database passwords from environment variables.",
+        "MAS TRM Section 9.2 Compliance: Meets strict regulatory mandates for end-to-end mTLS encryption and automated 60-minute secret rotation."
+      ],
+      "interview_framing": "Explain how SPIFFE eliminates shared static passwords in financial institutions, drastically reducing the blast radius of container compromises.",
+      "sources": [
+        {
+          "title": "CNCF SPIFFE/SPIRE Production Architecture",
+          "url": "https://spiffe.io/"
+        },
+        {
+          "title": "Singapore MAS TRM Sec 9 Guidelines",
+          "url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
+        }
+      ]
+    },
+    "devops": {
+      "badge": "KERNEL OBSERVABILITY",
+      "release_date": "Aug 23, 2026",
+      "title": "Kernel eBPF Socket Tracing & OpenTelemetry W3C Distributed Context",
+      "bullets": [
+        "Low-Overhead Packet Inspection: eBPF programs hook directly into kernel network tracepoints with <1% CPU overhead.",
+        "Automatic Distributed Tracing: Inspects and propagates W3C trace-context headers across HTTP and gRPC calls without manual code instrumentation.",
+        "Continuous Profiling: Captures on-CPU and off-CPU flame graphs across all running containers to pinpoint production bottlenecks."
+      ],
+      "interview_framing": "Articulate how eBPF observability provides complete system visibility with negligible overhead, reducing Mean Time to Resolution (MTTR) during outages.",
+      "sources": [
+        {
+          "title": "eBPF Applications in Observability",
           "url": "https://ebpf.io/what-is-ebpf/"
+        },
+        {
+          "title": "OpenTelemetry W3C Trace Context Specification",
+          "url": "https://www.w3.org/TR/trace-context/"
+        }
+      ]
+    },
+    "arch": {
+      "badge": "DATABASE CONSISTENCY",
+      "release_date": "Aug 23, 2026",
+      "title": "Distributed Multi-Master Database Replication & CRDT Conflict Resolution",
+      "bullets": [
+        "Conflict-Free Replicated Data Types (CRDTs): Automatically resolves concurrent write conflicts across multi-region databases without distributed locks.",
+        "State-Based vs Operation-Based CRDTs: Compares network bandwidth trade-offs between full state replication and delta mutation streams.",
+        "High Availability Under Partitions: Guarantees AP (Availability + Partition Tolerance) properties under CAP theorem constraints."
+      ],
+      "interview_framing": "Discuss when to choose CRDTs over consensus protocols, citing real-world examples like collaborative documents and shopping cart counters.",
+      "sources": [
+        {
+          "title": "CRDTs: Consistency without Consensus",
+          "url": "https://crdt.tech/"
+        }
+      ]
+    },
+    "finops": {
+      "badge": "EGRESS OPTIMIZATION",
+      "release_date": "Aug 23, 2026",
+      "title": "Cross-AZ Data Transfer Optimization & PrivateLink Architecture",
+      "bullets": [
+        "Availability Zone Colocation: Schedules chatty microservices within the same Availability Zone using Kubernetes pod affinity to eliminate cross-AZ transfer fees.",
+        "AWS VPC Endpoints & PrivateLink: Routes traffic to S3 and DynamoDB over internal AWS networks, avoiding internet NAT gateway data processing costs.",
+        "Egress Cost Monitoring: Tracks network egress volume per Kubernetes namespace using Prometheus and OpenCost."
+      ],
+      "interview_framing": "Show how optimizing network topology and replacing NAT gateways with VPC endpoints cuts cloud networking bills by up to 50%.",
+      "sources": [
+        {
+          "title": "AWS Best Practices for Data Transfer Costs",
+          "url": "https://aws.amazon.com/blogs/architecture/reduce-data-transfer-costs-with-aws-privatelink/"
+        }
+      ]
+    },
+    "gov": {
+      "badge": "VULNERABILITY MANAGEMENT",
+      "release_date": "Aug 23, 2026",
+      "title": "Automated EPSS Vulnerability Prioritization & VEX Attestations",
+      "bullets": [
+        "Exploit Prediction Scoring System (EPSS): Focuses remediation efforts on CVEs with high probability of real-world exploitation rather than raw CVSS scores.",
+        "Vulnerability Exploitability eXchange (VEX): Generates machine-readable attestations confirming whether a vulnerable library is reachable in runtime execution.",
+        "Automated CI/CD Gate Enforcement: Blocks production deployments only when exploitable vulnerabilities are actively detected."
+      ],
+      "interview_framing": "Explain how combining EPSS scores with VEX runtime reachability reduces vulnerability triage noise by 80% while strengthening security posture.",
+      "sources": [
+        {
+          "title": "FIRST EPSS Vulnerability Scoring Guide",
+          "url": "https://www.first.org/epss/"
+        },
+        {
+          "title": "CISA Vulnerability Exploitability eXchange (VEX)",
+          "url": "https://www.cisa.gov/resources-tools/resources/vulnerability-exploitability-exchange-vex"
         }
       ]
     }

@@ -40,23 +40,162 @@
   ],
   "takeaways": {
     "ai": {
-      "badge": "AGENTIC DESIGN PATTERN",
-      "release_date": "Aug 2026",
+      "badge": "MULTI-AGENT SWARM GOVERNANCE",
+      "release_date": "Aug 26, 2026",
       "title": "Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms",
       "bullets": [
-        "Decouples stateful planning from tool execution to prevent cascading prompt hallucinations.",
-        "Implements structural dry-run approval gates before executing file system or API mutations.",
-        "Evaluates agent trajectories using automated LLM-as-a-Judge benchmark suites."
+        "Decoupled Planning & Execution: Separating planning orchestration from stateless execution workers eliminates exponential prompt drift across multi-step chains.",
+        "Structural Dry-Run Gates: Production agents must output deterministic diffs and state mutations for explicit user or policy approval before filesystem/API writes.",
+        "Hard Retry Caps & State Isolation: Enforcing a strict 3-retry cap with automated escalation prevents token waste and cascading hallucination loops."
       ],
-      "interview_framing": "Explain how the 'Main-as-Router' pattern guarantees deterministic audit logs and cost bounds in enterprise production.",
+      "interview_framing": "Frame the Main-as-Router pattern as an enterprise reliability necessity. Highlight how deterministic routing prevents runaway agent tool-calling loops while satisfying MAS FEAT and SR 11-7 model risk governance standards.",
       "sources": [
         {
-          "title": "Anthropic: Building Effective Agents",
+          "title": "Anthropic Agent Workflows Research",
           "url": "https://www.anthropic.com/research/building-effective-agents"
         },
         {
-          "title": "OpenAI: Governing Agentic AI",
-          "url": "https://openai.com/research/practices-for-governing-agentic-ai"
+          "title": "OpenAI Swarm & Deterministic Routing",
+          "url": "https://github.com/openai/swarm"
+        }
+      ]
+    },
+    "cloud": {
+      "badge": "MULTI-REGION RESILIENCY",
+      "release_date": "Aug 26, 2026",
+      "title": "Cross-Region Multi-Cluster Kubernetes Failover & Azure Landing Zones",
+      "bullets": [
+        "Active-Passive Anycast Traffic Shedding: Azure Front Door routes 100% of ingress to Primary Region East US with automated health probes switching to West US in <15s.",
+        "Stateless Pod Replication with FluxCD: GitOps controllers reconcile identical container deployments across dual Azure AKS clusters simultaneously.",
+        "Cross-Region Azure Storage Replication: Object store writes replicate asynchronously with <5s RPO guarantees."
+      ],
+      "interview_framing": "When asked how to architect a mission-critical financial system across cloud regions, explain why you chose active-passive with Anycast over active-active (avoiding two-phase commit database latency penalties while hitting RTO < 30s).",
+      "sources": [
+        {
+          "title": "Azure Architecture Center: Multi-Region AKS",
+          "url": "https://learn.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks-multi-region/aks-multi-cluster"
+        },
+        {
+          "title": "AWS Multi-Region Active-Passive Architecture",
+          "url": "https://docs.aws.amazon.com/whitepapers/latest/reliability-and-resilience-on-aws/active-passive.html"
+        }
+      ]
+    },
+    "data": {
+      "badge": "MEMORY-MAPPED LAKEHOUSE",
+      "release_date": "Aug 26, 2026",
+      "title": "Microsoft Fabric Direct Lake Mode vs VertiPaq Import & DirectQuery",
+      "bullets": [
+        "Zero-ETL Columnar Paging: Loads Delta Parquet files directly from OneLake into VertiPaq memory without data duplication or scheduled refresh jobs.",
+        "Sub-Minute Analytical Latency: Analytical reports query freshly written Spark commits instantaneously with sub-second execution across billion-row datasets.",
+        "Automatic Capacity Fallback: Gracefully falls back to DirectQuery mode if provisioned Fabric F-SKU memory limits are exceeded."
+      ],
+      "interview_framing": "In data engineering interviews, compare Fabric Direct Lake against Snowflake Iceberg tables. Highlight how Direct Lake removes the 24-hour ETL batch latency barrier while keeping data in open Delta Parquet format.",
+      "sources": [
+        {
+          "title": "Microsoft Learn: Fabric Direct Lake Overview",
+          "url": "https://learn.microsoft.com/en-us/fabric/get-started/direct-lake-overview"
+        },
+        {
+          "title": "Snowflake Apache Iceberg Architecture",
+          "url": "https://www.snowflake.com/en/data-cloud/table-formats/iceberg/"
+        }
+      ]
+    },
+    "sec": {
+      "badge": "ZERO TRUST CREDENTIAL REMOVAL",
+      "release_date": "Aug 26, 2026",
+      "title": "Zero-Trust SPIFFE Workload Identity in Banking & MAS TRM Sec 9",
+      "bullets": [
+        "Node-Local SPIRE Kernel Attestation: Attests workload identity using Linux kernel cgroups, container hashes, and Kubernetes service accounts.",
+        "Ephemeral X.509 SVID Issuance: Delivers short-lived certificates directly into container memory via UNIX domain sockets, completely removing static secrets from CI/CD.",
+        "Automated 60-Minute Rotation: SVIDs rotate automatically every 60 minutes with zero downtime, fulfilling MAS TRM Section 9.2 mandates."
+      ],
+      "interview_framing": "Position SPIFFE/SPIRE as the gold standard for zero-trust microsegmentation. Explain how eliminating static API keys removes the single largest attack surface for cloud credential exfiltration in banking.",
+      "sources": [
+        {
+          "title": "CNCF SPIFFE/SPIRE Specification",
+          "url": "https://spiffe.io/docs/latest/spire-about/spire-concepts/"
+        },
+        {
+          "title": "MAS Technology Risk Management Guidelines (TRM Sec 9)",
+          "url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
+        }
+      ]
+    },
+    "devops": {
+      "badge": "KERNEL TELEMETRY",
+      "release_date": "Aug 26, 2026",
+      "title": "Kernel eBPF Socket Tracing vs Sidecar Proxy Latency Overheads",
+      "bullets": [
+        "Kernel Socket Interception: Hooks into kprobes and tracepoints to capture TCP socket latency and packet drops with <1% CPU overhead.",
+        "OpenTelemetry W3C Header Propagation: Propagates distributed trace context seamlessly without requiring application code changes.",
+        "Sidecarless Service Mesh: Eliminates resource-heavy Envoy sidecars across 10,000-pod Kubernetes clusters."
+      ],
+      "interview_framing": "Articulate how eBPF observability reduces Kubernetes cluster node memory overhead by 30% compared to traditional Istio/Envoy sidecar proxies while providing continuous kernel-level packet inspection.",
+      "sources": [
+        {
+          "title": "Cilium eBPF Service Mesh Architecture",
+          "url": "https://cilium.io/use-cases/service-mesh/"
+        },
+        {
+          "title": "OpenTelemetry eBPF Profiling",
+          "url": "https://opentelemetry.io/docs/specs/otel/trace/ebpf/"
+        }
+      ]
+    },
+    "arch": {
+      "badge": "DISTRIBUTED CONSENSUS",
+      "release_date": "Aug 26, 2026",
+      "title": "Dual-Active Anycast Routing & WAN Latency Bounds in Core Banking",
+      "bullets": [
+        "BGP Anycast Ingress: Directs global traffic to the topologically closest edge point-of-presence (PoP).",
+        "Asynchronous Log Shipping: Replicates commit logs across data centers with bounded lag to avoid blocking synchronous write transactions.",
+        "Circuit-Breaker Traffic Shedding: Automatically sheds non-critical analytical requests during WAN partition events."
+      ],
+      "interview_framing": "Discuss the trade-offs between linearizable distributed consensus (Raft/Paxos) and eventual consistency in payment ledgers, detailing how WAN round-trip latency impacts transaction throughput.",
+      "sources": [
+        {
+          "title": "Google Spanner Distributed Consensus Architecture",
+          "url": "https://research.google/pubs/pub39966/"
+        }
+      ]
+    },
+    "finops": {
+      "badge": "CLOUD UNIT ECONOMICS",
+      "release_date": "Aug 26, 2026",
+      "title": "LLM Token Budgeting & Spot GPU Orchestration in Multi-Tenant Clouds",
+      "bullets": [
+        "Dynamic Spot GPU Preemption Handling: Checkpoints transformer KV-caches to NVMe storage, allowing seamless failover when spot instances are reclaimed.",
+        "Context Window Compaction: Prunes conversational context windows to reduce prompt token consumption by 40%.",
+        "Model Cascade Tiering: Routes 80% of routine categorization prompts to lightweight SLMs (Gemini Flash), reserving frontier models for reasoning."
+      ],
+      "interview_framing": "Demonstrate financial leadership by showing how hierarchical model routing and prompt compaction cut enterprise AI operational expenses by over $50k monthly.",
+      "sources": [
+        {
+          "title": "FinOps Foundation: AI/ML Cost Management",
+          "url": "https://www.finops.org/framework/capabilities/manage-ai-costs/"
+        }
+      ]
+    },
+    "gov": {
+      "badge": "REGULATORY COMPLIANCE",
+      "release_date": "Aug 26, 2026",
+      "title": "Singapore MAS FEAT Principles & US Fed SR 11-7 Model Governance",
+      "bullets": [
+        "Audit Trail Immutability: Every agent tool invocation and prompt trajectory is signed and stored in append-only storage.",
+        "Fairness & Explainability: Enforces deterministic scoring rubrics and drift monitoring on generative AI outputs.",
+        "Model Inventory & Risk Tiering: Enforces independent validation and human-in-the-loop approvals for Tier-1 customer-facing financial models."
+      ],
+      "interview_framing": "Emphasize your readiness for enterprise fintech by explaining how your system design embeds compliance directly into CI/CD pipelines rather than treating governance as an afterthought.",
+      "sources": [
+        {
+          "title": "Monetary Authority of Singapore FEAT Principles",
+          "url": "https://www.mas.gov.sg/publications/monographs-or-information-paper/2018/FEAT"
+        },
+        {
+          "title": "Federal Reserve SR 11-7 Model Risk Management",
+          "url": "https://www.federalreserve.gov/supervisionreg/srletters/sr1107.htm"
         }
       ]
     }

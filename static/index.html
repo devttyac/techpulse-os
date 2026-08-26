@@ -985,377 +985,884 @@
     // 2. EPISODES DATASET & DYNAMIC SYNC
     // ==========================================
     const episodes = {
-  "ep-142": {
-    "id": "ep-142",
-    "episode_number": 142,
-    "date": "Aug 26, 2026",
-    "title": "Full Technical Paper Readout: Multi-Agent Swarms, Azure Multi-Region Resiliency, Fabric Direct Lake & SPIFFE Zero Trust",
-    "summary": "Complete unabridged full-text technical readouts covering Anthropic's Deterministic Main-as-Router Pattern, Azure Multi-Region Kubernetes Failover Architecture, Microsoft Fabric Direct Lake Memory Paging, and CNCF SPIFFE Workload Identity in Banking Perimeters.",
-    "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal SRE & Governance Lead)",
-    "duration": "12:00",
-    "total_seconds": 720,
-    "audio_url": "/audio/ep-142.mp3",
-    "chapters": [
-      {
-        "time": "00:00",
-        "seconds": 0,
-        "title": "\ud83d\udcc4 AI: Deterministic Main-as-Router Pattern (Full Paper)",
-        "source_name": "Anthropic & OpenAI",
-        "source_url": "https://www.anthropic.com/research/building-effective-agents"
-      },
-      {
-        "time": "03:35",
-        "seconds": 215,
-        "title": "\ud83d\udcc4 Cloud: Azure Landing Zones & AWS Failover (Full Paper)",
-        "source_name": "Azure Architecture Center",
-        "source_url": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"
-      },
-      {
-        "time": "06:15",
-        "seconds": 375,
-        "title": "\ud83d\udcc4 Data: Microsoft Fabric Direct Lake Mode (Full Paper)",
-        "source_name": "Microsoft Fabric Engineering",
-        "source_url": "https://blog.fabric.microsoft.com/"
-      },
-      {
-        "time": "09:20",
-        "seconds": 560,
-        "title": "\ud83d\udcc4 Security: Zero-Trust SPIFFE Workload Tokens & MAS TRM 9 (Full Paper)",
-        "source_name": "CNCF Security TAG",
-        "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"
-      }
-    ],
-    "takeaways": {
-      "ai": {
-        "badge": "AGENTIC DESIGN PATTERN",
-        "release_date": "Aug 2026",
-        "title": "Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms",
-        "bullets": [
-          "Decouples stateful planning from tool execution to prevent cascading prompt hallucinations.",
-          "Implements structural dry-run approval gates before executing file system or API mutations.",
-          "Evaluates agent trajectories using automated LLM-as-a-Judge benchmark suites."
+    "ep-142": {
+        "id": "ep-142",
+        "episode_number": 142,
+        "date": "Aug 26, 2026",
+        "title": "Full Technical Paper Readout: Multi-Agent Swarms, Azure Multi-Region Resiliency, Fabric Direct Lake & SPIFFE Zero Trust",
+        "summary": "Complete unabridged full-text technical readouts covering Anthropic's Deterministic Main-as-Router Pattern, Azure Multi-Region Kubernetes Failover Architecture, Microsoft Fabric Direct Lake Memory Paging, and CNCF SPIFFE Workload Identity in Banking Perimeters.",
+        "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal SRE & Governance Lead)",
+        "duration": "12:00",
+        "total_seconds": 720,
+        "audio_url": "/audio/ep-142.mp3",
+        "chapters": [
+            {
+                "time": "00:00",
+                "seconds": 0,
+                "title": "\ud83d\udcc4 AI: Deterministic Main-as-Router Pattern (Full Paper)",
+                "source_name": "Anthropic & OpenAI",
+                "source_url": "https://www.anthropic.com/research/building-effective-agents"
+            },
+            {
+                "time": "03:35",
+                "seconds": 215,
+                "title": "\ud83d\udcc4 Cloud: Azure Landing Zones & AWS Failover (Full Paper)",
+                "source_name": "Azure Architecture Center",
+                "source_url": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"
+            },
+            {
+                "time": "06:15",
+                "seconds": 375,
+                "title": "\ud83d\udcc4 Data: Microsoft Fabric Direct Lake Mode (Full Paper)",
+                "source_name": "Microsoft Fabric Engineering",
+                "source_url": "https://blog.fabric.microsoft.com/"
+            },
+            {
+                "time": "09:20",
+                "seconds": 560,
+                "title": "\ud83d\udcc4 Security: Zero-Trust SPIFFE Workload Tokens & MAS TRM 9 (Full Paper)",
+                "source_name": "CNCF Security TAG",
+                "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"
+            }
         ],
-        "interview_framing": "Explain how the 'Main-as-Router' pattern guarantees deterministic audit logs and cost bounds in enterprise production.",
-        "sources": [
-          {
-            "title": "Anthropic: Building Effective Agents",
-            "url": "https://www.anthropic.com/research/building-effective-agents"
-          },
-          {
-            "title": "OpenAI: Governing Agentic AI",
-            "url": "https://openai.com/research/practices-for-governing-agentic-ai"
-          }
-        ]
-      }
+        "takeaways": {
+            "ai": {
+                "badge": "MULTI-AGENT SWARM GOVERNANCE",
+                "release_date": "Aug 26, 2026",
+                "title": "Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms",
+                "bullets": [
+                    "Decoupled Planning & Execution: Separating planning orchestration from stateless execution workers eliminates exponential prompt drift across multi-step chains.",
+                    "Structural Dry-Run Gates: Production agents must output deterministic diffs and state mutations for explicit user or policy approval before filesystem/API writes.",
+                    "Hard Retry Caps & State Isolation: Enforcing a strict 3-retry cap with automated escalation prevents token waste and cascading hallucination loops."
+                ],
+                "interview_framing": "Frame the Main-as-Router pattern as an enterprise reliability necessity. Highlight how deterministic routing prevents runaway agent tool-calling loops while satisfying MAS FEAT and SR 11-7 model risk governance standards.",
+                "sources": [
+                    {
+                        "title": "Anthropic Agent Workflows Research",
+                        "url": "https://www.anthropic.com/research/building-effective-agents"
+                    },
+                    {
+                        "title": "OpenAI Swarm & Deterministic Routing",
+                        "url": "https://github.com/openai/swarm"
+                    }
+                ]
+            },
+            "cloud": {
+                "badge": "MULTI-REGION RESILIENCY",
+                "release_date": "Aug 26, 2026",
+                "title": "Cross-Region Multi-Cluster Kubernetes Failover & Azure Landing Zones",
+                "bullets": [
+                    "Active-Passive Anycast Traffic Shedding: Azure Front Door routes 100% of ingress to Primary Region East US with automated health probes switching to West US in <15s.",
+                    "Stateless Pod Replication with FluxCD: GitOps controllers reconcile identical container deployments across dual Azure AKS clusters simultaneously.",
+                    "Cross-Region Azure Storage Replication: Object store writes replicate asynchronously with <5s RPO guarantees."
+                ],
+                "interview_framing": "When asked how to architect a mission-critical financial system across cloud regions, explain why you chose active-passive with Anycast over active-active (avoiding two-phase commit database latency penalties while hitting RTO < 30s).",
+                "sources": [
+                    {
+                        "title": "Azure Architecture Center: Multi-Region AKS",
+                        "url": "https://learn.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks-multi-region/aks-multi-cluster"
+                    },
+                    {
+                        "title": "AWS Multi-Region Active-Passive Architecture",
+                        "url": "https://docs.aws.amazon.com/whitepapers/latest/reliability-and-resilience-on-aws/active-passive.html"
+                    }
+                ]
+            },
+            "data": {
+                "badge": "MEMORY-MAPPED LAKEHOUSE",
+                "release_date": "Aug 26, 2026",
+                "title": "Microsoft Fabric Direct Lake Mode vs VertiPaq Import & DirectQuery",
+                "bullets": [
+                    "Zero-ETL Columnar Paging: Loads Delta Parquet files directly from OneLake into VertiPaq memory without data duplication or scheduled refresh jobs.",
+                    "Sub-Minute Analytical Latency: Analytical reports query freshly written Spark commits instantaneously with sub-second execution across billion-row datasets.",
+                    "Automatic Capacity Fallback: Gracefully falls back to DirectQuery mode if provisioned Fabric F-SKU memory limits are exceeded."
+                ],
+                "interview_framing": "In data engineering interviews, compare Fabric Direct Lake against Snowflake Iceberg tables. Highlight how Direct Lake removes the 24-hour ETL batch latency barrier while keeping data in open Delta Parquet format.",
+                "sources": [
+                    {
+                        "title": "Microsoft Learn: Fabric Direct Lake Overview",
+                        "url": "https://learn.microsoft.com/en-us/fabric/get-started/direct-lake-overview"
+                    },
+                    {
+                        "title": "Snowflake Apache Iceberg Architecture",
+                        "url": "https://www.snowflake.com/en/data-cloud/table-formats/iceberg/"
+                    }
+                ]
+            },
+            "sec": {
+                "badge": "ZERO TRUST CREDENTIAL REMOVAL",
+                "release_date": "Aug 26, 2026",
+                "title": "Zero-Trust SPIFFE Workload Identity in Banking & MAS TRM Sec 9",
+                "bullets": [
+                    "Node-Local SPIRE Kernel Attestation: Attests workload identity using Linux kernel cgroups, container hashes, and Kubernetes service accounts.",
+                    "Ephemeral X.509 SVID Issuance: Delivers short-lived certificates directly into container memory via UNIX domain sockets, completely removing static secrets from CI/CD.",
+                    "Automated 60-Minute Rotation: SVIDs rotate automatically every 60 minutes with zero downtime, fulfilling MAS TRM Section 9.2 mandates."
+                ],
+                "interview_framing": "Position SPIFFE/SPIRE as the gold standard for zero-trust microsegmentation. Explain how eliminating static API keys removes the single largest attack surface for cloud credential exfiltration in banking.",
+                "sources": [
+                    {
+                        "title": "CNCF SPIFFE/SPIRE Specification",
+                        "url": "https://spiffe.io/docs/latest/spire-about/spire-concepts/"
+                    },
+                    {
+                        "title": "MAS Technology Risk Management Guidelines (TRM Sec 9)",
+                        "url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
+                    }
+                ]
+            },
+            "devops": {
+                "badge": "KERNEL TELEMETRY",
+                "release_date": "Aug 26, 2026",
+                "title": "Kernel eBPF Socket Tracing vs Sidecar Proxy Latency Overheads",
+                "bullets": [
+                    "Kernel Socket Interception: Hooks into kprobes and tracepoints to capture TCP socket latency and packet drops with <1% CPU overhead.",
+                    "OpenTelemetry W3C Header Propagation: Propagates distributed trace context seamlessly without requiring application code changes.",
+                    "Sidecarless Service Mesh: Eliminates resource-heavy Envoy sidecars across 10,000-pod Kubernetes clusters."
+                ],
+                "interview_framing": "Articulate how eBPF observability reduces Kubernetes cluster node memory overhead by 30% compared to traditional Istio/Envoy sidecar proxies while providing continuous kernel-level packet inspection.",
+                "sources": [
+                    {
+                        "title": "Cilium eBPF Service Mesh Architecture",
+                        "url": "https://cilium.io/use-cases/service-mesh/"
+                    },
+                    {
+                        "title": "OpenTelemetry eBPF Profiling",
+                        "url": "https://opentelemetry.io/docs/specs/otel/trace/ebpf/"
+                    }
+                ]
+            },
+            "arch": {
+                "badge": "DISTRIBUTED CONSENSUS",
+                "release_date": "Aug 26, 2026",
+                "title": "Dual-Active Anycast Routing & WAN Latency Bounds in Core Banking",
+                "bullets": [
+                    "BGP Anycast Ingress: Directs global traffic to the topologically closest edge point-of-presence (PoP).",
+                    "Asynchronous Log Shipping: Replicates commit logs across data centers with bounded lag to avoid blocking synchronous write transactions.",
+                    "Circuit-Breaker Traffic Shedding: Automatically sheds non-critical analytical requests during WAN partition events."
+                ],
+                "interview_framing": "Discuss the trade-offs between linearizable distributed consensus (Raft/Paxos) and eventual consistency in payment ledgers, detailing how WAN round-trip latency impacts transaction throughput.",
+                "sources": [
+                    {
+                        "title": "Google Spanner Distributed Consensus Architecture",
+                        "url": "https://research.google/pubs/pub39966/"
+                    }
+                ]
+            },
+            "finops": {
+                "badge": "CLOUD UNIT ECONOMICS",
+                "release_date": "Aug 26, 2026",
+                "title": "LLM Token Budgeting & Spot GPU Orchestration in Multi-Tenant Clouds",
+                "bullets": [
+                    "Dynamic Spot GPU Preemption Handling: Checkpoints transformer KV-caches to NVMe storage, allowing seamless failover when spot instances are reclaimed.",
+                    "Context Window Compaction: Prunes conversational context windows to reduce prompt token consumption by 40%.",
+                    "Model Cascade Tiering: Routes 80% of routine categorization prompts to lightweight SLMs (Gemini Flash), reserving frontier models for reasoning."
+                ],
+                "interview_framing": "Demonstrate financial leadership by showing how hierarchical model routing and prompt compaction cut enterprise AI operational expenses by over $50k monthly.",
+                "sources": [
+                    {
+                        "title": "FinOps Foundation: AI/ML Cost Management",
+                        "url": "https://www.finops.org/framework/capabilities/manage-ai-costs/"
+                    }
+                ]
+            },
+            "gov": {
+                "badge": "REGULATORY COMPLIANCE",
+                "release_date": "Aug 26, 2026",
+                "title": "Singapore MAS FEAT Principles & US Fed SR 11-7 Model Governance",
+                "bullets": [
+                    "Audit Trail Immutability: Every agent tool invocation and prompt trajectory is signed and stored in append-only storage.",
+                    "Fairness & Explainability: Enforces deterministic scoring rubrics and drift monitoring on generative AI outputs.",
+                    "Model Inventory & Risk Tiering: Enforces independent validation and human-in-the-loop approvals for Tier-1 customer-facing financial models."
+                ],
+                "interview_framing": "Emphasize your readiness for enterprise fintech by explaining how your system design embeds compliance directly into CI/CD pipelines rather than treating governance as an afterthought.",
+                "sources": [
+                    {
+                        "title": "Monetary Authority of Singapore FEAT Principles",
+                        "url": "https://www.mas.gov.sg/publications/monographs-or-information-paper/2018/FEAT"
+                    },
+                    {
+                        "title": "Federal Reserve SR 11-7 Model Risk Management",
+                        "url": "https://www.federalreserve.gov/supervisionreg/srletters/sr1107.htm"
+                    }
+                ]
+            }
+        },
+        "flashcards": [
+            {
+                "domain": "\ud83e\udd16 AI & Agent Systems",
+                "question": "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
+                "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
+                "cite": "Source: Anthropic Research 2026",
+                "color_class": "bg-indigo-500/20 text-indigo-300"
+            }
+        ],
+        "script_segments": [
+            {
+                "speaker": "Host A",
+                "text": "Welcome to TechPulse OS, Episode 142. I'm your Enterprise Cloud Architect host."
+            },
+            {
+                "speaker": "Host B",
+                "text": "And I'm your Principal SRE and Governance Lead. Today we deliver an in-depth architectural breakdown across AI agent systems, Microsoft Azure multi-cloud resiliency, Microsoft Fabric Direct Lake versus Snowflake Iceberg, and zero-trust banking perimeters under Singapore MAS guidelines."
+            },
+            {
+                "speaker": "Host A",
+                "text": "Let's dive straight into Chapter 1: Agentic Architecture. Both Anthropic and OpenAI have published updated guidance on governing autonomous LLM systems in production. The single most important architectural pattern is replacing monolithic, recursive swarms with a deterministic 'Main-as-Router' pattern."
+            },
+            {
+                "speaker": "Host B",
+                "text": "Why is this shift happening? Because in recursive agent swarms, sub-agents can call other sub-agents in unconstrained loops, leading to prompt drift, cascading hallucinations, and exponential API cost overruns. In the Main-as-Router pattern, the main session acts strictly as an orchestrator. It manages state, executes dry-run approval gates before any filesystem or API mutations, and caps retry attempts at three before triggering human-in-the-loop escalation."
+            },
+            {
+                "speaker": "Host A",
+                "text": "If you're framing this in a System Design interview: emphasize that decoupling stateful planning from tool execution guarantees deterministic audit logging and predictable cost bounds, which enterprise compliance boards require."
+            },
+            {
+                "speaker": "Host A",
+                "text": "Moving to Chapter 2: Cloud & Platforms. We're tracking multi-region Kubernetes failover across Microsoft Azure Landing Zones and AWS. Enterprise mission-critical workloads are adopting automated active-passive traffic shedding using Azure Front Door and AWS Global Accelerator combined with Cloudflare Magic Transit."
+            },
+            {
+                "speaker": "Host B",
+                "text": "On the storage layer, rather than attempting complex synchronous multi-region database writes that suffer from high cross-region latency, teams are utilizing Azure Managed Disks cross-region replication paired with Rook-Ceph availability-zone meshes. This keeps Recovery Point Objective under five seconds while isolating blast radiuses."
+            },
+            {
+                "speaker": "Host A",
+                "text": "In Chapter 3: Enterprise Lakehouses. Microsoft Fabric's Direct Lake mode is fundamentally shifting Power BI and analytical engineering. In legacy architectures, you had to choose between slow DirectQuery on source data or scheduled VertiPaq imports with 24-hour data staleness."
+            },
+            {
+                "speaker": "Host B",
+                "text": "Direct Lake solves this by paging Delta Parquet files directly from OneLake storage straight into VertiPaq RAM on demand. There are no import refresh pipelines to maintain. Meanwhile, Snowflake's managed Apache Iceberg tables allow organizations to maintain a vendor-neutral catalog accessible across Spark, Databricks, and Trino engines simultaneously."
+            },
+            {
+                "speaker": "Host A",
+                "text": "Now to Chapter 4: Zero Trust Security. In tier-one financial institutions, long-lived static API keys and database credentials are being systematically eradicated in favor of SPIFFE and SPIRE workload identity federation."
+            },
+            {
+                "speaker": "Host B",
+                "text": "SPIFFE issues ephemeral cryptographic X.509 SVID tokens to microservices and Kubernetes pods. These certificates rotate automatically every sixty minutes without requiring application restarts or downtime. This directly satisfies Singapore MAS Technology Risk Management Section 9, neutralizing credential leakage blast radius."
+            },
+            {
+                "speaker": "Host A",
+                "text": "In SRE and Systems Architecture: eBPF is replacing user-space APM daemons. By attaching sandboxed bytecode directly to Linux kernel socket buffers, teams capture TCP connection latency and network anomalies with under one percent CPU overhead, propagating W3C distributed trace context seamlessly into OpenTelemetry."
+            },
+            {
+                "speaker": "Host B",
+                "text": "In distributed data consistency, the Transactional Outbox Pattern using Debezium Change Data Capture is replacing fragile Two-Phase Commits (2PC). By reading database Write-Ahead Logs directly, it guarantees event delivery to Kafka brokers with sub-ten-millisecond latency, even during partial network partitions."
+            },
+            {
+                "speaker": "Host A",
+                "text": "Wrapping up with FinOps and AI Governance: Automated compute pausing on Fabric F-SKUs combined with AWS Graviton4 ARM64 spot instances has cut batch ETL costs by over thirty-five percent."
+            },
+            {
+                "speaker": "Host B",
+                "text": "And on the regulatory frontier: Singapore MAS FEAT principles and SR 11-7 Model Risk frameworks mandate immutable audit trails capturing prompt snapshots, model temperature, and hallucination scoring for every production GenAI decision."
+            },
+            {
+                "speaker": "Host A",
+                "text": "That concludes today's deep-dive briefing for Episode 142. Open the TechPulse OS dashboard to review complete source papers, and test your retention with today's interactive flashcards. We'll see you tomorrow."
+            }
+        ],
+        "full_articles": {
+            "ai": "Title: Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms in Enterprise Production\nSource: Anthropic Research & OpenAI Applied AI (2026)\n\n1. The Problem of Unconstrained Agentic Swarms:\nIn early agentic architectures, developers implemented recursive swarm patterns where agents dynamically spawned subagents, delegated subtasks, and resolved dependencies recursively. In production environments, this introduces fatal failure modes:\n- Cascading Prompt Drift: Context windows passing through multiple recursive hops become diluted, leading to unpredictable tool hallucinations.\n- Unbounded API Cost and Execution Loops: An ambiguous edge case triggers recursive self-invocation loops, resulting in hundreds of dollars of inference costs within minutes.\n- Regulatory Non-Compliance: Financial regulators (MAS FEAT & US Fed SR 11-7) require deterministic audit trails explaining every automated decision. Recursive swarms produce non-deterministic trajectories that fail regulatory audit.\n\n2. The Main-as-Router Architectural Solution:\nThe main session functions strictly as a centralized router and governance layer.\n- Stateful Planning Decoupling: Planning orchestrators decompose requirements into isolated, sequential specialist tasks. Specialists execute within isolated sub-contexts and return structured artifacts.\n- Structural Dry-Run Approval Gates: Before any specialist can mutate the filesystem, execute shell commands, or trigger production APIs, it must submit a structured dry-run plan for explicit human/router approval.\n- Strict Retry Caps: If a specialist step fails 3 times consecutively, the router halts execution immediately, flags the task as blocked, and triggers human escalation.\n\n3. System Design Interview Framing:\nDecoupling planning from tool execution turns probabilistic LLM behavior into a verifiable, deterministic state machine with immutable audit logs.",
+            "cloud": "Title: Cross-Region Multi-Cluster Kubernetes Failover & Azure Landing Zone Architecture\nSource: Microsoft Azure Architecture Center & AWS Architecture (2026)\n\n1. Designing for Regional Cloud Resiliency:\nAchieving high availability with RTO < 60s and RPO < 5s across geographic regions without suffering WAN latency penalties (50-120ms per cross-region synchronous transaction).\n\n2. Decoupled Ingress & Storage Replication Architecture:\n- Traffic Ingress Layer: Azure Front Door, AWS Global Accelerator, and Cloudflare Magic Transit manage global Anycast IP routing with automated health probes polling every 5s. Three consecutive failures reroute traffic to standby region within 15s.\n- Compute Layer: Identical Kubernetes clusters in Azure East US and Azure West US provisioned via GitOps (ArgoCD) with blue-green cutover.\n- Storage Layer: Azure Managed Disks cross-region asynchronous snapshot replication and Rook-Ceph AZ meshes. Database layers utilize asynchronous replication with automated failover promotion scripts, keeping RPO < 5s.",
+            "data": "Title: Microsoft Fabric Direct Lake Architecture vs Snowflake Managed Iceberg Tables\nSource: Microsoft Fabric Engineering & Snowflake Technical Architecture (2026)\n\n1. The Modern Enterprise Lakehouse Dilemma:\nChoosing between slow DirectQuery (high warehouse compute costs) vs scheduled VertiPaq Import (24-hour data staleness & duplicate storage).\n\n2. Direct Lake Mode Architecture:\n- Direct Lake reads Delta Parquet files directly from OneLake storage into VertiPaq memory on demand via memory-mapped I/O without trans-coding or copying data.\n- Achieves sub-second query execution across billion-row datasets with sub-minute data freshness.\n- If query memory exceeds provisioned Fabric F-SKU capacity limits, it falls back gracefully to DirectQuery mode.\n\n3. Snowflake Managed Iceberg Tables:\nEnables vendor-neutral open Parquet and Iceberg metadata on customer cloud storage, queryable across Snowflake, Apache Spark, and Trino under Polaris Catalog governance.",
+            "sec": "Title: Zero-Trust SPIFFE/SPIRE Workload Identity Federation in Banking Perimeters\nSource: CNCF Security TAG & Singapore MAS Technology Risk Management (2026)\n\n1. Vulnerability of Static Secrets:\nShared database credentials and long-lived API tokens in CI/CD pipelines represent the highest attack blast radius in financial infrastructure.\n\n2. SPIFFE/SPIRE Architecture:\n- Workload Attestation: SPIRE agent inspects container cgroups, Kubernetes service account tokens, and image hashes.\n- Ephemeral SVID Issuance: Issues X.509 SVID certificates into container memory via UNIX domain sockets.\n- 60-Minute Automated Rotation: Certificates rotate every 60 minutes with zero downtime or app restarts.\n\n3. MAS TRM Section 9 Compliance:\nSatisfies strict MAS requirements for eliminating static credentials and enforcing cryptographic mutual TLS across all microsegments."
+        }
     },
-    "flashcards": [
-      {
-        "domain": "\ud83e\udd16 AI & Agent Systems",
-        "question": "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
-        "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
-        "cite": "Source: Anthropic Research 2026",
-        "color_class": "bg-indigo-500/20 text-indigo-300"
-      }
-    ],
-    "script_segments": [
-      {
-        "speaker": "Host A",
-        "text": "Welcome to TechPulse OS, Episode 142. I'm your Enterprise Cloud Architect host."
-      },
-      {
-        "speaker": "Host B",
-        "text": "And I'm your Principal SRE and Governance Lead. Today we deliver an in-depth architectural breakdown across AI agent systems, Microsoft Azure multi-cloud resiliency, Microsoft Fabric Direct Lake versus Snowflake Iceberg, and zero-trust banking perimeters under Singapore MAS guidelines."
-      },
-      {
-        "speaker": "Host A",
-        "text": "Let's dive straight into Chapter 1: Agentic Architecture. Both Anthropic and OpenAI have published updated guidance on governing autonomous LLM systems in production. The single most important architectural pattern is replacing monolithic, recursive swarms with a deterministic 'Main-as-Router' pattern."
-      },
-      {
-        "speaker": "Host B",
-        "text": "Why is this shift happening? Because in recursive agent swarms, sub-agents can call other sub-agents in unconstrained loops, leading to prompt drift, cascading hallucinations, and exponential API cost overruns. In the Main-as-Router pattern, the main session acts strictly as an orchestrator. It manages state, executes dry-run approval gates before any filesystem or API mutations, and caps retry attempts at three before triggering human-in-the-loop escalation."
-      },
-      {
-        "speaker": "Host A",
-        "text": "If you're framing this in a System Design interview: emphasize that decoupling stateful planning from tool execution guarantees deterministic audit logging and predictable cost bounds, which enterprise compliance boards require."
-      },
-      {
-        "speaker": "Host A",
-        "text": "Moving to Chapter 2: Cloud & Platforms. We're tracking multi-region Kubernetes failover across Microsoft Azure Landing Zones and AWS. Enterprise mission-critical workloads are adopting automated active-passive traffic shedding using Azure Front Door and AWS Global Accelerator combined with Cloudflare Magic Transit."
-      },
-      {
-        "speaker": "Host B",
-        "text": "On the storage layer, rather than attempting complex synchronous multi-region database writes that suffer from high cross-region latency, teams are utilizing Azure Managed Disks cross-region replication paired with Rook-Ceph availability-zone meshes. This keeps Recovery Point Objective under five seconds while isolating blast radiuses."
-      },
-      {
-        "speaker": "Host A",
-        "text": "In Chapter 3: Enterprise Lakehouses. Microsoft Fabric's Direct Lake mode is fundamentally shifting Power BI and analytical engineering. In legacy architectures, you had to choose between slow DirectQuery on source data or scheduled VertiPaq imports with 24-hour data staleness."
-      },
-      {
-        "speaker": "Host B",
-        "text": "Direct Lake solves this by paging Delta Parquet files directly from OneLake storage straight into VertiPaq RAM on demand. There are no import refresh pipelines to maintain. Meanwhile, Snowflake's managed Apache Iceberg tables allow organizations to maintain a vendor-neutral catalog accessible across Spark, Databricks, and Trino engines simultaneously."
-      },
-      {
-        "speaker": "Host A",
-        "text": "Now to Chapter 4: Zero Trust Security. In tier-one financial institutions, long-lived static API keys and database credentials are being systematically eradicated in favor of SPIFFE and SPIRE workload identity federation."
-      },
-      {
-        "speaker": "Host B",
-        "text": "SPIFFE issues ephemeral cryptographic X.509 SVID tokens to microservices and Kubernetes pods. These certificates rotate automatically every sixty minutes without requiring application restarts or downtime. This directly satisfies Singapore MAS Technology Risk Management Section 9, neutralizing credential leakage blast radius."
-      },
-      {
-        "speaker": "Host A",
-        "text": "In SRE and Systems Architecture: eBPF is replacing user-space APM daemons. By attaching sandboxed bytecode directly to Linux kernel socket buffers, teams capture TCP connection latency and network anomalies with under one percent CPU overhead, propagating W3C distributed trace context seamlessly into OpenTelemetry."
-      },
-      {
-        "speaker": "Host B",
-        "text": "In distributed data consistency, the Transactional Outbox Pattern using Debezium Change Data Capture is replacing fragile Two-Phase Commits (2PC). By reading database Write-Ahead Logs directly, it guarantees event delivery to Kafka brokers with sub-ten-millisecond latency, even during partial network partitions."
-      },
-      {
-        "speaker": "Host A",
-        "text": "Wrapping up with FinOps and AI Governance: Automated compute pausing on Fabric F-SKUs combined with AWS Graviton4 ARM64 spot instances has cut batch ETL costs by over thirty-five percent."
-      },
-      {
-        "speaker": "Host B",
-        "text": "And on the regulatory frontier: Singapore MAS FEAT principles and SR 11-7 Model Risk frameworks mandate immutable audit trails capturing prompt snapshots, model temperature, and hallucination scoring for every production GenAI decision."
-      },
-      {
-        "speaker": "Host A",
-        "text": "That concludes today's deep-dive briefing for Episode 142. Open the TechPulse OS dashboard to review complete source papers, and test your retention with today's interactive flashcards. We'll see you tomorrow."
-      }
-    ],
-    "full_articles": {
-      "ai": "Title: Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms in Enterprise Production\nSource: Anthropic Research & OpenAI Applied AI (2026)\n\n1. The Problem of Unconstrained Agentic Swarms:\nIn early agentic architectures, developers implemented recursive swarm patterns where agents dynamically spawned subagents, delegated subtasks, and resolved dependencies recursively. In production environments, this introduces fatal failure modes:\n- Cascading Prompt Drift: Context windows passing through multiple recursive hops become diluted, leading to unpredictable tool hallucinations.\n- Unbounded API Cost and Execution Loops: An ambiguous edge case triggers recursive self-invocation loops, resulting in hundreds of dollars of inference costs within minutes.\n- Regulatory Non-Compliance: Financial regulators (MAS FEAT & US Fed SR 11-7) require deterministic audit trails explaining every automated decision. Recursive swarms produce non-deterministic trajectories that fail regulatory audit.\n\n2. The Main-as-Router Architectural Solution:\nThe main session functions strictly as a centralized router and governance layer.\n- Stateful Planning Decoupling: Planning orchestrators decompose requirements into isolated, sequential specialist tasks. Specialists execute within isolated sub-contexts and return structured artifacts.\n- Structural Dry-Run Approval Gates: Before any specialist can mutate the filesystem, execute shell commands, or trigger production APIs, it must submit a structured dry-run plan for explicit human/router approval.\n- Strict Retry Caps: If a specialist step fails 3 times consecutively, the router halts execution immediately, flags the task as blocked, and triggers human escalation.\n\n3. System Design Interview Framing:\nDecoupling planning from tool execution turns probabilistic LLM behavior into a verifiable, deterministic state machine with immutable audit logs.",
-      "cloud": "Title: Cross-Region Multi-Cluster Kubernetes Failover & Azure Landing Zone Architecture\nSource: Microsoft Azure Architecture Center & AWS Architecture (2026)\n\n1. Designing for Regional Cloud Resiliency:\nAchieving high availability with RTO < 60s and RPO < 5s across geographic regions without suffering WAN latency penalties (50-120ms per cross-region synchronous transaction).\n\n2. Decoupled Ingress & Storage Replication Architecture:\n- Traffic Ingress Layer: Azure Front Door, AWS Global Accelerator, and Cloudflare Magic Transit manage global Anycast IP routing with automated health probes polling every 5s. Three consecutive failures reroute traffic to standby region within 15s.\n- Compute Layer: Identical Kubernetes clusters in Azure East US and Azure West US provisioned via GitOps (ArgoCD) with blue-green cutover.\n- Storage Layer: Azure Managed Disks cross-region asynchronous snapshot replication and Rook-Ceph AZ meshes. Database layers utilize asynchronous replication with automated failover promotion scripts, keeping RPO < 5s.",
-      "data": "Title: Microsoft Fabric Direct Lake Architecture vs Snowflake Managed Iceberg Tables\nSource: Microsoft Fabric Engineering & Snowflake Technical Architecture (2026)\n\n1. The Modern Enterprise Lakehouse Dilemma:\nChoosing between slow DirectQuery (high warehouse compute costs) vs scheduled VertiPaq Import (24-hour data staleness & duplicate storage).\n\n2. Direct Lake Mode Architecture:\n- Direct Lake reads Delta Parquet files directly from OneLake storage into VertiPaq memory on demand via memory-mapped I/O without trans-coding or copying data.\n- Achieves sub-second query execution across billion-row datasets with sub-minute data freshness.\n- If query memory exceeds provisioned Fabric F-SKU capacity limits, it falls back gracefully to DirectQuery mode.\n\n3. Snowflake Managed Iceberg Tables:\nEnables vendor-neutral open Parquet and Iceberg metadata on customer cloud storage, queryable across Snowflake, Apache Spark, and Trino under Polaris Catalog governance.",
-      "sec": "Title: Zero-Trust SPIFFE/SPIRE Workload Identity Federation in Banking Perimeters\nSource: CNCF Security TAG & Singapore MAS Technology Risk Management (2026)\n\n1. Vulnerability of Static Secrets:\nShared database credentials and long-lived API tokens in CI/CD pipelines represent the highest attack blast radius in financial infrastructure.\n\n2. SPIFFE/SPIRE Architecture:\n- Workload Attestation: SPIRE agent inspects container cgroups, Kubernetes service account tokens, and image hashes.\n- Ephemeral SVID Issuance: Issues X.509 SVID certificates into container memory via UNIX domain sockets.\n- 60-Minute Automated Rotation: Certificates rotate every 60 minutes with zero downtime or app restarts.\n\n3. MAS TRM Section 9 Compliance:\nSatisfies strict MAS requirements for eliminating static credentials and enforcing cryptographic mutual TLS across all microsegments."
-    }
-  },
-  "ep-141": {
-    "id": "ep-141",
-    "episode_number": 141,
-    "date": "Aug 25, 2026",
-    "title": "Deep Dive: Agentic RAG Architectures, Vector Cache Warming & Context Window Budgeting",
-    "summary": "Explores production caching for vector databases, context window compression techniques, and automated LLM-as-a-Judge evaluation pipelines for high-throughput enterprise systems.",
-    "hosts": "Host A (Principal AI Engineer) & Host B (LLMOps Lead)",
-    "duration": "11:30",
-    "total_seconds": 690,
-    "audio_url": "/audio/ep-141.mp3",
-    "chapters": [
-      {
-        "time": "00:00",
-        "seconds": 0,
-        "title": "1. Vector Cache Warming vs Real-Time Hybrid Search",
-        "source_name": "Pinecone",
-        "source_url": "https://www.pinecone.io/blog/"
-      },
-      {
-        "time": "01:30",
-        "seconds": 90,
-        "title": "2. Context Window Compaction & Prompt Compression",
-        "source_name": "OpenAI",
-        "source_url": "https://openai.com/research/"
-      },
-      {
-        "time": "03:10",
-        "seconds": 190,
-        "title": "3. Automated Agent Benchmarking with LLM-as-a-Judge",
-        "source_name": "Anthropic",
-        "source_url": "https://www.anthropic.com/research"
-      }
-    ],
-    "takeaways": {
-      "ai": {
-        "badge": "AGENTIC RAG OPTIMIZATION",
-        "release_date": "Aug 2026",
-        "title": "Predictive Vector Cache Warming vs Real-Time Hybrid Search Latency",
-        "bullets": [
-          "Pre-computes and warms HNSW vector indexes for top-tier analytical queries, reducing P99 latency by 68%.",
-          "Pairs sparse BM25 keyword indexes with dense embeddings using Reciprocal Rank Fusion (RRF).",
-          "Reduces embedding API inference spend by 40% via Redis semantic cache layers."
+    "ep-141": {
+        "id": "ep-141",
+        "episode_number": 141,
+        "date": "Aug 25, 2026",
+        "title": "Deep Dive: Agentic RAG Architectures, Vector Cache Warming & Context Window Budgeting",
+        "summary": "Explores production caching for vector databases, context window compression techniques, and automated LLM-as-a-Judge evaluation pipelines for high-throughput enterprise systems.",
+        "hosts": "Host A (Principal AI Engineer) & Host B (LLMOps Lead)",
+        "duration": "11:30",
+        "total_seconds": 690,
+        "audio_url": "/audio/ep-141.mp3",
+        "chapters": [
+            {
+                "time": "00:00",
+                "seconds": 0,
+                "title": "1. Vector Cache Warming vs Real-Time Hybrid Search",
+                "source_name": "Pinecone",
+                "source_url": "https://www.pinecone.io/blog/"
+            },
+            {
+                "time": "01:30",
+                "seconds": 90,
+                "title": "2. Context Window Compaction & Prompt Compression",
+                "source_name": "OpenAI",
+                "source_url": "https://openai.com/research/"
+            },
+            {
+                "time": "03:10",
+                "seconds": 190,
+                "title": "3. Automated Agent Benchmarking with LLM-as-a-Judge",
+                "source_name": "Anthropic",
+                "source_url": "https://www.anthropic.com/research"
+            }
         ],
-        "interview_framing": "Explain how semantic caching and HNSW vector index warming mitigate embedding cost spikes and P99 latency SLA violations in tier-1 customer support agents.",
-        "sources": [
-          {
-            "title": "Pinecone: Production Vector Caching",
-            "url": "https://www.pinecone.io/blog/"
-          }
-        ]
-      },
-      "devops": {
-        "badge": "LLMOPS & CONTEXT BUDGETING",
-        "release_date": "Aug 2026",
-        "title": "Context Window Compaction & Automated LLM-as-a-Judge Pipelines",
-        "bullets": [
-          "Applies structured prompt compression and semantic chunking to keep context budgets under 8k tokens.",
-          "Runs automated synthetic judge evals using G-Eval rubrics across hallucination and faithfulness dimensions.",
-          "Enforces strict rate-limiting and circuit breakers across upstream model provider endpoints."
+        "takeaways": {
+            "ai": {
+                "badge": "AGENTIC RAG OPTIMIZATION",
+                "release_date": "Aug 25, 2026",
+                "title": "Predictive Vector Cache Warming vs Real-Time Hybrid Search Latency",
+                "bullets": [
+                    "Two-Tier Caching Architecture: Pairs an in-memory Redis semantic cache (similarity threshold 0.96) with an HNSW graph vector index to deliver sub-10ms response times for common queries.",
+                    "Scheduled Partition Warming: Pre-loads frequently accessed vector partitions into RAM prior to high-volume query periods, eliminating cold-start disk I/O penalties.",
+                    "Context Compaction: Semantic chunking and window compression reduce LLM prompt token load by 45% while preserving critical reasoning state."
+                ],
+                "interview_framing": "In GenAI architecture interviews, explain how predictive cache warming mathematically bounds embedding latency and avoids expensive vector database scan penalties under sudden traffic spikes.",
+                "sources": [
+                    {
+                        "title": "Pinecone Research: Scaling Vector Caching",
+                        "url": "https://www.pinecone.io/learn/vector-caching/"
+                    },
+                    {
+                        "title": "Redis Semantic Cache Architecture",
+                        "url": "https://redis.io/solutions/semantic-caching/"
+                    }
+                ]
+            },
+            "cloud": {
+                "badge": "MULTI-CLOUD CONTROL PLANE",
+                "release_date": "Aug 25, 2026",
+                "title": "Crossplane Infrastructure Orchestration & OIDC Token Federation",
+                "bullets": [
+                    "Kubernetes-Native Infrastructure: Replaces fragmented Terraform scripts with declarative Crossplane custom resource definitions (CRDs).",
+                    "OIDC Cloud Federation: Eliminates permanent IAM credentials across AWS, Azure, and GCP using workload identity federation.",
+                    "Automated Drift Reconciliation: Continuously reconciles live cloud state every 60 seconds against Git repositories."
+                ],
+                "interview_framing": "Contrast Crossplane with Terraform, explaining how continuous Kubernetes control loops prevent configuration drift and provide unified governance across AWS and Azure.",
+                "sources": [
+                    {
+                        "title": "Crossplane Multi-Cloud Architecture",
+                        "url": "https://docs.crossplane.io/"
+                    },
+                    {
+                        "title": "AWS IAM OIDC Workload Federation",
+                        "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html"
+                    }
+                ]
+            },
+            "data": {
+                "badge": "LAKEHOUSE SHARDING",
+                "release_date": "Aug 25, 2026",
+                "title": "Apache Iceberg Partition Evolution & Z-Order Clustering at Scale",
+                "bullets": [
+                    "Hidden Partitioning: Iceberg automatically translates SQL timestamp filters into physical directory paths without requiring users to maintain synthetic date columns.",
+                    "Z-Order Space-Filling Curves: Colocates multidimensional query attributes within Parquet row groups to skip 80% of file I/O during analytical scans.",
+                    "Metadata Compaction: Automated background maintenance jobs compact small metadata JSON snapshots into optimized Avro manifests."
+                ],
+                "interview_framing": "Explain why Apache Iceberg's metadata tree structure avoids S3 object listing bottlenecks and enables schema evolution without rewriting petabyte-scale data files.",
+                "sources": [
+                    {
+                        "title": "Apache Iceberg Specification",
+                        "url": "https://iceberg.apache.org/spec/"
+                    },
+                    {
+                        "title": "Tabular: Z-Order Indexing in Iceberg",
+                        "url": "https://tabular.io/blog/iceberg-z-ordering/"
+                    }
+                ]
+            },
+            "sec": {
+                "badge": "SUPPLY CHAIN SECURITY",
+                "release_date": "Aug 25, 2026",
+                "title": "SLSA Level 3 Provenance & Cosign Keyless Image Signing in CI/CD",
+                "bullets": [
+                    "Keyless Ephemeral Signing: Cosign utilizes Sigstore Fulcio and Rekor transparency logs to sign container images with short-lived OIDC certificates.",
+                    "SLSA Build Provenance: Generates cryptographic in-toto build attestations verifying source repository, commit SHA, and build environment.",
+                    "Admission Controller Enforcement: Kyverno and Gatekeeper reject unsigned container images from deploying to production Kubernetes clusters."
+                ],
+                "interview_framing": "Detail how keyless container signing eliminates private key management overhead while guaranteeing cryptographic supply-chain integrity for enterprise deployments.",
+                "sources": [
+                    {
+                        "title": "Sigstore Keyless Signing Guide",
+                        "url": "https://docs.sigstore.dev/signing/quickstart/"
+                    },
+                    {
+                        "title": "SLSA Security Framework",
+                        "url": "https://slsa.dev/spec/v1.0/levels"
+                    }
+                ]
+            },
+            "devops": {
+                "badge": "AUTOMATED LLMOPS",
+                "release_date": "Aug 25, 2026",
+                "title": "Context Window Compaction & Automated LLM-as-a-Judge Pipelines",
+                "bullets": [
+                    "G-Eval Metric Frameworks: Evaluates AI responses against structured rubrics across faithfulness, relevance, and safety prior to canary deployment.",
+                    "Rolling Context Summarization: Dynamically compresses long multi-turn dialogue histories to stay within the 8,000-token precision sweet spot.",
+                    "Continuous CI/CD Regression Testing: Automated regression suites run synthetic question sets against candidate models on every Git pull request."
+                ],
+                "interview_framing": "Highlight how automated LLM-as-a-Judge testing in CI/CD gives engineering teams confidence to update system prompts and models without risking silent behavioral regressions.",
+                "sources": [
+                    {
+                        "title": "DeepEval LLMOps Framework",
+                        "url": "https://github.com/confident-ai/deepeval"
+                    },
+                    {
+                        "title": "OpenAI Evaluation Best Practices",
+                        "url": "https://github.com/openai/evals"
+                    }
+                ]
+            },
+            "arch": {
+                "badge": "EVENT-DRIVEN ARCHITECTURE",
+                "release_date": "Aug 25, 2026",
+                "title": "Transactional Outbox Pattern & Debezium CDC for Microservices",
+                "bullets": [
+                    "Dual-Write Problem Elimination: Database writes and outbox table entries commit in a single atomic ACID transaction.",
+                    "Log-Based CDC: Debezium reads database write-ahead logs (WAL) to publish events to Apache Kafka with zero polling overhead.",
+                    "At-Least-Once Delivery Guarantees: Consumers utilize idempotent message handlers with Redis deduplication keys."
+                ],
+                "interview_framing": "Explain how the Transactional Outbox pattern guarantees event consistency between relational databases and Kafka event streams without distributed two-phase commit locks.",
+                "sources": [
+                    {
+                        "title": "Debezium CDC Architecture",
+                        "url": "https://debezium.io/documentation/reference/stable/architecture.html"
+                    }
+                ]
+            },
+            "finops": {
+                "badge": "SERVERLESS ECONOMICS",
+                "release_date": "Aug 25, 2026",
+                "title": "Kubernetes Karpenter Autoscaling & Predictive Node Provisioning",
+                "bullets": [
+                    "Direct EC2 Fleet Allocation: Karpenter launches customized EC2 instance sizes matching exact pod resource requests in <45 seconds.",
+                    "Automated Consolidation: Continuously replaces underutilized nodes with smaller spot instances, reducing cluster compute costs by 32%.",
+                    "Elimination of Static Node Groups: Removes over-provisioned worker pools in favor of dynamic JIT scheduling."
+                ],
+                "interview_framing": "Compare Karpenter with standard Kubernetes Cluster Autoscaler, showing how just-in-time instance sizing prevents node fragmentation and cuts cloud spend.",
+                "sources": [
+                    {
+                        "title": "Karpenter Open-Source Autoscaler",
+                        "url": "https://karpenter.sh/docs/"
+                    }
+                ]
+            },
+            "gov": {
+                "badge": "DATA PRIVACY & SOVEREIGNTY",
+                "release_date": "Aug 25, 2026",
+                "title": "Singapore PDPC Guidelines on Synthetic Data & Privacy-Preserving AI",
+                "bullets": [
+                    "Differential Privacy Mechanisms: Injects bounded mathematical noise into training datasets to prevent model inversion attacks.",
+                    "Synthetic Data Generation: Generates statistically representative test datasets for AI evaluation without exposing customer PII.",
+                    "Data Localization Compliance: Ensures Singapore resident financial data remains processed within local sovereign cloud boundaries."
+                ],
+                "interview_framing": "Articulate how synthetic data pipelines satisfy Singapore PDPC requirements and enable rapid LLM development without compromising customer privacy.",
+                "sources": [
+                    {
+                        "title": "Singapore PDPC AI Governance Framework",
+                        "url": "https://www.pdpc.gov.sg/help-and-resources/2020/01/model-ai-governance-framework"
+                    }
+                ]
+            }
+        },
+        "flashcards": [
+            {
+                "domain": "\ud83e\udd16 Agentic RAG",
+                "question": "What is the primary architectural trade-off between Semantic Caching and Real-Time Vector Similarity Search?",
+                "answer": "Semantic caching achieves sub-5ms query times and saves API cost by matching cosine similarity against cached responses, but risks serving stale answers if underlying source documents update frequently.",
+                "cite": "Source: Pinecone Research 2026",
+                "color_class": "bg-indigo-500/20 text-indigo-300"
+            }
         ],
-        "interview_framing": "Detail your evaluation methodology for regression testing agent prompt changes using LLM-as-a-Judge pipelines.",
-        "sources": [
-          {
-            "title": "OpenAI: Context Management in Production",
-            "url": "https://openai.com/research/"
-          }
-        ]
-      }
+        "full_articles": {
+            "ai": "Title: Predictive Vector Cache Warming in Enterprise Agentic RAG\nSource: Pinecone & OpenAI Research (2026)\n\nSection 1: The Vector Search Latency Bottleneck.\nIn large-scale agentic RAG pipelines, computing dense vector embeddings and traversing billion-node HNSW graphs on every conversational turn creates 150-300ms latency overheads.\n\nSection 2: The Two-Tier Cache Architecture.\nBy deploying Redis Semantic Cache in front of the vector database, queries with cosine similarity > 0.96 return pre-computed context chunks in under 4ms, reducing downstream embedding API costs by 42%.",
+            "devops": "Title: Context Window Compaction & Prompt Budgeting\nSource: Anthropic & OpenAI (2026)\n\nSection 1: Managing Context Bloat in Long-Running Workflows.\nPassing raw chat histories across 20+ turns degrades LLM reasoning precision. Applying selective summarization and key-entity extraction preserves context fidelity within an 8k token envelope."
+        }
     },
-    "flashcards": [
-      {
-        "domain": "\ud83e\udd16 Agentic RAG",
-        "question": "What is the primary architectural trade-off between Semantic Caching and Real-Time Vector Similarity Search?",
-        "answer": "Semantic caching achieves sub-5ms query times and saves API cost by matching cosine similarity against cached responses, but risks serving stale answers if underlying source documents update frequently.",
-        "cite": "Source: Pinecone Research 2026",
-        "color_class": "bg-indigo-500/20 text-indigo-300"
-      }
-    ],
-    "full_articles": {
-      "ai": "Title: Predictive Vector Cache Warming in Enterprise Agentic RAG\nSource: Pinecone & OpenAI Research (2026)\n\nSection 1: The Vector Search Latency Bottleneck.\nIn large-scale agentic RAG pipelines, computing dense vector embeddings and traversing billion-node HNSW graphs on every conversational turn creates 150-300ms latency overheads.\n\nSection 2: The Two-Tier Cache Architecture.\nBy deploying Redis Semantic Cache in front of the vector database, queries with cosine similarity > 0.96 return pre-computed context chunks in under 4ms, reducing downstream embedding API costs by 42%.",
-      "devops": "Title: Context Window Compaction & Prompt Budgeting\nSource: Anthropic & OpenAI (2026)\n\nSection 1: Managing Context Bloat in Long-Running Workflows.\nPassing raw chat histories across 20+ turns degrades LLM reasoning precision. Applying selective summarization and key-entity extraction preserves context fidelity within an 8k token envelope."
-    }
-  },
-  "ep-140": {
-    "id": "ep-140",
-    "episode_number": 140,
-    "date": "Aug 24, 2026",
-    "title": "Modern Data Stack: Microsoft Fabric Real-Time Analytics vs Snowflake Iceberg Catalogs",
-    "summary": "Deep dive into Delta Parquet on OneLake, open Iceberg metadata management, and enterprise capacity cost modeling across multi-cloud lakehouses.",
-    "hosts": "Host A (Data Platform Architect) & Host B (Analytics Engineering Lead)",
-    "duration": "11:15",
-    "total_seconds": 675,
-    "audio_url": "/audio/ep-140.mp3",
-    "chapters": [
-      {
-        "time": "00:00",
-        "seconds": 0,
-        "title": "1. Microsoft Fabric OneLake Delta Parquet Architecture",
-        "source_name": "MS Learn",
-        "source_url": "https://learn.microsoft.com/en-us/fabric/"
-      },
-      {
-        "time": "01:45",
-        "seconds": 105,
-        "title": "2. Apache Iceberg Metadata Scaling on S3/Blob Storage",
-        "source_name": "Snowflake",
-        "source_url": "https://www.snowflake.com/en/blog/"
-      },
-      {
-        "time": "03:30",
-        "seconds": 210,
-        "title": "3. Cost Comparison: Fabric F-SKU vs Snowflake Warehouses",
-        "source_name": "FinOps",
-        "source_url": "https://www.finops.org/framework/"
-      }
-    ],
-    "takeaways": {
-      "data": {
-        "badge": "ENTERPRISE LAKEHOUSE",
-        "release_date": "Aug 2026",
-        "title": "Open Table Formats: Delta Lake vs Apache Iceberg & Snowflake Polaris",
-        "bullets": [
-          "Consolidates disparate data silos into unified OneLake storage using open Delta Parquet files.",
-          "Decouples storage compute via Snowflake Polaris Catalog for multi-engine interoperability (Spark, Trino, Snowflake).",
-          "Implements partition pruning and min/max metadata indexes to accelerate large-scale analytical scans."
+    "ep-140": {
+        "id": "ep-140",
+        "episode_number": 140,
+        "date": "Aug 24, 2026",
+        "title": "Modern Data Stack: Microsoft Fabric Real-Time Analytics vs Snowflake Iceberg Catalogs",
+        "summary": "Deep dive into Delta Parquet on OneLake, open Iceberg metadata management, and enterprise capacity cost modeling across multi-cloud lakehouses.",
+        "hosts": "Host A (Data Platform Architect) & Host B (Analytics Engineering Lead)",
+        "duration": "11:15",
+        "total_seconds": 675,
+        "audio_url": "/audio/ep-140.mp3",
+        "chapters": [
+            {
+                "time": "00:00",
+                "seconds": 0,
+                "title": "1. Microsoft Fabric OneLake Delta Parquet Architecture",
+                "source_name": "MS Learn",
+                "source_url": "https://learn.microsoft.com/en-us/fabric/"
+            },
+            {
+                "time": "01:45",
+                "seconds": 105,
+                "title": "2. Apache Iceberg Metadata Scaling on S3/Blob Storage",
+                "source_name": "Snowflake",
+                "source_url": "https://www.snowflake.com/en/blog/"
+            },
+            {
+                "time": "03:30",
+                "seconds": 210,
+                "title": "3. Cost Comparison: Fabric F-SKU vs Snowflake Warehouses",
+                "source_name": "FinOps",
+                "source_url": "https://www.finops.org/framework/"
+            }
         ],
-        "interview_framing": "Compare the architectural governance trade-offs of Microsoft Fabric OneLake Direct Lake mode against Snowflake Managed Iceberg tables.",
-        "sources": [
-          {
-            "title": "Microsoft Fabric OneLake Architecture",
-            "url": "https://learn.microsoft.com/en-us/fabric/"
-          }
-        ]
-      }
-    },
-    "flashcards": [
-      {
-        "domain": "\ud83d\udcca Lakehouse Architecture",
-        "question": "Why are enterprise teams migrating from proprietary data warehouse tables to Apache Iceberg metadata catalogs?",
-        "answer": "Iceberg eliminates vendor lock-in by storing data in open Parquet format on customer cloud storage, allowing multiple compute engines (Snowflake, Spark, Trino) to query identical data with ACID transactions.",
-        "cite": "Source: Snowflake Architecture Center 2026",
-        "color_class": "bg-emerald-500/20 text-emerald-300"
-      }
-    ],
-    "full_articles": {
-      "data": "Title: Open Table Formats: Delta Lake vs Apache Iceberg\nSource: Microsoft & Snowflake Architecture (2026)\n\nSection 1: The Multi-Engine Lakehouse Architecture.\nModern data platforms store petabyte-scale data in customer-owned cloud object storage (Azure Blob, AWS S3) formatted as open Parquet files. Apache Iceberg manages snapshot isolation and schema evolution, enabling concurrent access from Snowflake, Apache Spark, and DuckDB without data duplication."
-    }
-  },
-  "ep-139": {
-    "id": "ep-139",
-    "episode_number": 139,
-    "date": "Aug 23, 2026",
-    "title": "Platform Engineering: Kernel eBPF Telemetry & Workload Identity Federation",
-    "summary": "Covers kernel-level network tracing with <1% overhead, OpenTelemetry W3C trace context, and MAS TRM Section 9 credential removal.",
-    "hosts": "Host A (Principal SRE) & Host B (CISO)",
-    "duration": "10:45",
-    "total_seconds": 645,
-    "audio_url": "/audio/ep-139.mp3",
-    "chapters": [
-      {
-        "time": "00:00",
-        "seconds": 0,
-        "title": "1. Kernel-Level TCP Telemetry with Zero Overhead",
-        "source_name": "eBPF.io",
-        "source_url": "https://ebpf.io/what-is-ebpf/"
-      },
-      {
-        "time": "01:20",
-        "seconds": 80,
-        "title": "2. OpenTelemetry W3C Distributed Context Propagation",
-        "source_name": "OTel Docs",
-        "source_url": "https://opentelemetry.io/docs/"
-      },
-      {
-        "time": "02:50",
-        "seconds": 170,
-        "title": "3. MAS TRM Section 9: Identity & Static Secret Removal",
-        "source_name": "MAS TRM",
-        "source_url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
-      }
-    ],
-    "takeaways": {
-      "devops": {
-        "badge": "KERNEL TELEMETRY",
-        "release_date": "Aug 2026",
-        "title": "eBPF Kernel Socket Tracing & OpenTelemetry W3C Context",
-        "bullets": [
-          "Hooks into Linux kernel kprobes and tracepoints to capture TCP socket latency with under 1% CPU overhead.",
-          "Propagates OpenTelemetry W3C trace headers across asynchronous message queues and service meshes.",
-          "Provides real-time packet-level visibility into container ingress packet drops."
+        "takeaways": {
+            "ai": {
+                "badge": "SPECULATIVE DECODING",
+                "release_date": "Aug 24, 2026",
+                "title": "Draft-Verification Speculative Decoding & KV-Cache Offloading",
+                "bullets": [
+                    "Draft-Verifier Pipeline: A lightweight 1B draft model proposes token sequences in parallel while a 70B target model verifies them in a single forward pass.",
+                    "2.5x Inference Speedup: Accelerates generation latency without altering model output distribution or accuracy.",
+                    "PagedAttention Memory Optimization: Offloads inactive KV-cache blocks to system RAM, doubling batch concurrency."
+                ],
+                "interview_framing": "Explain the mechanics of speculative decoding to interviewers, emphasizing how it circumvents memory bandwidth bottlenecks in large language model inference.",
+                "sources": [
+                    {
+                        "title": "Fast Inference with Speculative Decoding",
+                        "url": "https://arxiv.org/abs/2211.17192"
+                    },
+                    {
+                        "title": "vLLM PagedAttention Paper",
+                        "url": "https://arxiv.org/abs/2309.06180"
+                    }
+                ]
+            },
+            "cloud": {
+                "badge": "INFRASTRUCTURE HARDENING",
+                "release_date": "Aug 24, 2026",
+                "title": "AWS Graviton4 ARM Migration & Ephemeral Spot Fleet Orchestration",
+                "bullets": [
+                    "Price-Performance Efficiency: Graviton4 processors provide 30% higher compute performance and 20% lower power consumption for microservices.",
+                    "Multi-Arch Container Builds: Builds dual-architecture AMD64/ARM64 container images using Docker Buildx and GitHub Actions.",
+                    "Spot Interruption Tolerance: Integrates AWS Node Termination Handler to drain pods gracefully within the 2-minute spot warning window."
+                ],
+                "interview_framing": "Discuss how migrating container workloads to ARM64 architecture delivers immediate double-digit cloud cost savings while improving server density.",
+                "sources": [
+                    {
+                        "title": "AWS Graviton4 Performance Benchmarks",
+                        "url": "https://aws.amazon.com/ec2/graviton/"
+                    }
+                ]
+            },
+            "data": {
+                "badge": "LAKEHOUSE GOVERNANCE",
+                "release_date": "Aug 24, 2026",
+                "title": "Microsoft Fabric OneLake vs Snowflake Apache Iceberg & Polaris",
+                "bullets": [
+                    "Open Storage Unification: Evaluates open Delta Parquet in OneLake against Apache Iceberg metadata catalogs across cross-engine analytics.",
+                    "Multi-Engine Compute Freedom: Snowflake, Apache Spark, and Trino query identical data files concurrently without vendor lock-in.",
+                    "Centralized Access Control: Polaris catalog enforces uniform column-level and row-level security across heterogeneous compute engines."
+                ],
+                "interview_framing": "In data architecture interviews, compare the governance and cost trade-offs between Microsoft Fabric Direct Lake mode and Snowflake managed Iceberg tables.",
+                "sources": [
+                    {
+                        "title": "Microsoft Fabric OneLake Architecture",
+                        "url": "https://learn.microsoft.com/en-us/fabric/onelake/onelake-overview"
+                    },
+                    {
+                        "title": "Snowflake Polaris Catalog Open Source",
+                        "url": "https://www.snowflake.com/en/data-cloud/polaris-catalog/"
+                    }
+                ]
+            },
+            "sec": {
+                "badge": "IDENTITY SECURITY",
+                "release_date": "Aug 24, 2026",
+                "title": "OIDC Identity Federation & Elimination of Long-Lived AWS Secrets",
+                "bullets": [
+                    "GitHub Actions OIDC: Exchanges short-lived GitHub tokens for temporary AWS IAM session credentials, eradicating stored AWS access keys.",
+                    "Least-Privilege Scoping: Scopes IAM role trust policies strictly to specific repository branches and environments.",
+                    "Automated Credential Revocation: Automatically invalidates session tokens after 15 minutes of inactivity."
+                ],
+                "interview_framing": "Detail how OIDC token federation eliminates the risk of static CI/CD secret leaks and simplifies compliance audits across cloud environments.",
+                "sources": [
+                    {
+                        "title": "GitHub Actions OpenID Connect with AWS",
+                        "url": "https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect"
+                    }
+                ]
+            },
+            "devops": {
+                "badge": "CHAOS ENGINEERING",
+                "release_date": "Aug 24, 2026",
+                "title": "Automated Network Latency Injection & Chaos Mesh in Kubernetes",
+                "bullets": [
+                    "Proactive Failure Verification: Simulates cross-region WAN packet loss, pod restarts, and DNS outages during business hours.",
+                    "SLO Verification: Validates that circuit breakers and retry budgets prevent cascading outages during database failovers.",
+                    "Automated Rollback Triggers: Integrates Argo Rollouts with Prometheus metrics to halt deployments when error rates exceed 0.5%."
+                ],
+                "interview_framing": "Explain how running controlled chaos experiments in staging and production builds confidence in automated failover mechanisms.",
+                "sources": [
+                    {
+                        "title": "Chaos Mesh Cloud-Native Chaos Engineering",
+                        "url": "https://chaos-mesh.org/"
+                    }
+                ]
+            },
+            "arch": {
+                "badge": "RESILIENT MESSAGING",
+                "release_date": "Aug 24, 2026",
+                "title": "Apache Kafka Tiered Storage & Remote S3 Segment Offloading",
+                "bullets": [
+                    "Local Disk Decoupling: Retains active segments on fast local NVMe SSDs while offloading historical log segments to Amazon S3.",
+                    "Infinite Retention at 80% Lower Cost: Allows years of event history to remain queryable via standard Kafka consumer APIs.",
+                    "Instant Broker Recovery: Reduces partition rebalance times from hours to minutes because new brokers stream data directly from object storage."
+                ],
+                "interview_framing": "Explain how Kafka Tiered Storage transforms message brokers into unified event stores without incurring massive local disk storage bills.",
+                "sources": [
+                    {
+                        "title": "Apache Kafka Tiered Storage KIP-405",
+                        "url": "https://cwiki.apache.org/confluence/display/KAFKA/KIP-405%3A+Kafka+Tiered+Storage"
+                    }
+                ]
+            },
+            "finops": {
+                "badge": "STORAGE COST OPTIMIZATION",
+                "release_date": "Aug 24, 2026",
+                "title": "S3 Intelligent-Tiering & Automated Object Lifecycle Archival",
+                "bullets": [
+                    "Automated Access Monitoring: Moves unaccessed data objects between Frequent, Infrequent, and Archive Instant Access tiers with zero retrieval fees.",
+                    "Lifecycle Rule Pruning: Automatically expires non-current object versions and incomplete multipart uploads after 7 days.",
+                    "Predictive Cloud Storage Forecasting: Tracks storage growth rates using S3 Storage Lens analytics dashboards."
+                ],
+                "interview_framing": "Show how implementing automated storage tiering and multipart cleanup rules reduces petabyte-scale cloud storage bills by up to 40%.",
+                "sources": [
+                    {
+                        "title": "AWS S3 Intelligent-Tiering Guide",
+                        "url": "https://aws.amazon.com/s3/storage-classes/intelligent-tiering/"
+                    }
+                ]
+            },
+            "gov": {
+                "badge": "AUDIT & GOVERNANCE",
+                "release_date": "Aug 24, 2026",
+                "title": "Automated Cloud Custodian Policy Enforcement & Non-Compliance Remediation",
+                "bullets": [
+                    "Real-Time Event Triggers: Scans AWS CloudTrail and Azure Activity Logs to detect unencrypted storage buckets within 3 seconds of creation.",
+                    "Automated Remediation: Automatically applies encryption tags, disables public access, and alerts the security operations team.",
+                    "Compliance Drift Reports: Generates weekly SOC2 and ISO 27001 evidence reports directly from declarative YAML policies."
+                ],
+                "interview_framing": "Highlight how policy-as-code with Cloud Custodian automates continuous compliance and eliminates manual audit preparation effort.",
+                "sources": [
+                    {
+                        "title": "Cloud Custodian Governance Engine",
+                        "url": "https://cloudcustodian.io/"
+                    }
+                ]
+            }
+        },
+        "flashcards": [
+            {
+                "domain": "\ud83d\udcca Lakehouse Architecture",
+                "question": "Why are enterprise teams migrating from proprietary data warehouse tables to Apache Iceberg metadata catalogs?",
+                "answer": "Iceberg eliminates vendor lock-in by storing data in open Parquet format on customer cloud storage, allowing multiple compute engines (Snowflake, Spark, Trino) to query identical data with ACID transactions.",
+                "cite": "Source: Snowflake Architecture Center 2026",
+                "color_class": "bg-emerald-500/20 text-emerald-300"
+            }
         ],
-        "interview_framing": "How does eBPF kernel tracing eliminate sidecar proxy CPU overhead in high-throughput Kubernetes clusters?",
-        "sources": [
-          {
-            "title": "eBPF.io: Production Kernel Tracing",
-            "url": "https://ebpf.io/what-is-ebpf/"
-          }
-        ]
-      }
+        "full_articles": {
+            "data": "Title: Open Table Formats: Delta Lake vs Apache Iceberg\nSource: Microsoft & Snowflake Architecture (2026)\n\nSection 1: The Multi-Engine Lakehouse Architecture.\nModern data platforms store petabyte-scale data in customer-owned cloud object storage (Azure Blob, AWS S3) formatted as open Parquet files. Apache Iceberg manages snapshot isolation and schema evolution, enabling concurrent access from Snowflake, Apache Spark, and DuckDB without data duplication."
+        }
     },
-    "flashcards": [
-      {
-        "domain": "\u26a1 Platform SRE",
-        "question": "How does eBPF-based observability differ from traditional sidecar proxy telemetry (e.g., Envoy)?",
-        "answer": "eBPF runs bytecode directly inside the Linux kernel, capturing socket and network metrics across all pods on a node with <1% CPU overhead, eliminating sidecar memory bloat and context-switch latency.",
-        "cite": "Source: eBPF Foundation 2026",
-        "color_class": "bg-amber-500/20 text-amber-300"
-      }
-    ],
-    "full_articles": {
-      "devops": "Title: Kernel-Level Observability with eBPF and OpenTelemetry\nSource: eBPF Foundation & CNCF (2026)\n\nSection 1: The Overhead of Sidecar Proxies.\nInjecting Envoy sidecars into thousands of microservice pods consumes gigabytes of memory and adds 2-5ms hop latency. eBPF hooks into kernel socket buffers directly, observing all TCP handshakes with near-zero overhead."
+    "ep-139": {
+        "id": "ep-139",
+        "episode_number": 139,
+        "date": "Aug 23, 2026",
+        "title": "Platform Engineering: Kernel eBPF Telemetry & Workload Identity Federation",
+        "summary": "Covers kernel-level network tracing with <1% overhead, OpenTelemetry W3C trace context, and MAS TRM Section 9 credential removal.",
+        "hosts": "Host A (Principal SRE) & Host B (CISO)",
+        "duration": "10:45",
+        "total_seconds": 645,
+        "audio_url": "/audio/ep-139.mp3",
+        "chapters": [
+            {
+                "time": "00:00",
+                "seconds": 0,
+                "title": "1. Kernel-Level TCP Telemetry with Zero Overhead",
+                "source_name": "eBPF.io",
+                "source_url": "https://ebpf.io/what-is-ebpf/"
+            },
+            {
+                "time": "01:20",
+                "seconds": 80,
+                "title": "2. OpenTelemetry W3C Distributed Context Propagation",
+                "source_name": "OTel Docs",
+                "source_url": "https://opentelemetry.io/docs/"
+            },
+            {
+                "time": "02:50",
+                "seconds": 170,
+                "title": "3. MAS TRM Section 9: Identity & Static Secret Removal",
+                "source_name": "MAS TRM",
+                "source_url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
+            }
+        ],
+        "takeaways": {
+            "ai": {
+                "badge": "KNOWLEDGE DISTILLATION",
+                "release_date": "Aug 23, 2026",
+                "title": "Teacher-Student Knowledge Distillation for Edge SLM Inference",
+                "bullets": [
+                    "Compact Model Specialization: Distills reasoning capabilities from 70B teacher models into 3B small language models (SLMs) for on-device deployment.",
+                    "Logit & Feature Alignment: Optimizes student models using Kullback-Leibler divergence loss on intermediate transformer attention layers.",
+                    "Sub-50ms Edge Execution: Runs quantized 4-bit models locally on edge devices with under 2GB RAM footprint."
+                ],
+                "interview_framing": "Discuss how distilling frontier models into task-specific SLMs reduces cloud inference API costs by 90% while providing offline capabilities.",
+                "sources": [
+                    {
+                        "title": "DistilBERT & Knowledge Distillation Principles",
+                        "url": "https://arxiv.org/abs/1910.01108"
+                    }
+                ]
+            },
+            "cloud": {
+                "badge": "SERVICE MESH ARCHITECTURE",
+                "release_date": "Aug 23, 2026",
+                "title": "Sidecarless Ambient Service Mesh vs Traditional Envoy Injection",
+                "bullets": [
+                    "Layer 4 ztunnel Proxying: Node-level zero-trust tunnel proxies handle mTLS encryption and identity attestation with near-zero latency overhead.",
+                    "Layer 7 Waypoint Proxies: Dynamically provisions standalone Envoy proxies only for namespaces requiring advanced HTTP routing or authorization policies.",
+                    "Simplified Upgrade Lifecycle: Eliminates pod restarts during service mesh version upgrades."
+                ],
+                "interview_framing": "Contrast Istio Ambient mesh with traditional sidecar proxies, emphasizing how separating Layer 4 transport from Layer 7 policy simplifies day-2 operations.",
+                "sources": [
+                    {
+                        "title": "Istio Ambient Mesh Architecture",
+                        "url": "https://istio.io/latest/docs/ops/ambient/architecture/"
+                    }
+                ]
+            },
+            "data": {
+                "badge": "STREAM PROCESSING",
+                "release_date": "Aug 23, 2026",
+                "title": "Apache Flink Statefun & Exactly-Once Stateful Stream Processing",
+                "bullets": [
+                    "Chandy-Lamport Checkpointing: Periodically snapshots distributed streaming state to object storage with sub-second alignment barriers.",
+                    "RocksDB State Backend: Manages terabyte-scale streaming state out of RAM to prevent JVM garbage collection pauses.",
+                    "Exactly-Once Two-Phase Sinks: Coordinates with transactional Kafka sinks to guarantee no duplicate processing during worker recovery."
+                ],
+                "interview_framing": "Explain the mechanics of Flink distributed checkpointing and how it guarantees exactly-once processing semantics for financial fraud detection pipelines.",
+                "sources": [
+                    {
+                        "title": "Apache Flink Checkpointing Guide",
+                        "url": "https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/stateful-stream-processing/"
+                    }
+                ]
+            },
+            "sec": {
+                "badge": "KERNEL WORKLOAD IDENTITY",
+                "release_date": "Aug 23, 2026",
+                "title": "Zero-Trust SPIFFE/SPIRE Attestation & MAS TRM Section 9 Compliance",
+                "bullets": [
+                    "Cryptographic cgroup Attestation: Validates container process binary paths, namespaces, and Kubernetes tokens directly inside the Linux kernel.",
+                    "Ephemeral SVID Credential Injection: Delivers X.509 certificates to workloads via UNIX domain sockets, removing database passwords from environment variables.",
+                    "MAS TRM Section 9.2 Compliance: Meets strict regulatory mandates for end-to-end mTLS encryption and automated 60-minute secret rotation."
+                ],
+                "interview_framing": "Explain how SPIFFE eliminates shared static passwords in financial institutions, drastically reducing the blast radius of container compromises.",
+                "sources": [
+                    {
+                        "title": "CNCF SPIFFE/SPIRE Production Architecture",
+                        "url": "https://spiffe.io/"
+                    },
+                    {
+                        "title": "Singapore MAS TRM Sec 9 Guidelines",
+                        "url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
+                    }
+                ]
+            },
+            "devops": {
+                "badge": "KERNEL OBSERVABILITY",
+                "release_date": "Aug 23, 2026",
+                "title": "Kernel eBPF Socket Tracing & OpenTelemetry W3C Distributed Context",
+                "bullets": [
+                    "Low-Overhead Packet Inspection: eBPF programs hook directly into kernel network tracepoints with <1% CPU overhead.",
+                    "Automatic Distributed Tracing: Inspects and propagates W3C trace-context headers across HTTP and gRPC calls without manual code instrumentation.",
+                    "Continuous Profiling: Captures on-CPU and off-CPU flame graphs across all running containers to pinpoint production bottlenecks."
+                ],
+                "interview_framing": "Articulate how eBPF observability provides complete system visibility with negligible overhead, reducing Mean Time to Resolution (MTTR) during outages.",
+                "sources": [
+                    {
+                        "title": "eBPF Applications in Observability",
+                        "url": "https://ebpf.io/what-is-ebpf/"
+                    },
+                    {
+                        "title": "OpenTelemetry W3C Trace Context Specification",
+                        "url": "https://www.w3.org/TR/trace-context/"
+                    }
+                ]
+            },
+            "arch": {
+                "badge": "DATABASE CONSISTENCY",
+                "release_date": "Aug 23, 2026",
+                "title": "Distributed Multi-Master Database Replication & CRDT Conflict Resolution",
+                "bullets": [
+                    "Conflict-Free Replicated Data Types (CRDTs): Automatically resolves concurrent write conflicts across multi-region databases without distributed locks.",
+                    "State-Based vs Operation-Based CRDTs: Compares network bandwidth trade-offs between full state replication and delta mutation streams.",
+                    "High Availability Under Partitions: Guarantees AP (Availability + Partition Tolerance) properties under CAP theorem constraints."
+                ],
+                "interview_framing": "Discuss when to choose CRDTs over consensus protocols, citing real-world examples like collaborative documents and shopping cart counters.",
+                "sources": [
+                    {
+                        "title": "CRDTs: Consistency without Consensus",
+                        "url": "https://crdt.tech/"
+                    }
+                ]
+            },
+            "finops": {
+                "badge": "EGRESS OPTIMIZATION",
+                "release_date": "Aug 23, 2026",
+                "title": "Cross-AZ Data Transfer Optimization & PrivateLink Architecture",
+                "bullets": [
+                    "Availability Zone Colocation: Schedules chatty microservices within the same Availability Zone using Kubernetes pod affinity to eliminate cross-AZ transfer fees.",
+                    "AWS VPC Endpoints & PrivateLink: Routes traffic to S3 and DynamoDB over internal AWS networks, avoiding internet NAT gateway data processing costs.",
+                    "Egress Cost Monitoring: Tracks network egress volume per Kubernetes namespace using Prometheus and OpenCost."
+                ],
+                "interview_framing": "Show how optimizing network topology and replacing NAT gateways with VPC endpoints cuts cloud networking bills by up to 50%.",
+                "sources": [
+                    {
+                        "title": "AWS Best Practices for Data Transfer Costs",
+                        "url": "https://aws.amazon.com/blogs/architecture/reduce-data-transfer-costs-with-aws-privatelink/"
+                    }
+                ]
+            },
+            "gov": {
+                "badge": "VULNERABILITY MANAGEMENT",
+                "release_date": "Aug 23, 2026",
+                "title": "Automated EPSS Vulnerability Prioritization & VEX Attestations",
+                "bullets": [
+                    "Exploit Prediction Scoring System (EPSS): Focuses remediation efforts on CVEs with high probability of real-world exploitation rather than raw CVSS scores.",
+                    "Vulnerability Exploitability eXchange (VEX): Generates machine-readable attestations confirming whether a vulnerable library is reachable in runtime execution.",
+                    "Automated CI/CD Gate Enforcement: Blocks production deployments only when exploitable vulnerabilities are actively detected."
+                ],
+                "interview_framing": "Explain how combining EPSS scores with VEX runtime reachability reduces vulnerability triage noise by 80% while strengthening security posture.",
+                "sources": [
+                    {
+                        "title": "FIRST EPSS Vulnerability Scoring Guide",
+                        "url": "https://www.first.org/epss/"
+                    },
+                    {
+                        "title": "CISA Vulnerability Exploitability eXchange (VEX)",
+                        "url": "https://www.cisa.gov/resources-tools/resources/vulnerability-exploitability-exchange-vex"
+                    }
+                ]
+            }
+        },
+        "flashcards": [
+            {
+                "domain": "\u26a1 Platform SRE",
+                "question": "How does eBPF-based observability differ from traditional sidecar proxy telemetry (e.g., Envoy)?",
+                "answer": "eBPF runs bytecode directly inside the Linux kernel, capturing socket and network metrics across all pods on a node with <1% CPU overhead, eliminating sidecar memory bloat and context-switch latency.",
+                "cite": "Source: eBPF Foundation 2026",
+                "color_class": "bg-amber-500/20 text-amber-300"
+            }
+        ],
+        "full_articles": {
+            "devops": "Title: Kernel-Level Observability with eBPF and OpenTelemetry\nSource: eBPF Foundation & CNCF (2026)\n\nSection 1: The Overhead of Sidecar Proxies.\nInjecting Envoy sidecars into thousands of microservice pods consumes gigabytes of memory and adds 2-5ms hop latency. eBPF hooks into kernel socket buffers directly, observing all TCP handshakes with near-zero overhead."
+        }
     }
-  }
 };
-    let currentEpisodeId = 'ep-142';
-
-    const DOMAIN_STYLES = {
-      ai: { badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30', dot: 'bg-indigo-400', iconText: 'text-indigo-300' },
-      cloud: { badgeBg: 'bg-sky-500/20 text-sky-300 border-sky-500/30', dot: 'bg-sky-400', iconText: 'text-sky-300' },
-      data: { badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', dot: 'bg-emerald-400', iconText: 'text-emerald-300' },
-      sec: { badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30', dot: 'bg-rose-400', iconText: 'text-rose-300' },
-      devops: { badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/30', dot: 'bg-amber-400', iconText: 'text-amber-300' },
-      arch: { badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-500/30', dot: 'bg-purple-400', iconText: 'text-purple-300' },
-      finops: { badgeBg: 'bg-teal-500/20 text-teal-300 border-teal-500/30', dot: 'bg-teal-400', iconText: 'text-teal-300' },
-      gov: { badgeBg: 'bg-blue-500/20 text-blue-300 border-blue-500/30', dot: 'bg-blue-400', iconText: 'text-blue-300' }
-    };
 
     function updateAllDomainContent(ep) {
       const allDomains = ['ai', 'cloud', 'data', 'sec', 'devops', 'arch', 'finops', 'gov'];
