@@ -982,314 +982,517 @@
     // EPISODE DATASET
     // ==========================================
     const episodes = {
-      'ep-142': {
-        title: "Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Banking Perimeters",
-        hosts: "Host A (Cloud Architect) & Host B (Governance Lead)",
-        duration: "05:20",
-        totalSeconds: 320,
-        chapters: [
-          { time: "00:00", seconds: 0, title: "1. Intro & Multi-Agent Deterministic Routing", sourceName: "Anthropic", sourceUrl: "https://www.anthropic.com/research/building-effective-agents" },
-          { time: "01:15", seconds: 75, title: "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg", sourceName: "MS Fabric", sourceUrl: "https://blog.fabric.microsoft.com/" },
-          { time: "02:35", seconds: 155, title: "3. Zero-Trust SPIFFE Workload Tokens in Banking", sourceName: "SPIFFE.io", sourceUrl: "https://spiffe.io/docs/latest/spiffe-about/overview/" },
-          { time: "04:00", seconds: 240, title: "4. MAS FEAT Model Risk Compliance & Socratic QA", sourceName: "MAS Veritas", sourceUrl: "https://www.mas.gov.sg/schemes-and-initiatives/veritas" }
-        ]
-      },
-      'ep-141': {
-        title: "Deep Dive: Agentic RAG Architectures, Vector Cache Warming & Context Window Budgeting",
-        hosts: "Host A (AI Engineer) & Host B (LLMOps Lead)",
-        duration: "04:45",
-        totalSeconds: 285,
-        chapters: [
-          { time: "00:00", seconds: 0, title: "1. Vector Cache Warming vs Real-Time Hybrid Search", sourceName: "Pinecone", sourceUrl: "https://www.pinecone.io/blog/" },
-          { time: "01:30", seconds: 90, title: "2. Context Window Compaction & Prompt Compression", sourceName: "OpenAI", sourceUrl: "https://openai.com/research/" },
-          { time: "03:10", seconds: 190, title: "3. Automated Agent Benchmarking with LLM-as-a-Judge", sourceName: "Anthropic", sourceUrl: "https://www.anthropic.com/research" }
-        ]
-      },
-      'ep-140': {
-        title: "Modern Data Stack: Microsoft Fabric Real-Time Analytics vs Snowflake Iceberg Catalogs",
-        hosts: "Host A (Data Architect) & Host B (Analytics Lead)",
-        duration: "05:10",
-        totalSeconds: 310,
-        chapters: [
-          { time: "00:00", seconds: 0, title: "1. Microsoft Fabric OneLake Delta Parquet Architecture", sourceName: "MS Learn", sourceUrl: "https://learn.microsoft.com/en-us/fabric/" },
-          { time: "01:45", seconds: 105, title: "2. Apache Iceberg Metadata Scaling on S3/Blob Storage", sourceName: "Snowflake", sourceUrl: "https://www.snowflake.com/en/blog/" },
-          { time: "03:30", seconds: 210, title: "3. Cost Comparison: Fabric F-SKU vs Snowflake Warehouses", sourceName: "FinOps", sourceUrl: "https://www.finops.org/framework/" }
-        ]
-      },
-      'ep-139': {
-        title: "Platform Engineering: Kernel eBPF Telemetry & Workload Identity Federation",
-        hosts: "Host A (Principal SRE) & Host B (CISO)",
-        duration: "04:30",
-        totalSeconds: 270,
-        chapters: [
-          { time: "00:00", seconds: 0, title: "1. Kernel-Level TCP Telemetry with Zero Overhead", sourceName: "eBPF.io", sourceUrl: "https://ebpf.io/what-is-ebpf/" },
-          { time: "01:20", seconds: 80, title: "2. OpenTelemetry W3C Distributed Context Propagation", sourceName: "OTel Docs", sourceUrl: "https://opentelemetry.io/docs/" },
-          { time: "02:50", seconds: 170, title: "3. MAS TRM Section 9: Identity & Static Secret Removal", sourceName: "MAS TRM", sourceUrl: "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines" }
-        ]
-      }
+    "ep-142": {
+        "id": "ep-142",
+        "episode_number": 142,
+        "date": "Aug 26, 2026",
+        "title": "Full Technical Paper Readout: Multi-Agent Swarms, Azure Multi-Region Resiliency, Fabric Direct Lake & SPIFFE Zero Trust",
+        "summary": "Complete unabridged full-text technical readouts covering Anthropic's Deterministic Main-as-Router Pattern, Azure Multi-Region Kubernetes Failover Architecture, Microsoft Fabric Direct Lake Memory Paging, and CNCF SPIFFE Workload Identity in Banking Perimeters.",
+        "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal SRE & Governance Lead)",
+        "duration": "12:00",
+        "total_seconds": 720,
+        "audio_url": "/audio/ep-142.mp3",
+        "chapters": [
+            {
+                "time": "00:00",
+                "seconds": 0,
+                "title": "\ud83d\udcc4 AI: Deterministic Main-as-Router Pattern (Full Paper)",
+                "source_name": "Anthropic & OpenAI",
+                "source_url": "https://www.anthropic.com/research/building-effective-agents"
+            },
+            {
+                "time": "03:35",
+                "seconds": 215,
+                "title": "\ud83d\udcc4 Cloud: Azure Landing Zones & AWS Failover (Full Paper)",
+                "source_name": "Azure Architecture Center",
+                "source_url": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"
+            },
+            {
+                "time": "06:15",
+                "seconds": 375,
+                "title": "\ud83d\udcc4 Data: Microsoft Fabric Direct Lake Mode (Full Paper)",
+                "source_name": "Microsoft Fabric Engineering",
+                "source_url": "https://blog.fabric.microsoft.com/"
+            },
+            {
+                "time": "09:20",
+                "seconds": 560,
+                "title": "\ud83d\udcc4 Security: Zero-Trust SPIFFE Workload Tokens & MAS TRM 9 (Full Paper)",
+                "source_name": "CNCF Security TAG",
+                "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"
+            }
+        ],
+        "takeaways": {
+            "ai": {
+                "badge": "AGENTIC DESIGN PATTERN",
+                "release_date": "Aug 2026",
+                "title": "Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms",
+                "bullets": [
+                    "Decouples stateful planning from tool execution to prevent cascading prompt hallucinations.",
+                    "Implements structural dry-run approval gates before executing file system or API mutations.",
+                    "Evaluates agent trajectories using automated LLM-as-a-Judge benchmark suites."
+                ],
+                "interview_framing": "Explain how the 'Main-as-Router' pattern guarantees deterministic audit logs and cost bounds in enterprise production.",
+                "sources": [
+                    {
+                        "title": "Anthropic: Building Effective Agents",
+                        "url": "https://www.anthropic.com/research/building-effective-agents"
+                    },
+                    {
+                        "title": "OpenAI: Governing Agentic AI",
+                        "url": "https://openai.com/research/practices-for-governing-agentic-ai"
+                    }
+                ]
+            }
+        },
+        "flashcards": [
+            {
+                "domain": "\ud83e\udd16 AI & Agent Systems",
+                "question": "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
+                "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
+                "cite": "Source: Anthropic Research 2026",
+                "color_class": "bg-indigo-500/20 text-indigo-300"
+            }
+        ],
+        "script_segments": [
+            {
+                "speaker": "Host A",
+                "text": "Welcome to TechPulse OS, Episode 142. I'm your Enterprise Cloud Architect host."
+            },
+            {
+                "speaker": "Host B",
+                "text": "And I'm your Principal SRE and Governance Lead. Today we deliver an in-depth architectural breakdown across AI agent systems, Microsoft Azure multi-cloud resiliency, Microsoft Fabric Direct Lake versus Snowflake Iceberg, and zero-trust banking perimeters under Singapore MAS guidelines."
+            },
+            {
+                "speaker": "Host A",
+                "text": "Let's dive straight into Chapter 1: Agentic Architecture. Both Anthropic and OpenAI have published updated guidance on governing autonomous LLM systems in production. The single most important architectural pattern is replacing monolithic, recursive swarms with a deterministic 'Main-as-Router' pattern."
+            },
+            {
+                "speaker": "Host B",
+                "text": "Why is this shift happening? Because in recursive agent swarms, sub-agents can call other sub-agents in unconstrained loops, leading to prompt drift, cascading hallucinations, and exponential API cost overruns. In the Main-as-Router pattern, the main session acts strictly as an orchestrator. It manages state, executes dry-run approval gates before any filesystem or API mutations, and caps retry attempts at three before triggering human-in-the-loop escalation."
+            },
+            {
+                "speaker": "Host A",
+                "text": "If you're framing this in a System Design interview: emphasize that decoupling stateful planning from tool execution guarantees deterministic audit logging and predictable cost bounds, which enterprise compliance boards require."
+            },
+            {
+                "speaker": "Host A",
+                "text": "Moving to Chapter 2: Cloud & Platforms. We're tracking multi-region Kubernetes failover across Microsoft Azure Landing Zones and AWS. Enterprise mission-critical workloads are adopting automated active-passive traffic shedding using Azure Front Door and AWS Global Accelerator combined with Cloudflare Magic Transit."
+            },
+            {
+                "speaker": "Host B",
+                "text": "On the storage layer, rather than attempting complex synchronous multi-region database writes that suffer from high cross-region latency, teams are utilizing Azure Managed Disks cross-region replication paired with Rook-Ceph availability-zone meshes. This keeps Recovery Point Objective under five seconds while isolating blast radiuses."
+            },
+            {
+                "speaker": "Host A",
+                "text": "In Chapter 3: Enterprise Lakehouses. Microsoft Fabric's Direct Lake mode is fundamentally shifting Power BI and analytical engineering. In legacy architectures, you had to choose between slow DirectQuery on source data or scheduled VertiPaq imports with 24-hour data staleness."
+            },
+            {
+                "speaker": "Host B",
+                "text": "Direct Lake solves this by paging Delta Parquet files directly from OneLake storage straight into VertiPaq RAM on demand. There are no import refresh pipelines to maintain. Meanwhile, Snowflake's managed Apache Iceberg tables allow organizations to maintain a vendor-neutral catalog accessible across Spark, Databricks, and Trino engines simultaneously."
+            },
+            {
+                "speaker": "Host A",
+                "text": "Now to Chapter 4: Zero Trust Security. In tier-one financial institutions, long-lived static API keys and database credentials are being systematically eradicated in favor of SPIFFE and SPIRE workload identity federation."
+            },
+            {
+                "speaker": "Host B",
+                "text": "SPIFFE issues ephemeral cryptographic X.509 SVID tokens to microservices and Kubernetes pods. These certificates rotate automatically every sixty minutes without requiring application restarts or downtime. This directly satisfies Singapore MAS Technology Risk Management Section 9, neutralizing credential leakage blast radius."
+            },
+            {
+                "speaker": "Host A",
+                "text": "In SRE and Systems Architecture: eBPF is replacing user-space APM daemons. By attaching sandboxed bytecode directly to Linux kernel socket buffers, teams capture TCP connection latency and network anomalies with under one percent CPU overhead, propagating W3C distributed trace context seamlessly into OpenTelemetry."
+            },
+            {
+                "speaker": "Host B",
+                "text": "In distributed data consistency, the Transactional Outbox Pattern using Debezium Change Data Capture is replacing fragile Two-Phase Commits (2PC). By reading database Write-Ahead Logs directly, it guarantees event delivery to Kafka brokers with sub-ten-millisecond latency, even during partial network partitions."
+            },
+            {
+                "speaker": "Host A",
+                "text": "Wrapping up with FinOps and AI Governance: Automated compute pausing on Fabric F-SKUs combined with AWS Graviton4 ARM64 spot instances has cut batch ETL costs by over thirty-five percent."
+            },
+            {
+                "speaker": "Host B",
+                "text": "And on the regulatory frontier: Singapore MAS FEAT principles and SR 11-7 Model Risk frameworks mandate immutable audit trails capturing prompt snapshots, model temperature, and hallucination scoring for every production GenAI decision."
+            },
+            {
+                "speaker": "Host A",
+                "text": "That concludes today's deep-dive briefing for Episode 142. Open the TechPulse OS dashboard to review complete source papers, and test your retention with today's interactive flashcards. We'll see you tomorrow."
+            }
+        ],
+        "full_articles": {
+            "ai": "Title: Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms in Enterprise Production\nSource: Anthropic Research & OpenAI Applied AI (2026)\n\n1. The Problem of Unconstrained Agentic Swarms:\nIn early agentic architectures, developers implemented recursive swarm patterns where agents dynamically spawned subagents, delegated subtasks, and resolved dependencies recursively. In production environments, this introduces fatal failure modes:\n- Cascading Prompt Drift: Context windows passing through multiple recursive hops become diluted, leading to unpredictable tool hallucinations.\n- Unbounded API Cost and Execution Loops: An ambiguous edge case triggers recursive self-invocation loops, resulting in hundreds of dollars of inference costs within minutes.\n- Regulatory Non-Compliance: Financial regulators (MAS FEAT & US Fed SR 11-7) require deterministic audit trails explaining every automated decision. Recursive swarms produce non-deterministic trajectories that fail regulatory audit.\n\n2. The Main-as-Router Architectural Solution:\nThe main session functions strictly as a centralized router and governance layer.\n- Stateful Planning Decoupling: Planning orchestrators decompose requirements into isolated, sequential specialist tasks. Specialists execute within isolated sub-contexts and return structured artifacts.\n- Structural Dry-Run Approval Gates: Before any specialist can mutate the filesystem, execute shell commands, or trigger production APIs, it must submit a structured dry-run plan for explicit human/router approval.\n- Strict Retry Caps: If a specialist step fails 3 times consecutively, the router halts execution immediately, flags the task as blocked, and triggers human escalation.\n\n3. System Design Interview Framing:\nDecoupling planning from tool execution turns probabilistic LLM behavior into a verifiable, deterministic state machine with immutable audit logs.",
+            "cloud": "Title: Cross-Region Multi-Cluster Kubernetes Failover & Azure Landing Zone Architecture\nSource: Microsoft Azure Architecture Center & AWS Architecture (2026)\n\n1. Designing for Regional Cloud Resiliency:\nAchieving high availability with RTO < 60s and RPO < 5s across geographic regions without suffering WAN latency penalties (50-120ms per cross-region synchronous transaction).\n\n2. Decoupled Ingress & Storage Replication Architecture:\n- Traffic Ingress Layer: Azure Front Door, AWS Global Accelerator, and Cloudflare Magic Transit manage global Anycast IP routing with automated health probes polling every 5s. Three consecutive failures reroute traffic to standby region within 15s.\n- Compute Layer: Identical Kubernetes clusters in Azure East US and Azure West US provisioned via GitOps (ArgoCD) with blue-green cutover.\n- Storage Layer: Azure Managed Disks cross-region asynchronous snapshot replication and Rook-Ceph AZ meshes. Database layers utilize asynchronous replication with automated failover promotion scripts, keeping RPO < 5s.",
+            "data": "Title: Microsoft Fabric Direct Lake Architecture vs Snowflake Managed Iceberg Tables\nSource: Microsoft Fabric Engineering & Snowflake Technical Architecture (2026)\n\n1. The Modern Enterprise Lakehouse Dilemma:\nChoosing between slow DirectQuery (high warehouse compute costs) vs scheduled VertiPaq Import (24-hour data staleness & duplicate storage).\n\n2. Direct Lake Mode Architecture:\n- Direct Lake reads Delta Parquet files directly from OneLake storage into VertiPaq memory on demand via memory-mapped I/O without trans-coding or copying data.\n- Achieves sub-second query execution across billion-row datasets with sub-minute data freshness.\n- If query memory exceeds provisioned Fabric F-SKU capacity limits, it falls back gracefully to DirectQuery mode.\n\n3. Snowflake Managed Iceberg Tables:\nEnables vendor-neutral open Parquet and Iceberg metadata on customer cloud storage, queryable across Snowflake, Apache Spark, and Trino under Polaris Catalog governance.",
+            "sec": "Title: Zero-Trust SPIFFE/SPIRE Workload Identity Federation in Banking Perimeters\nSource: CNCF Security TAG & Singapore MAS Technology Risk Management (2026)\n\n1. Vulnerability of Static Secrets:\nShared database credentials and long-lived API tokens in CI/CD pipelines represent the highest attack blast radius in financial infrastructure.\n\n2. SPIFFE/SPIRE Architecture:\n- Workload Attestation: SPIRE agent inspects container cgroups, Kubernetes service account tokens, and image hashes.\n- Ephemeral SVID Issuance: Issues X.509 SVID certificates into container memory via UNIX domain sockets.\n- 60-Minute Automated Rotation: Certificates rotate every 60 minutes with zero downtime or app restarts.\n\n3. MAS TRM Section 9 Compliance:\nSatisfies strict MAS requirements for eliminating static credentials and enforcing cryptographic mutual TLS across all microsegments."
+        }
+    },
+    "ep-141": {
+        "id": "ep-141",
+        "episode_number": 141,
+        "date": "Aug 25, 2026",
+        "title": "Deep Dive: Agentic RAG Architectures, Vector Cache Warming & Context Window Budgeting",
+        "summary": "Explores production caching for vector databases, context window compression techniques, and automated LLM-as-a-Judge evaluation pipelines for high-throughput enterprise systems.",
+        "hosts": "Host A (Principal AI Engineer) & Host B (LLMOps Lead)",
+        "duration": "04:45",
+        "total_seconds": 285,
+        "audio_url": "/audio/ep-141.mp3",
+        "chapters": [
+            {
+                "time": "00:00",
+                "seconds": 0,
+                "title": "1. Vector Cache Warming vs Real-Time Hybrid Search",
+                "source_name": "Pinecone",
+                "source_url": "https://www.pinecone.io/blog/"
+            },
+            {
+                "time": "01:30",
+                "seconds": 90,
+                "title": "2. Context Window Compaction & Prompt Compression",
+                "source_name": "OpenAI",
+                "source_url": "https://openai.com/research/"
+            },
+            {
+                "time": "03:10",
+                "seconds": 190,
+                "title": "3. Automated Agent Benchmarking with LLM-as-a-Judge",
+                "source_name": "Anthropic",
+                "source_url": "https://www.anthropic.com/research"
+            }
+        ],
+        "takeaways": {
+            "ai": {
+                "badge": "AGENTIC RAG OPTIMIZATION",
+                "release_date": "Aug 2026",
+                "title": "Predictive Vector Cache Warming vs Real-Time Hybrid Search Latency",
+                "bullets": [
+                    "Pre-computes and warms HNSW vector indexes for top-tier analytical queries, reducing P99 latency by 68%.",
+                    "Pairs sparse BM25 keyword indexes with dense embeddings using Reciprocal Rank Fusion (RRF).",
+                    "Reduces embedding API inference spend by 40% via Redis semantic cache layers."
+                ],
+                "interview_framing": "Explain how semantic caching and HNSW vector index warming mitigate embedding cost spikes and P99 latency SLA violations in tier-1 customer support agents.",
+                "sources": [
+                    {
+                        "title": "Pinecone: Production Vector Caching",
+                        "url": "https://www.pinecone.io/blog/"
+                    }
+                ]
+            },
+            "devops": {
+                "badge": "LLMOPS & CONTEXT BUDGETING",
+                "release_date": "Aug 2026",
+                "title": "Context Window Compaction & Automated LLM-as-a-Judge Pipelines",
+                "bullets": [
+                    "Applies structured prompt compression and semantic chunking to keep context budgets under 8k tokens.",
+                    "Runs automated synthetic judge evals using G-Eval rubrics across hallucination and faithfulness dimensions.",
+                    "Enforces strict rate-limiting and circuit breakers across upstream model provider endpoints."
+                ],
+                "interview_framing": "Detail your evaluation methodology for regression testing agent prompt changes using LLM-as-a-Judge pipelines.",
+                "sources": [
+                    {
+                        "title": "OpenAI: Context Management in Production",
+                        "url": "https://openai.com/research/"
+                    }
+                ]
+            }
+        },
+        "flashcards": [
+            {
+                "domain": "\ud83e\udd16 Agentic RAG",
+                "question": "What is the primary architectural trade-off between Semantic Caching and Real-Time Vector Similarity Search?",
+                "answer": "Semantic caching achieves sub-5ms query times and saves API cost by matching cosine similarity against cached responses, but risks serving stale answers if underlying source documents update frequently.",
+                "cite": "Source: Pinecone Research 2026",
+                "color_class": "bg-indigo-500/20 text-indigo-300"
+            }
+        ],
+        "full_articles": {
+            "ai": "Title: Predictive Vector Cache Warming in Enterprise Agentic RAG\nSource: Pinecone & OpenAI Research (2026)\n\nSection 1: The Vector Search Latency Bottleneck.\nIn large-scale agentic RAG pipelines, computing dense vector embeddings and traversing billion-node HNSW graphs on every conversational turn creates 150-300ms latency overheads.\n\nSection 2: The Two-Tier Cache Architecture.\nBy deploying Redis Semantic Cache in front of the vector database, queries with cosine similarity > 0.96 return pre-computed context chunks in under 4ms, reducing downstream embedding API costs by 42%.",
+            "devops": "Title: Context Window Compaction & Prompt Budgeting\nSource: Anthropic & OpenAI (2026)\n\nSection 1: Managing Context Bloat in Long-Running Workflows.\nPassing raw chat histories across 20+ turns degrades LLM reasoning precision. Applying selective summarization and key-entity extraction preserves context fidelity within an 8k token envelope."
+        }
+    },
+    "ep-140": {
+        "id": "ep-140",
+        "episode_number": 140,
+        "date": "Aug 24, 2026",
+        "title": "Modern Data Stack: Microsoft Fabric Real-Time Analytics vs Snowflake Iceberg Catalogs",
+        "summary": "Deep dive into Delta Parquet on OneLake, open Iceberg metadata management, and enterprise capacity cost modeling across multi-cloud lakehouses.",
+        "hosts": "Host A (Data Platform Architect) & Host B (Analytics Engineering Lead)",
+        "duration": "05:10",
+        "total_seconds": 310,
+        "audio_url": "/audio/ep-140.mp3",
+        "chapters": [
+            {
+                "time": "00:00",
+                "seconds": 0,
+                "title": "1. Microsoft Fabric OneLake Delta Parquet Architecture",
+                "source_name": "MS Learn",
+                "source_url": "https://learn.microsoft.com/en-us/fabric/"
+            },
+            {
+                "time": "01:45",
+                "seconds": 105,
+                "title": "2. Apache Iceberg Metadata Scaling on S3/Blob Storage",
+                "source_name": "Snowflake",
+                "source_url": "https://www.snowflake.com/en/blog/"
+            },
+            {
+                "time": "03:30",
+                "seconds": 210,
+                "title": "3. Cost Comparison: Fabric F-SKU vs Snowflake Warehouses",
+                "source_name": "FinOps",
+                "source_url": "https://www.finops.org/framework/"
+            }
+        ],
+        "takeaways": {
+            "data": {
+                "badge": "ENTERPRISE LAKEHOUSE",
+                "release_date": "Aug 2026",
+                "title": "Open Table Formats: Delta Lake vs Apache Iceberg & Snowflake Polaris",
+                "bullets": [
+                    "Consolidates disparate data silos into unified OneLake storage using open Delta Parquet files.",
+                    "Decouples storage compute via Snowflake Polaris Catalog for multi-engine interoperability (Spark, Trino, Snowflake).",
+                    "Implements partition pruning and min/max metadata indexes to accelerate large-scale analytical scans."
+                ],
+                "interview_framing": "Compare the architectural governance trade-offs of Microsoft Fabric OneLake Direct Lake mode against Snowflake Managed Iceberg tables.",
+                "sources": [
+                    {
+                        "title": "Microsoft Fabric OneLake Architecture",
+                        "url": "https://learn.microsoft.com/en-us/fabric/"
+                    }
+                ]
+            }
+        },
+        "flashcards": [
+            {
+                "domain": "\ud83d\udcca Lakehouse Architecture",
+                "question": "Why are enterprise teams migrating from proprietary data warehouse tables to Apache Iceberg metadata catalogs?",
+                "answer": "Iceberg eliminates vendor lock-in by storing data in open Parquet format on customer cloud storage, allowing multiple compute engines (Snowflake, Spark, Trino) to query identical data with ACID transactions.",
+                "cite": "Source: Snowflake Architecture Center 2026",
+                "color_class": "bg-emerald-500/20 text-emerald-300"
+            }
+        ],
+        "full_articles": {
+            "data": "Title: Open Table Formats: Delta Lake vs Apache Iceberg\nSource: Microsoft & Snowflake Architecture (2026)\n\nSection 1: The Multi-Engine Lakehouse Architecture.\nModern data platforms store petabyte-scale data in customer-owned cloud object storage (Azure Blob, AWS S3) formatted as open Parquet files. Apache Iceberg manages snapshot isolation and schema evolution, enabling concurrent access from Snowflake, Apache Spark, and DuckDB without data duplication."
+        }
+    },
+    "ep-139": {
+        "id": "ep-139",
+        "episode_number": 139,
+        "date": "Aug 23, 2026",
+        "title": "Platform Engineering: Kernel eBPF Telemetry & Workload Identity Federation",
+        "summary": "Covers kernel-level network tracing with <1% overhead, OpenTelemetry W3C trace context, and MAS TRM Section 9 credential removal.",
+        "hosts": "Host A (Principal SRE) & Host B (CISO)",
+        "duration": "04:30",
+        "total_seconds": 270,
+        "audio_url": "/audio/ep-139.mp3",
+        "chapters": [
+            {
+                "time": "00:00",
+                "seconds": 0,
+                "title": "1. Kernel-Level TCP Telemetry with Zero Overhead",
+                "source_name": "eBPF.io",
+                "source_url": "https://ebpf.io/what-is-ebpf/"
+            },
+            {
+                "time": "01:20",
+                "seconds": 80,
+                "title": "2. OpenTelemetry W3C Distributed Context Propagation",
+                "source_name": "OTel Docs",
+                "source_url": "https://opentelemetry.io/docs/"
+            },
+            {
+                "time": "02:50",
+                "seconds": 170,
+                "title": "3. MAS TRM Section 9: Identity & Static Secret Removal",
+                "source_name": "MAS TRM",
+                "source_url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
+            }
+        ],
+        "takeaways": {
+            "devops": {
+                "badge": "KERNEL TELEMETRY",
+                "release_date": "Aug 2026",
+                "title": "eBPF Kernel Socket Tracing & OpenTelemetry W3C Context",
+                "bullets": [
+                    "Hooks into Linux kernel kprobes and tracepoints to capture TCP socket latency with under 1% CPU overhead.",
+                    "Propagates OpenTelemetry W3C trace headers across asynchronous message queues and service meshes.",
+                    "Provides real-time packet-level visibility into container ingress packet drops."
+                ],
+                "interview_framing": "How does eBPF kernel tracing eliminate sidecar proxy CPU overhead in high-throughput Kubernetes clusters?",
+                "sources": [
+                    {
+                        "title": "eBPF.io: Production Kernel Tracing",
+                        "url": "https://ebpf.io/what-is-ebpf/"
+                    }
+                ]
+            }
+        },
+        "flashcards": [
+            {
+                "domain": "\u26a1 Platform SRE",
+                "question": "How does eBPF-based observability differ from traditional sidecar proxy telemetry (e.g., Envoy)?",
+                "answer": "eBPF runs bytecode directly inside the Linux kernel, capturing socket and network metrics across all pods on a node with <1% CPU overhead, eliminating sidecar memory bloat and context-switch latency.",
+                "cite": "Source: eBPF Foundation 2026",
+                "color_class": "bg-amber-500/20 text-amber-300"
+            }
+        ],
+        "full_articles": {
+            "devops": "Title: Kernel-Level Observability with eBPF and OpenTelemetry\nSource: eBPF Foundation & CNCF (2026)\n\nSection 1: The Overhead of Sidecar Proxies.\nInjecting Envoy sidecars into thousands of microservice pods consumes gigabytes of memory and adds 2-5ms hop latency. eBPF hooks into kernel socket buffers directly, observing all TCP handshakes with near-zero overhead."
+        }
+    }
+};
+
+            let currentEpisodeId = 'ep-142';
+
+    const DOMAIN_STYLES = {
+      ai: { badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30', dot: 'bg-indigo-400', iconText: 'text-indigo-300' },
+      cloud: { badgeBg: 'bg-sky-500/20 text-sky-300 border-sky-500/30', dot: 'bg-sky-400', iconText: 'text-sky-300' },
+      data: { badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', dot: 'bg-emerald-400', iconText: 'text-emerald-300' },
+      sec: { badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30', dot: 'bg-rose-400', iconText: 'text-rose-300' },
+      devops: { badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/30', dot: 'bg-amber-400', iconText: 'text-amber-300' },
+      arch: { badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-500/30', dot: 'bg-purple-400', iconText: 'text-purple-300' },
+      finops: { badgeBg: 'bg-teal-500/20 text-teal-300 border-teal-500/30', dot: 'bg-teal-400', iconText: 'text-teal-300' },
+      gov: { badgeBg: 'bg-blue-500/20 text-blue-300 border-blue-500/30', dot: 'bg-blue-400', iconText: 'text-blue-300' }
     };
 
-        let currentEpisodeId = 'ep-142';
-
-    function renderDomainTakeaways(ep) {
-      const grid = document.getElementById('takeaways-grid');
-      if (!grid) return;
-      
+    function updateAllDomainContent(ep) {
+      const allDomains = ['ai', 'cloud', 'data', 'sec', 'devops', 'arch', 'finops', 'gov'];
       const takeaways = ep.takeaways || {};
-      const domains = Object.keys(takeaways);
-      
-      if (domains.length === 0) {
-        // Fallback for episodes with simple summaries
-        grid.innerHTML = `
-          <div class="col-span-full p-6 rounded-2xl bg-white/[0.03] border border-white/10 text-center space-y-2">
-            <h3 class="text-white font-bold text-base">${escapeHtml(ep.title)}</h3>
-            <p class="text-slate-300 text-xs max-w-2xl mx-auto leading-relaxed">${escapeHtml(ep.summary || '')}</p>
-          </div>
-        `;
-        return;
-      }
 
-      const domainColors = {
-        ai: { border: 'border-indigo-500/30', bg: 'bg-indigo-500/10', text: 'text-indigo-400', badge: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30', btn: 'bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border-indigo-500/40', glow: 'bg-indigo-400' },
-        cloud: { border: 'border-sky-500/30', bg: 'bg-sky-500/10', text: 'text-sky-400', badge: 'bg-sky-500/20 text-sky-300 border-sky-500/30', btn: 'bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border-sky-500/40', glow: 'bg-sky-400' },
-        data: { border: 'border-emerald-500/30', bg: 'bg-emerald-500/10', text: 'text-emerald-400', badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', btn: 'bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border-emerald-500/40', glow: 'bg-emerald-400' },
-        sec: { border: 'border-rose-500/30', bg: 'bg-rose-500/10', text: 'text-rose-400', badge: 'bg-rose-500/20 text-rose-300 border-rose-500/30', btn: 'bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 border-rose-500/40', glow: 'bg-rose-400' },
-        devops: { border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30', btn: 'bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border-amber-500/40', glow: 'bg-amber-400' },
-        default: { border: 'border-cyan-500/30', bg: 'bg-cyan-500/10', text: 'text-cyan-400', badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30', btn: 'bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border-cyan-500/40', glow: 'bg-cyan-400' }
-      };
+      allDomains.forEach(dom => {
+        const container = document.getElementById('content-' + dom);
+        if (!container) return;
 
-      grid.innerHTML = domains.map(dom => {
-        const d = takeaways[dom];
-        const style = domainColors[dom] || domainColors.default;
-        const bulletsHtml = (d.bullets || []).map(b => `
-          <li class="flex items-start gap-2 text-slate-300 text-xs leading-relaxed">
-            <span class="text-rose-400 font-bold mt-0.5">•</span>
-            <span>${escapeHtml(b)}</span>
-          </li>
-        `).join('');
+        const data = takeaways[dom];
+        const style = DOMAIN_STYLES[dom] || DOMAIN_STYLES.ai;
 
-        return `
-          <div class="p-4 sm:p-5 rounded-2xl bg-night-900/90 border ${style.border} hover:border-white/20 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-lg group">
-            <div class="space-y-3">
+        if (data) {
+          const bulletsHtml = (data.bullets || []).map(b => `
+            <li class="flex items-start gap-2.5">
+              <span class="w-1.5 h-1.5 rounded-full ${style.dot} mt-1.5 flex-shrink-0"></span>
+              <span>${escapeHtml(b)}</span>
+            </li>
+          `).join('');
+
+          const sourcesHtml = (data.sources || []).map(s => `
+            <a href="${s.url}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+              <span>${escapeHtml(s.title)}</span>
+              <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
+          `).join('');
+
+          container.innerHTML = `
+            <div class="p-4 sm:p-5 rounded-2xl theme-card-bg border space-y-4 shadow-lg">
               <div class="flex items-center justify-between gap-2">
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold ${style.badge}">
-                  ${escapeHtml(d.badge || dom.toUpperCase())}
+                <span class="px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-mono font-bold ${style.badgeBg}">
+                  ${escapeHtml(data.badge || dom.toUpperCase())}
                 </span>
-                <span class="text-[10px] font-mono text-slate-400">${escapeHtml(d.release_date || ep.date || 'Aug 2026')}</span>
+                <span class="text-[11px] sm:text-xs text-slate-400 font-mono">Released: ${escapeHtml(data.release_date || ep.date || 'Aug 2026')}</span>
               </div>
-              <h3 class="text-sm sm:text-base font-bold text-white tracking-tight leading-snug group-hover:text-cyan-300 transition">
-                ${escapeHtml(d.title)}
-              </h3>
-              <ul class="space-y-2">
-                ${bulletsHtml}
-              </ul>
+              <div>
+                <h4 class="text-sm sm:text-base font-bold text-white tracking-tight">${escapeHtml(data.title)}</h4>
+                <ul class="text-xs sm:text-sm text-slate-300 space-y-2 mt-2.5">
+                  ${bulletsHtml}
+                </ul>
+              </div>
+              ${data.interview_framing ? `
+              <div class="p-3 sm:p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
+                <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0 font-bold text-sm">💡</div>
+                <div>
+                  <h5 class="text-xs font-bold text-amber-300">How to Frame in an Interview</h5>
+                  <p class="text-[11px] sm:text-xs text-slate-300 mt-0.5">${escapeHtml(data.interview_framing)}</p>
+                </div>
+              </div>` : ''}
+              ${sourcesHtml ? `
+              <div class="pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                <span class="text-slate-400 font-medium w-full sm:w-auto text-[11px]">Primary Sources:</span>
+                ${sourcesHtml}
+              </div>` : ''}
             </div>
-            ${d.interview_framing ? `
-            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
-              <div class="flex items-center gap-1.5 text-amber-300 text-[10px] font-bold uppercase tracking-wider font-mono">
-                <span>💡 How to Frame in an Interview</span>
-              </div>
-              <p class="text-slate-300 text-[11px] leading-relaxed italic">
-                "${escapeHtml(d.interview_framing)}"
-              </p>
-            </div>` : ''}
-          </div>
-        `;
-      }).join('');
+          `;
+        } else {
+          // Domain not in this episode
+          container.innerHTML = `
+            <div class="p-5 rounded-2xl theme-card-bg border text-center space-y-3">
+              <span class="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-white/10 text-slate-400 border border-white/10">ARCHIVED BRIEFING</span>
+              <h4 class="text-sm font-semibold text-slate-200">${escapeHtml(ep.title)}</h4>
+              <p class="text-xs text-slate-400 max-w-lg mx-auto leading-relaxed">${escapeHtml(ep.summary)}</p>
+              <p class="text-[11px] text-cyan-400 font-mono">Switch to Episode #142 for today's active ${dom.toUpperCase()} architecture brief.</p>
+            </div>
+          `;
+        }
+      });
     }
 
     function changeEpisode(epId) {
+      console.log('Switching episode to:', epId);
       currentEpisodeId = epId;
       const ep = episodes[epId];
-      if (!ep) return;
-
-      if (audioPlayer) {
-        audioPlayer.pause();
-        initAudioSource(epId);
-        document.getElementById('play-icon').classList.remove('hidden');
-        document.getElementById('pause-icon').classList.add('hidden');
+      if (!ep) {
+        console.error('Episode not found in dataset:', epId);
+        return;
       }
 
-      // Update Player Metadata
-      document.getElementById('ep-title').innerText = ep.title;
-      const hostEl = document.getElementById('ep-hosts');
-      if (hostEl) hostEl.innerText = ep.hosts || 'Host A & Host B';
-      
-      const badgeEl = document.getElementById('ep-duration-badge');
-      if (badgeEl) badgeEl.innerText = (ep.duration || '05:00') + ' Mins';
-      
-      document.getElementById('total-time').innerText = ep.duration || '05:00';
-      document.getElementById('current-time').innerText = '00:00';
-      document.getElementById('progress-bar').style.width = '0%';
-
-      // Update Chat Badge
-      const chatBadge = document.getElementById('chat-ep-badge');
-      if (chatBadge) {
-        chatBadge.innerText = `🔒 Grounded in Episode #${ep.episode_number || epId.replace('ep-', '')} Papers`;
+      // 1. Sync Dropdown Value
+      const select = document.getElementById('episode-select');
+      if (select && select.value !== epId) {
+        select.value = epId;
       }
 
-      // Render Chapters
+      // 2. Audio Player & Header Metadata
+      const titleEl = document.getElementById('ep-title');
+      if (titleEl) titleEl.innerText = ep.title;
+
+      const hostsEl = document.getElementById('ep-hosts');
+      if (hostsEl) hostsEl.innerText = ep.hosts || 'Host A (Architect) & Host B (SRE)';
+
+      const durationBadge = document.getElementById('ep-duration-badge');
+      if (durationBadge) durationBadge.innerText = (ep.duration || '05:00') + ' Mins';
+
+      const totalTimeEl = document.getElementById('total-time');
+      if (totalTimeEl) totalTimeEl.innerText = ep.duration || '05:00';
+
+      const curTimeEl = document.getElementById('current-time');
+      if (curTimeEl) curTimeEl.innerText = '00:00';
+
+      const progBar = document.getElementById('progress-bar');
+      if (progBar) progBar.style.width = '0%';
+
+      // 3. Audio Source
+      const audio = getAudio();
+      if (audio) {
+        audio.pause();
+        audio.src = `/audio/${epId}.mp3?v=ep_${epId}`;
+        audio.load();
+        showAudioStatus(`Ready: Episode #${ep.episode_number || epId}`);
+        const playIcon = document.getElementById('play-icon');
+        const pauseIcon = document.getElementById('pause-icon');
+        if (playIcon) playIcon.classList.remove('hidden');
+        if (pauseIcon) pauseIcon.classList.add('hidden');
+      }
+
+      // 4. Update Chapters
       renderChapters(ep);
 
-      // Render Domain Takeaways for this episode
-      renderDomainTakeaways(ep);
+      // 5. Update All Domain Takeaway Cards
+      updateAllDomainContent(ep);
 
-      // Update Flashcards
+      // 6. Update Flashcards
       if (ep.flashcards && ep.flashcards.length > 0) {
         flashcards = ep.flashcards;
         currentCardIndex = 0;
         renderFlashcard();
       }
 
-      addBotMessage(`Switched active topic grounding to <strong>Episode #${ep.episode_number || epId} (${ep.title})</strong>. All questions and interview scenarios are now grounded in this episode's whitepapers.`);
-    }
-
-
-    function renderChapters(ep) {
-      const container = document.getElementById('chapters-list');
-      const chapters = ep.chapters || [];
-      container.innerHTML = chapters.map(c => {
-        const sourceName = c.source_name || c.sourceName || 'TechPulse';
-        const sourceUrl = c.source_url || c.sourceUrl || '#';
-        const seconds = c.seconds !== undefined ? c.seconds : 0;
-        return `
-        <div class="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 transition">
-          <div class="flex items-center gap-2">
-            <button onclick="jumpTo(${seconds}, '${c.time}')" class="px-2 py-0.5 rounded bg-black/70 font-mono text-cyan-400 font-bold hover:bg-cyan-500/20 border border-white/10 text-[11px] transition flex-shrink-0">${c.time}</button>
-            <span class="text-slate-200 font-medium text-xs leading-snug">${c.title}</span>
-          </div>
-          <div class="flex items-center justify-between sm:justify-end gap-2 pl-7 sm:pl-0">
-            <span class="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono bg-white/5 text-slate-300 border border-white/10 font-medium">${sourceName}</span>
-            <a href="${sourceUrl}" target="_blank" class="inline-flex items-center gap-0.5 text-cyan-400 hover:underline font-mono text-[10px] sm:text-[11px]">
-              <span>Read</span>
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-            </a>
-          </div>
-        </div>
-      `;}).join('');
-    }
-
-    renderChapters(episodes['ep-142']);
-
-    // ==========================================
-    // GROUNDED AI CHAT
-    // ==========================================
-    function handleChatSubmit(e) {
-      e.preventDefault();
-      const input = document.getElementById('chat-input');
-      const query = input.value.trim();
-      if (!query) return;
-      addUserMessage(query);
-      input.value = '';
-      setTimeout(() => { respondToQuery(query); }, 700);
-    }
-
-    function sendQuickPrompt(promptText) {
-      addUserMessage(promptText);
-      setTimeout(() => { respondToQuery(promptText); }, 600);
-    }
-
-    function addUserMessage(text) {
-      const thread = document.getElementById('chat-messages');
-      const msgDiv = document.createElement('div');
-      msgDiv.className = 'flex items-start gap-2 justify-end';
-      msgDiv.innerHTML = `
-        <div class="p-2.5 sm:p-3 rounded-2xl bg-cyan-600/30 border border-cyan-500/30 text-white max-w-[88%] leading-relaxed text-[11px] sm:text-xs">
-          ${escapeHtml(text)}
-        </div>
-        <div class="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center text-white font-mono text-[10px] flex-shrink-0">You</div>
-      `;
-      thread.appendChild(msgDiv);
-      thread.scrollTop = thread.scrollHeight;
-    }
-
-    function addBotMessage(htmlContent) {
-      const thread = document.getElementById('chat-messages');
-      const msgDiv = document.createElement('div');
-      msgDiv.className = 'flex items-start gap-2';
-      msgDiv.innerHTML = `
-        <div class="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 flex-shrink-0 font-mono font-bold text-[10px]">AI</div>
-        <div class="p-3 rounded-2xl bg-night-900 border border-white/5 space-y-1.5 max-w-[92%] text-slate-200 leading-relaxed text-[11px] sm:text-xs">
-          ${htmlContent}
-        </div>
-      `;
-      thread.appendChild(msgDiv);
-      thread.scrollTop = thread.scrollHeight;
-    }
-
-    async function respondToQuery(query) {
-      // 1. Try backend API with full paper corpus first
-      const backendRes = await callBackendChat(query);
-      if (backendRes) {
-        addBotMessage(backendRes);
-        return;
+      // 7. Update Chat Grounding Badge & Context
+      const chatBadge = document.getElementById('chat-ep-badge');
+      if (chatBadge) {
+        chatBadge.innerText = `🔒 Grounded in Episode #${ep.episode_number || epId.replace('ep-', '')} Papers`;
       }
 
-      // 2. High-fidelity specification-grade fallback
-      const q = query.toLowerCase();
-      let response = '';
-
-      if (q.includes('fabric') || q.includes('direct lake') || q.includes('onelake') || q.includes('iceberg')) {
-        response = `
-          <p><strong>Microsoft Fabric Direct Lake vs Snowflake Iceberg Deep Dive:</strong></p>
-          <ul class="list-disc list-inside space-y-1 text-slate-300 text-[10px] sm:text-[11px]">
-            <li><strong>Memory Paging:</strong> Direct Lake eliminates the 24-hour ETL refresh delay by paging Delta Parquet straight from OneLake storage into VertiPaq RAM on demand via memory-mapped I/O.</li>
-            <li><strong>Query Latency:</strong> Sub-second analytics across billion-row datasets with sub-minute data freshness as soon as Spark commits new files.</li>
-            <li><strong>Capacity Limits:</strong> Automatically falls back to DirectQuery mode if Fabric F-SKU memory thresholds are exceeded.</li>
-            <li><strong>Snowflake Iceberg:</strong> Uses the open Polaris Catalog to query Parquet files across Snowflake, Apache Spark, and Trino engines simultaneously.</li>
-          </ul>
-          <div class="pt-1.5 border-t border-white/5 flex items-center gap-1.5">
-            <span class="text-[9px] text-cyan-400 font-mono bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">Source: MS Fabric Engineering Whitepaper §2.3</span>
-          </div>
-        `;
-      } else if (q.includes('spiffe') || q.includes('mas') || q.includes('security') || q.includes('zero trust')) {
-        response = `
-          <p><strong>Zero-Trust SPIFFE/SPIRE & Singapore MAS TRM Section 9:</strong></p>
-          <ul class="list-disc list-inside space-y-1 text-slate-300 text-[10px] sm:text-[11px]">
-            <li><strong>Workload Attestation:</strong> Node-local SPIRE agents verify container cgroups, Kubernetes service account tokens, and binary hashes.</li>
-            <li><strong>Static Secret Removal:</strong> Eliminates long-lived database credentials by issuing ephemeral X.509 SVID tokens via UNIX domain sockets directly into memory.</li>
-            <li><strong>60-Minute Rotation:</strong> SVID certificates rotate automatically every 60m with zero downtime, neutralizing credential leak blast radius.</li>
-            <li><strong>MAS TRM 9.2:</strong> Fully satisfies regulatory mandates for end-to-end cryptographic mTLS microsegments.</li>
-          </ul>
-          <div class="pt-1.5 border-t border-white/5 flex items-center gap-1.5">
-            <span class="text-[9px] text-indigo-400 font-mono bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Source: CNCF SPIFFE Spec & MAS TRM 9.2</span>
-          </div>
-        `;
-      } else if (q.includes('agent') || q.includes('swarm') || q.includes('router') || q.includes('anthropic')) {
-        response = `
-          <p><strong>Deterministic Main-as-Router Pattern (Anthropic & OpenAI):</strong></p>
-          <ul class="list-disc list-inside space-y-1 text-slate-300 text-[10px] sm:text-[11px]">
-            <li><strong>Failure Modes of Recursive Swarms:</strong> Monolithic multi-agent swarms trigger prompt drift over recursive hops, cascading hallucinations, and unbounded API cost loops.</li>
-            <li><strong>Main-as-Router Architecture:</strong> The main orchestrator manages state and routing. Specialist sub-agents execute in isolated contexts and return structured artifacts.</li>
-            <li><strong>Dry-Run Gates & Retry Caps:</strong> Structural dry-run approval gates are mandatory before any write mutation. Retries are capped at 3 before human escalation.</li>
-          </ul>
-          <div class="pt-1.5 border-t border-white/5 flex items-center gap-1.5">
-            <span class="text-[9px] text-purple-400 font-mono bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">Source: Anthropic & OpenAI Applied AI (2026)</span>
-          </div>
-        `;
-      } else if (q.includes('interview') || q.includes('challenge') || q.includes('question') || q.includes('coach')) {
-        response = `
-          <p class="text-amber-300 font-bold">🎯 Socratic System Design Challenge (Tier-1 Architecture):</p>
-          <p class="text-slate-200"><em>"You are designing a cross-region disaster recovery architecture across Azure East US and West US for a core banking ledger (RTO &lt; 60s, RPO &lt; 5s). Why choose Active-Passive Anycast traffic shedding with Azure Front Door over synchronous Multi-Region Active-Active clustering?"</em></p>
-          <p class="text-slate-400 text-[10px] mt-1">Reply in chat, and I will evaluate your architecture on WAN latency penalties, two-phase commit overhead, and blast-radius containment.</p>
-        `;
-      } else {
-        response = `
-          <p><strong>Deep Grounded Analysis (${escapeHtml(currentEpisodeId)}):</strong></p>
-          <p class="text-slate-300 text-[10px] sm:text-[11px]">Based on the complete technical corpus for today's briefing, key architectural takeaways for <em>"${escapeHtml(query)}"</em> include:</p>
-          <ul class="list-disc list-inside space-y-1 text-slate-300 text-[10px]">
-            <li><strong>Decoupled State & Execution:</strong> Separating planning orchestration from tool execution ensures deterministic state machines and caps error cascades.</li>
-            <li><strong>Ephemeral Security Tokens:</strong> Replacing static credentials with automated SPIFFE X.509 SVID tokens rotating every 60m satisfies MAS TRM Sec 9.</li>
-            <li><strong>Memory-Mapped Zero-ETL Lakehouses:</strong> Leveraging Microsoft Fabric Direct Lake mode to query Delta Parquet directly in VertiPaq memory provides sub-minute reporting freshness.</li>
-          </ul>
-          <div class="pt-1 border-t border-white/5">
-            <span class="text-[9px] text-cyan-400 font-mono bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">Verified Deep-Corpus Grounding</span>
-          </div>
-        `;
-      }
-
-      addBotMessage(response);
+      addBotMessage(`Switched active topic grounding to <strong>Episode #${ep.episode_number || epId} (${ep.title})</strong>. All questions and Socratic interview queries are now grounded in this episode's whitepapers.`);
     }
+
 
     function clearChat() {
       document.getElementById('chat-messages').innerHTML = `
