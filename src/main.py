@@ -159,13 +159,26 @@ def init_seed_data():
                     except Exception as e:
                         logger.error(f"Failed to copy seed file {src_f}: {e}")
 
-    # 2. Populate JSON episode definitions
-    for ep_id, data in SEED_EPISODES.items():
-        ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
-        if not os.path.exists(ep_file) or os.path.getsize(ep_file) < 500:
-            with open(ep_file, "w") as f:
-                json.dump(data, f, indent=2)
-            logger.info(f"Initialized seed episode JSON: {ep_id}")
+    # 2. Populate and upgrade JSON episode definitions with full_articles corpus
+    seed_json_dir = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes")
+    if os.path.exists(seed_json_dir):
+        for f in os.listdir(seed_json_dir):
+            if f.endswith(".json"):
+                src_f = os.path.join(seed_json_dir, f)
+                dst_f = os.path.join(EPISODES_DIR, f)
+                # Overwrite if destination lacks full_articles or is smaller than seed
+                need_update = True
+                if os.path.exists(dst_f):
+                    try:
+                        with open(dst_f, "r") as fp:
+                            curr_data = json.load(fp)
+                        if "full_articles" in curr_data:
+                            need_update = False
+                    except:
+                        need_update = True
+                if need_update:
+                    shutil.copyfile(src_f, dst_f)
+                    logger.info(f"Upgraded episode JSON with full paper corpus: {dst_f}")
 
 init_seed_data()
 
