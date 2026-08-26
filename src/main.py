@@ -217,7 +217,7 @@ def init_seed_data():
                     logger.info(f"Upgraded episode JSON with full paper corpus: {dst_f}")
 
 def cleanup_duplicate_episodes():
-    """Scans EPISODES_DIR and purges any duplicate episodes with identical titles and summaries."""
+    """Scans EPISODES_DIR and purges any duplicate episodes with identical titles or summaries."""
     if not os.path.exists(EPISODES_DIR):
         return
     files = [f for f in os.listdir(EPISODES_DIR) if f.startswith("ep-") and f.endswith(".json")]
@@ -236,10 +236,12 @@ def cleanup_duplicate_episodes():
                 data = json.load(f)
             title = data.get("title", "").strip().lower()
             summary = data.get("summary", "").strip().lower()
-            sig = hashlib.sha256(f"{title}::{summary}".encode("utf-8")).hexdigest()
+            sig_title = f"title::{title}"
+            sig_sum = f"sum::{summary[:100]}"
             
-            if sig in seen_signatures:
-                canonical_fn = seen_signatures[sig]
+            is_dup = bool(title and sig_title in seen_signatures) or bool(summary and sig_sum in seen_signatures)
+            if is_dup:
+                canonical_fn = seen_signatures.get(sig_title) or seen_signatures.get(sig_sum)
                 logger.warning(f"Detected duplicate episode {fn} (identical to {canonical_fn}). Purging duplicate...")
                 try:
                     os.remove(fp)
@@ -250,7 +252,10 @@ def cleanup_duplicate_episodes():
                 except Exception as e:
                     logger.error(f"Failed to remove duplicate {fn}: {e}")
             else:
-                seen_signatures[sig] = fn
+                if title:
+                    seen_signatures[sig_title] = fn
+                if summary:
+                    seen_signatures[sig_sum] = fn
         except Exception as e:
             logger.error(f"Error checking episode {fn} for duplicates: {e}")
 
@@ -288,6 +293,8 @@ async def run_daily_pipeline():
 
     try:
         corpus = await ingest_all_domains()
+        all_corpus_urls = sorted([item["url"] for items in corpus.values() for item in items if item.get("url")])
+        current_corpus_hash = hashlib.sha256("".join(all_corpus_urls).encode("utf-8")).hexdigest()
         
         # Check if corpus has new articles compared to existing episodes
         sorted_files = get_sorted_episode_files()
@@ -296,28 +303,27 @@ async def run_daily_pipeline():
             with open(os.path.join(EPISODES_DIR, latest_file), "r") as f:
                 latest_ep = json.load(f)
             
-            # Extract URLs from latest episode
-            latest_urls = set()
-            for ch in latest_ep.get("chapters", []):
-                if ch.get("source_url"):
-                    latest_urls.add(ch["source_url"].strip().rstrip("/"))
-            for dom_takeaway in latest_ep.get("takeaways", {}).values():
-                for s in dom_takeaway.get("sources", []):
-                    if s.get("url"):
-                        latest_urls.add(s["url"].strip().rstrip("/"))
+            latest_hash = latest_ep.get("corpus_hash")
+            latest_ingested = set(latest_ep.get("ingested_urls", []))
+            
+            # Check 1: Exact corpus hash match
+            is_same_corpus = bool(latest_hash and latest_hash == current_corpus_hash)
+            # Check 2: Sub-set of ingested URLs match (no new URLs)
+            if not is_same_corpus and latest_ingested:
+                is_same_corpus = set(all_corpus_urls).issubset(latest_ingested)
+            # Check 3: If latest_ep has no hash yet, check if latest episode was created today (same date)
+            if not is_same_corpus and not latest_hash and not latest_ingested:
+                today_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
+                if latest_ep.get("date") == today_str:
+                    latest_ep["corpus_hash"] = current_corpus_hash
+                    latest_ep["ingested_urls"] = all_corpus_urls
+                    with open(os.path.join(EPISODES_DIR, latest_file), "w") as f:
+                        json.dump(latest_ep, f, indent=2)
+                    is_same_corpus = True
 
-            # Extract URLs from fetched corpus
-            fetched_urls = set()
-            for items in corpus.values():
-                for it in items:
-                    if it.get("url"):
-                        fetched_urls.add(it["url"].strip().rstrip("/"))
-
-            # Check for new URLs
-            new_urls = fetched_urls - latest_urls
-            if not new_urls and fetched_urls:
+            if is_same_corpus:
                 latest_num = latest_ep.get("episode_number", latest_ep.get("id", "142").replace("ep-", ""))
-                logger.info(f"No new papers or articles found in feeds since Episode #{latest_num}. Skipping duplicate synthesis.")
+                logger.info(f"Ingested corpus hash matches latest Episode #{latest_num}. Skipping duplicate synthesis.")
                 pipeline_state["stage"] = "up_to_date"
                 pipeline_state["progress"] = 100
                 pipeline_state["message"] = "Feeds are up-to-date! No new whitepapers published as yet."
@@ -335,6 +341,8 @@ async def run_daily_pipeline():
         pipeline_state["message"] = f"New papers found! Synthesizing briefing for Episode #{next_num}..."
 
         briefing_data = await synthesize_briefing(corpus, next_num)
+        briefing_data["corpus_hash"] = current_corpus_hash
+        briefing_data["ingested_urls"] = all_corpus_urls
         
         pipeline_state["stage"] = "audio_tts"
         pipeline_state["progress"] = 75
