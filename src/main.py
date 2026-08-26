@@ -141,12 +141,30 @@ SEED_EPISODES = {
 }
 
 def init_seed_data():
+    # 1. Populate from seed_data if volume is freshly mounted
+    seed_dir = os.path.join(os.path.dirname(__file__), "..", "seed_data")
+    if os.path.exists(seed_dir):
+        for root, dirs, files in os.walk(seed_dir):
+            rel = os.path.relpath(root, seed_dir)
+            target_dir = os.path.join(STORAGE_DIR, rel)
+            os.makedirs(target_dir, exist_ok=True)
+            for file in files:
+                src_f = os.path.join(root, file)
+                dst_f = os.path.join(target_dir, file)
+                if not os.path.exists(dst_f) or os.path.getsize(dst_f) == 0:
+                    try:
+                        shutil.copyfile(src_f, dst_f)
+                        logger.info(f"Populated seed asset to persistent volume: {dst_f}")
+                    except Exception as e:
+                        logger.error(f"Failed to copy seed file {src_f}: {e}")
+
+    # 2. Populate JSON episode definitions
     for ep_id, data in SEED_EPISODES.items():
         ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
         if not os.path.exists(ep_file):
             with open(ep_file, "w") as f:
                 json.dump(data, f, indent=2)
-            logger.info(f"Initialized seed episode: {ep_id}")
+            logger.info(f"Initialized seed episode JSON: {ep_id}")
 
 init_seed_data()
 

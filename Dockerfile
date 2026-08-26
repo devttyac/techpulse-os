@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY static/ ./static/
 COPY data/ ./data/
+COPY data/ ./seed_data/
 
 # Persistent data directories
 RUN mkdir -p /app/data/audio /app/data/episodes /app/data/cache
