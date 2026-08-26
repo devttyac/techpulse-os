@@ -308,11 +308,12 @@ async def serve_audio(filename: str):
     file_path = os.path.join(AUDIO_DIR, filename)
     seed_path = os.path.join(os.path.dirname(__file__), "..", "seed_data", "audio", filename)
     
-    # Check seed_data fallback first
-    if (not os.path.exists(file_path) or os.path.getsize(file_path) < 100) and os.path.exists(seed_path):
-        os.makedirs(AUDIO_DIR, exist_ok=True)
-        shutil.copyfile(seed_path, file_path)
-        logger.info(f"Restored audio {filename} from seed_data into {AUDIO_DIR}")
+    # Check seed_data fallback (or upgrade stale audio if seed is larger)
+    if os.path.exists(seed_path):
+        if not os.path.exists(file_path) or os.path.getsize(file_path) < os.path.getsize(seed_path):
+            os.makedirs(AUDIO_DIR, exist_ok=True)
+            shutil.copyfile(seed_path, file_path)
+            logger.info(f"Updated {filename} with latest full-length audio ({os.path.getsize(seed_path)} bytes)")
 
     # If still not found, synthesize on-demand
     if not os.path.exists(file_path) or os.path.getsize(file_path) < 100:
