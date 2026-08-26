@@ -10,56 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <script src="https://cdn.tailwindcss.com">
-    // ==========================================
-    // LIVE BACKEND API INTEGRATION
-    // ==========================================
-    async function loadEpisodesFromBackend() {
-      try {
-        const res = await fetch('/api/episodes');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.episodes && data.episodes.length > 0) {
-            const select = document.getElementById('episode-select');
-            select.innerHTML = data.episodes.map(ep => `
-              <option value="${ep.id}">#${ep.episode_number || 142} (${ep.date}) — ${ep.title.substring(0, 35)}...</option>
-            `).join('');
-            
-            // Populate episodes map
-            data.episodes.forEach(ep => {
-              episodes[ep.id] = ep;
-            });
-            changeEpisode(data.episodes[0].id);
-          }
-        }
-      } catch (e) {
-        console.log('Running in standalone mode with embedded episodes.');
-      }
-    }
-
-    async function callBackendChat(query) {
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ query: query, episode_id: currentEpisodeId })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          return data.response;
-        }
-      } catch (e) {
-        console.log('Chat API fallback to in-browser engine.');
-      }
-      return null;
-    }
-
-    // Call on load
-    window.addEventListener('DOMContentLoaded', () => {
-      loadEpisodesFromBackend();
-    });
-
-  </script>
+    <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -75,57 +26,7 @@
         }
       }
     }
-  
-    // ==========================================
-    // LIVE BACKEND API INTEGRATION
-    // ==========================================
-    async function loadEpisodesFromBackend() {
-      try {
-        const res = await fetch('/api/episodes');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.episodes && data.episodes.length > 0) {
-            const select = document.getElementById('episode-select');
-            select.innerHTML = data.episodes.map(ep => `
-              <option value="${ep.id}">#${ep.episode_number || 142} (${ep.date}) — ${ep.title.substring(0, 35)}...</option>
-            `).join('');
-            
-            // Populate episodes map
-            data.episodes.forEach(ep => {
-              episodes[ep.id] = ep;
-            });
-            changeEpisode(data.episodes[0].id);
-          }
-        }
-      } catch (e) {
-        console.log('Running in standalone mode with embedded episodes.');
-      }
-    }
-
-    async function callBackendChat(query) {
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ query: query, episode_id: currentEpisodeId })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          return data.response;
-        }
-      } catch (e) {
-        console.log('Chat API fallback to in-browser engine.');
-      }
-      return null;
-    }
-
-    // Call on load
-    window.addEventListener('DOMContentLoaded', () => {
-      loadEpisodesFromBackend();
-    });
-
   </script>
-  
   <style>
     /* ==========================================================================
        DYNAMIC THEME SYSTEM (7 Curated Palettes)
@@ -1240,7 +1141,7 @@
         renderFlashcard();
       }
 
-      addBotMessage(`Switched active topic grounding to **Episode #${ep.episode_number || epId} (${ep.title})**. All questions and interview scenarios are now grounded in this episode's whitepapers.`);
+      addBotMessage(`Switched active topic grounding to <strong>Episode #${ep.episode_number || epId} (${ep.title})</strong>. All questions and interview scenarios are now grounded in this episode's whitepapers.`);
     }
 
 
