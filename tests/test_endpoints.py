@@ -43,7 +43,7 @@ async def run_asgi_tests():
         r_export_json = await client.post("/api/export-vault", json={"episode_id": "ep-142"})
         assert r_export_json.status_code == 200, f"Export JSON API failed: {r_export_json.status_code}"
         export_data = r_export_json.json()
-        assert export_data["status"] == "ok"
+        assert export_data["status"] == "success"
         assert export_data["filename"] == "techpulse-ep-142.md"
         assert "Domain Takeaways" in export_data["markdown"]
         print(f"✓ /api/export-vault returned structured markdown payload ({len(export_data['markdown'])} bytes)")

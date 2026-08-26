@@ -258,7 +258,7 @@ def sanitize_existing_episodes():
     """Scans EPISODES_DIR and in-place sanitizes any stale MAS/TRM references in saved JSON files (gated by one-time marker)."""
     if not os.path.exists(EPISODES_DIR):
         return
-    marker_file = os.path.join(DATA_DIR, ".migration_sanitized")
+    marker_file = os.path.join(STORAGE_DIR, ".migration_sanitized")
     if os.path.exists(marker_file):
         return
 
@@ -658,6 +658,10 @@ async def reset_refresh(auth: bool = Depends(verify_mutating_auth)):
     pipeline_state["error"] = None
     logger.info("Pipeline state explicitly reset via /api/refresh/reset")
     return {"status": "reset", "message": "Pipeline state reset to ready.", "state": pipeline_state}
+
+@app.get("/api/refresh/status")
+async def get_refresh_status():
+    return pipeline_state
 
 @app.get("/api/settings")
 async def get_settings():

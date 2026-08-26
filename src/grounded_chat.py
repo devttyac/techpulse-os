@@ -3,7 +3,6 @@ import logging
 import os
 import re
 from typing import Dict, Any, List, Optional
-import httpx
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("techpulse.grounded_chat")
@@ -81,6 +80,7 @@ async def call_gemini_llm(api_key: str, prompt: str) -> tuple[Optional[str], Opt
     # Tier 3: Direct httpx async REST call
     for m in models_to_try:
         try:
+            import httpx
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={clean_key}"
             async with httpx.AsyncClient(timeout=25.0) as http_client:
                 r = await http_client.post(
@@ -188,32 +188,22 @@ def dynamic_rag_synthesize(query: str, active_episode: Dict[str, Any]) -> str:
     greetings = ["hi", "hello", "hey", "how are you", "who are you", "what can you do", "what's up", "good morning", "good evening", "help"]
     if any(q == g or q.startswith(g + " ") or q.endswith(" " + g) for g in greetings):
         domains_summary = ", ".join([f"{data.get('badge', dom.upper())}" for dom, data in list(takeaways.items())[:4]])
-        return f"""<div class="space-y-2">
-  <p class="text-slate-200 text-xs leading-relaxed">
-    Hello Aaron! I am your <strong>Lead Enterprise Architect Copilot</strong>, strictly grounded in <strong>Episode #{ep_num} ({ep_title})</strong>.
-  </p>
-  <p class="text-slate-300 text-[11px] leading-relaxed">
-    I am ready to evaluate production trade-offs, inspect low-level system mechanisms, or conduct a system design interview across today's topics: <em>{domains_summary}</em>. What would you like to explore?
-  </p>
-</div>"""
+        return (
+            f"Hello Aaron! I am your **Lead Enterprise Architect Copilot**, strictly grounded in **Episode #{ep_num} ({ep_title})**.\n\n"
+            f"I am ready to evaluate production trade-offs, inspect low-level system mechanisms, or conduct a system design interview across today's topics: *{domains_summary}*. What would you like to explore?"
+        )
 
     # Socratic System Design Challenge Intent
     if any(k in q for k in ["interview", "challenge", "question", "quiz", "coach", "spar", "test me"]):
         top_dom = list(takeaways.values())[0] if takeaways else {}
         framing = top_dom.get("interview_framing", "Explain the production failure modes and architectural mitigation strategy.")
-        return f"""<div class="space-y-3">
-  <div>
-    <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">🎯 Socratic System Design Challenge (Ep #{ep_num})</span>
-    <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">{top_dom.get("title", ep_title)}</h4>
-  </div>
-  <div class="p-2.5 rounded-xl bg-black/40 border border-white/10 text-slate-300 text-[11px] space-y-1">
-    <strong class="text-cyan-300 font-mono text-[10px]">Architectural Prompt:</strong>
-    <p class="leading-relaxed">{framing}</p>
-  </div>
-  <p class="text-slate-400 text-[10px]">
-    Reply with your architectural rationale covering networking, consistency bounds, and blast-radius containment.
-  </p>
-</div>"""
+        top_title = top_dom.get("title", ep_title)
+        return (
+            f"### 🎯 Socratic System Design Challenge (Episode #{ep_num})\n\n"
+            f"**Challenge Domain**: {top_title}\n\n"
+            f"**Architectural Prompt**:\n{framing}\n\n"
+            f"*Reply with your architectural rationale covering networking, consistency bounds, and blast-radius containment.*"
+        )
 
     # 1. Match Concept Expansion
     matched_concept = None
@@ -242,9 +232,10 @@ def dynamic_rag_synthesize(query: str, active_episode: Dict[str, Any]) -> str:
         matched_item = scored_hits[0]
         dom_meta = matched_item[2]
         dom_key = matched_item[1]
+        badge = dom_meta.get('badge', dom_key.upper())
         
         concept_title = matched_concept.get("title") if matched_concept else dom_meta.get("title", ep_title)
-        concept_def = matched_concept.get("definition") if matched_concept else f"In enterprise distributed systems, <strong>{dom_meta.get('title')}</strong> represents a key operational mechanism for high-reliability production."
+        concept_def = matched_concept.get("definition") if matched_concept else f"In enterprise distributed systems, **{dom_meta.get('title')}** represents a key operational mechanism for high-reliability production."
         concept_pitfall = matched_concept.get("pitfalls") if matched_concept else "Without strict architectural guardrails, distributed components suffer from non-deterministic execution states and compliance risks."
         concept_sol = matched_concept.get("solution") if matched_concept else f"In Episode #{ep_num}, this mechanism is implemented through the following validated architectural controls:"
 
@@ -254,73 +245,35 @@ def dynamic_rag_synthesize(query: str, active_episode: Dict[str, Any]) -> str:
             text = hit[3]
             if ":" in text:
                 hdr, body = text.split(":", 1)
-                bullets_formatted.append(f'<li class="leading-relaxed"><strong class="text-cyan-300">{hdr.strip()}:</strong>{body}</li>')
+                bullets_formatted.append(f"- **{hdr.strip()}**: {body.strip()}")
             else:
-                bullets_formatted.append(f'<li class="leading-relaxed">{text}</li>')
+                bullets_formatted.append(f"- {text.strip()}")
 
-        bullets_html = "".join(bullets_formatted)
-        framing_html = f"""<div class="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[11px] text-slate-300 space-y-1">
-  <strong class="text-amber-300 font-mono text-[10px]">💡 Staff Architect Interview & Regulatory Framing:</strong>
-  <p class="leading-relaxed">{dom_meta.get('interview_framing')}</p>
-</div>""" if dom_meta.get("interview_framing") else ""
+        bullets_md = "\n".join(bullets_formatted)
+        framing_md = f"\n\n💡 **Staff Architect Interview Framing**:\n{dom_meta.get('interview_framing')}" if dom_meta.get("interview_framing") else ""
+        sources_list = [f"[{s.get('title')}]({s.get('url')})" for s in dom_meta.get("sources", [])]
+        sources_md = f"\n\n**Sources**: {', '.join(sources_list)}" if sources_list else ""
 
-        sources_html = "".join([f'<a href="{s.get("url")}" target="_blank" class="px-2 py-0.5 rounded bg-black/40 text-cyan-300 border border-white/10 text-[10px] font-mono hover:underline">{s.get("title")}</a> ' for s in dom_meta.get("sources", [])])
-        sources_block = f"""<div class="pt-1.5 border-t border-white/5 flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
-  <span class="text-slate-400">Sources:</span>
-  {sources_html}
-</div>""" if sources_html else ""
-
-        return f"""<div class="space-y-3.5 text-slate-200 text-xs">
-  <div>
-    <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-cyan-300 border border-white/10">{dom_meta.get('badge', dom_key.upper())}</span>
-    <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">{concept_title}</h4>
-  </div>
-
-  <div class="p-3 rounded-xl bg-night-900 border border-white/5 space-y-2.5 text-slate-300 text-[11px] sm:text-xs">
-    <div>
-      <h5 class="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold mb-1">1. Architectural Foundation & Definition</h5>
-      <p class="leading-relaxed">{concept_def}</p>
-    </div>
-
-    <div>
-      <h5 class="text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">2. Production Pitfalls & Failure Modes</h5>
-      <p class="leading-relaxed">{concept_pitfall}</p>
-    </div>
-
-    <div>
-      <h5 class="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold mb-1">3. Episode #{ep_num} Implementation Mechanics</h5>
-      <p class="leading-relaxed mb-1.5">{concept_sol}</p>
-      <ul class="list-disc list-inside space-y-1.5 pl-1 text-slate-300">
-        {bullets_html}
-      </ul>
-    </div>
-  </div>
-
-  {framing_html}
-  {sources_block}
-</div>"""
+        return (
+            f"### [{badge}] {concept_title}\n\n"
+            f"**1. Architectural Foundation & Definition**\n{concept_def}\n\n"
+            f"**2. Production Pitfalls & Failure Modes**\n{concept_pitfall}\n\n"
+            f"**3. Episode #{ep_num} Implementation Mechanics**\n{concept_sol}\n"
+            f"{bullets_md}"
+            f"{framing_md}"
+            f"{sources_md}"
+        )
 
     # Dynamic Fallback: Episode Overview
     top_dom = list(takeaways.items())[:3]
-    overview_items = "".join([f"""<div class="p-2 rounded-xl bg-black/30 border border-white/5 space-y-0.5">
-  <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-white/10 text-cyan-300">{d.get('badge', dom.upper())}</span>
-  <h5 class="text-xs font-bold text-slate-100">{d.get('title')}</h5>
-  <p class="text-[11px] text-slate-300 leading-snug">{d.get('bullets', [''])[0]}</p>
-</div>""" for dom, d in top_dom])
+    overview_items = "\n".join([f"- **[{d.get('badge', dom.upper())}] {d.get('title')}**: {d.get('bullets', [''])[0]}" for dom, d in top_dom])
 
-    return f"""<div class="space-y-2.5">
-  <h4 class="font-bold text-cyan-300 text-xs sm:text-sm">Grounded Briefing: Episode #{ep_num}</h4>
-  <p class="text-slate-300 text-[11px] leading-relaxed">
-    Analyzing today's technical corpus for <strong>{ep_title}</strong>:
-  </p>
-  <div class="space-y-2">
-    {overview_items}
-  </div>
-  <div class="pt-1.5 border-t border-white/10 flex items-center justify-between text-[10px] font-mono text-cyan-400">
-    <span>Grounded in Episode #{ep_num} Corpus</span>
-    <span>{len(takeaways)} Domains Available</span>
-  </div>
-</div>"""
+    return (
+        f"### Grounded Briefing: Episode #{ep_num}\n\n"
+        f"Analyzing today's technical corpus for **{ep_title}**:\n\n"
+        f"{overview_items}\n\n"
+        f"*Grounded in Episode #{ep_num} Corpus ({len(takeaways)} Domains Available)*"
+    )
 
 async def process_grounded_chat(query: str, active_episode: Dict[str, Any], chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
     api_key = os.getenv("GEMINI_API_KEY", "")
