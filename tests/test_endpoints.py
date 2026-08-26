@@ -39,14 +39,34 @@ async def run_asgi_tests():
         assert "response" in chat_data
         print(f"✓ /api/chat returned grounded model response ({len(chat_data['response'])} bytes)")
 
-        # 5. Test /api/export-vault
-        r_export = await client.post("/api/export-vault", json={"episode_id": "ep-142"})
-        assert r_export.status_code == 200, f"Export API failed: {r_export.status_code}"
-        assert 'attachment; filename="ep-142.md"' in r_export.headers.get("content-disposition", "")
-        assert "Domain Takeaways" in r_export.text
-        print(f"✓ /api/export-vault returned markdown file download ({len(r_export.text)} bytes)")
+        # 5. Test /api/export-vault and /api/export-markdown/{episode_id}
+        r_export_json = await client.post("/api/export-vault", json={"episode_id": "ep-142"})
+        assert r_export_json.status_code == 200, f"Export JSON API failed: {r_export_json.status_code}"
+        export_data = r_export_json.json()
+        assert export_data["status"] == "ok"
+        assert export_data["filename"] == "techpulse-ep-142.md"
+        assert "Domain Takeaways" in export_data["markdown"]
+        print(f"✓ /api/export-vault returned structured markdown payload ({len(export_data['markdown'])} bytes)")
 
-        # 6. Test /feed.xml (Podcast RSS 2.0)
+        r_export_file = await client.get("/api/export-markdown/ep-142")
+        assert r_export_file.status_code == 200, f"Export file API failed: {r_export_file.status_code}"
+        assert 'attachment; filename="techpulse-ep-142.md"' in r_export_file.headers.get("content-disposition", "")
+        assert "Domain Takeaways" in r_export_file.text
+        print(f"✓ /api/export-markdown/ep-142 returned markdown file download ({len(r_export_file.text)} bytes)")
+
+        # 6. Test /api/settings and /api/refresh/status
+        r_settings = await client.get("/api/settings")
+        assert r_settings.status_code == 200, f"Settings API failed: {r_settings.status_code}"
+        s_data = r_settings.json()
+        assert "config" in s_data and "storage" in s_data
+        print(f"✓ /api/settings returned config and storage stats ({s_data['storage']['disk_usage_mb']} MB)")
+
+        r_status = await client.get("/api/refresh/status")
+        assert r_status.status_code == 200, f"Refresh status API failed: {r_status.status_code}"
+        assert "stage" in r_status.json()
+        print(f"✓ /api/refresh/status returned live stage: {r_status.json()['stage']}")
+
+        # 7. Test /feed.xml (Podcast RSS 2.0)
         r_feed = await client.get("/feed.xml")
         assert r_feed.status_code == 200, f"Feed API failed: {r_feed.status_code}"
         assert '<rss version="2.0"' in r_feed.text
@@ -55,7 +75,7 @@ async def run_asgi_tests():
         assert 'enclosure' in r_feed.text
         print(f"✓ /feed.xml returned valid RSS 2.0 Podcast XML with RFC 822 pubDate ({len(r_feed.text)} bytes)")
 
-        # 7. Test Static PWA Root
+        # 8. Test Static PWA Root
         r_root = await client.get("/")
         assert r_root.status_code == 200, f"Static PWA failed: {r_root.status_code}"
         assert "TechPulse" in r_root.text

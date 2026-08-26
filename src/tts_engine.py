@@ -189,9 +189,10 @@ async def generate_episode_podcast_audio(episode_data: Dict[str, Any], output_di
                     for sf in segment_files:
                         f.write(f"file '{sf}'\n")
                 
-                cmd = f"ffmpeg -y -f concat -safe 0 -i {concat_list_path} -c copy {final_mp3_path}"
-                proc = await asyncio.create_subprocess_shell(
-                    cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_list_path, "-c", "copy", final_mp3_path,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
                 )
                 await proc.communicate()
                 logger.info(f"Successfully synthesized episode MP3 via ffmpeg at {final_mp3_path}")

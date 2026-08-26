@@ -2320,10 +2320,7 @@
     function formatMessageContent(content) {
       if (!content) return '';
       if (typeof content !== 'string') content = String(content);
-      const trimmed = content.trim();
-      if (trimmed.startsWith('<div') || trimmed.startsWith('<p') || trimmed.startsWith('<h') || trimmed.startsWith('<ul') || trimmed.startsWith('<table')) {
-        return content;
-      }
+      // Strictly escape HTML first to eliminate any XSS / prompt injection payload
       let html = escapeHtml(content);
       html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
       html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
@@ -2352,15 +2349,17 @@
       thread.scrollTop = thread.scrollHeight;
     }
 
-    function addBotMessage(content) {
+    function addBotMessage(content, footerHtml = '', isTrustedTemplate = false) {
       const thread = document.getElementById('chat-messages');
       if (!thread) return;
       const msgDiv = document.createElement('div');
       msgDiv.className = 'flex items-start gap-2';
+      const bodyHtml = isTrustedTemplate ? content : formatMessageContent(content);
       msgDiv.innerHTML = `
         <div class="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 flex-shrink-0 font-mono font-bold text-[10px]">AI</div>
         <div class="p-3 rounded-2xl bg-night-900 border border-white/5 space-y-1.5 max-w-[92%] text-slate-200 leading-relaxed text-[11px] sm:text-xs">
-          ${formatMessageContent(content)}
+          ${bodyHtml}
+          ${footerHtml || ''}
         </div>
       `;
       thread.appendChild(msgDiv);
@@ -2392,7 +2391,7 @@
         if (ind) ind.remove();
 
         if (backendRes) {
-          addBotMessage(backendRes);
+          addBotMessage(backendRes.text, backendRes.footerHtml, false);
           return;
         }
       } catch (err) {
@@ -2530,7 +2529,7 @@
         }
       }
 
-      addBotMessage(response);
+      addBotMessage(response, '', true);
     }
 
     function clearChat() {
@@ -3114,13 +3113,14 @@
         });
         if (res.ok) {
           const data = await res.json();
-          let html = data.response || '';
+          const rawText = data.response || '';
+          let footerHtml = '';
           if (data.model && data.model.includes('gemini')) {
-            html += `<div class="mt-2 pt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono text-emerald-400"><span>⚡ ${escapeHtml(data.model)}</span><span>Grounded in ${escapeHtml(data.grounded_episode_id || currentEpisodeId)}</span></div>`;
+            footerHtml = `<div class="mt-2 pt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono text-emerald-400"><span>⚡ ${escapeHtml(data.model)}</span><span>Grounded in ${escapeHtml(data.grounded_episode_id || currentEpisodeId)}</span></div>`;
           } else {
-            html += `<div class="mt-2 pt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono text-amber-400"><span>⚠️ Offline Keyword Fallback (Live LLM not responding)</span><span>${escapeHtml(data.grounded_episode_id || currentEpisodeId)}</span></div>`;
+            footerHtml = `<div class="mt-2 pt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono text-amber-400"><span>⚠️ Offline Keyword Fallback (Live LLM not responding)</span><span>${escapeHtml(data.grounded_episode_id || currentEpisodeId)}</span></div>`;
           }
-          return html;
+          return { text: rawText, footerHtml: footerHtml };
         }
       } catch (e) {
         console.log('Chat API fallback.');

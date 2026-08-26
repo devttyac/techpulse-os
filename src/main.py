@@ -81,12 +81,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Could not parse cron expression: {e}")
 
-    # Run in-place historical episode sanitizer and retention policy
+    # Run startup seed data initialization, duplicate cleanup, migration, and retention
     try:
+        init_seed_data()
+        cleanup_duplicate_episodes()
         sanitize_existing_episodes()
         enforce_retention_policy()
     except Exception as e:
-        logger.error(f"Error in startup sanitization/retention: {e}")
+        logger.error(f"Error in startup initialization/sanitization/retention: {e}")
 
     # Pre-generate seed episode audio in background if missing
     try:
@@ -113,10 +115,18 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+async def verify_mutating_auth(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")):
+    """Optional shared secret verification for mutating endpoints if API_SECRET_KEY is configured."""
+    secret = os.getenv("API_SECRET_KEY", "").strip()
+    if secret:
+        if not x_api_key or x_api_key != secret:
+            raise HTTPException(status_code=401, detail="Unauthorized: Invalid or missing X-API-Key header")
+    return True
 
 # Seed episodes for instant out-of-the-box readiness
 SEED_EPISODES = {
@@ -245,9 +255,13 @@ def init_seed_data():
                     logger.info(f"Upgraded episode JSON with full paper corpus: {dst_f}")
 
 def sanitize_existing_episodes():
-    """Scans EPISODES_DIR and in-place sanitizes any stale MAS/TRM references in saved JSON files."""
+    """Scans EPISODES_DIR and in-place sanitizes any stale MAS/TRM references in saved JSON files (gated by one-time marker)."""
     if not os.path.exists(EPISODES_DIR):
         return
+    marker_file = os.path.join(DATA_DIR, ".migration_sanitized")
+    if os.path.exists(marker_file):
+        return
+
     for fn in os.listdir(EPISODES_DIR):
         if not fn.endswith(".json"):
             continue
@@ -287,10 +301,16 @@ def sanitize_existing_episodes():
         except Exception as e:
             logger.error(f"Error sanitizing episode {fn}: {e}")
 
-def enforce_retention_policy():
+    try:
+        with open(marker_file, "w") as mf:
+            mf.write(datetime.now(timezone.utc).isoformat())
+    except Exception as e:
+        logger.warning(f"Could not write migration marker: {e}")
+
+def enforce_retention_policy(custom_limit: Optional[int] = None) -> Dict[str, Any]:
     """Purges older episodes and audio files beyond the configured retention limit."""
     cfg = load_config()
-    limit = int(cfg.get("max_episodes_retained", 14))
+    limit = int(custom_limit if custom_limit is not None else cfg.get("max_episodes_retained", 14))
     if limit <= 0 or not os.path.exists(EPISODES_DIR):
         return {"purged_episodes": 0, "freed_bytes": 0}
 
@@ -397,11 +417,6 @@ def cleanup_duplicate_episodes():
                     seen_signatures[sig_sum] = fn
         except Exception as e:
             logger.error(f"Error checking episode {fn} for duplicates: {e}")
-
-init_seed_data()
-cleanup_duplicate_episodes()
-sanitize_existing_episodes()
-enforce_retention_policy()
 
 def get_sorted_episode_files() -> List[str]:
     cleanup_duplicate_episodes()
@@ -559,7 +574,6 @@ async def health_check():
         "service": "techpulse-os",
         "version": "3.4.0",
         "gemini_api_key_configured": key_configured,
-        "gemini_api_key_length": len(clean_key) if key_configured else 0,
         "episodes_count": ep_count,
         "scheduler_running": scheduler.running,
         "pipeline_status": pipeline_state,
@@ -603,7 +617,7 @@ async def chat_endpoint(req: ChatRequest):
     return result
 
 @app.post("/api/refresh")
-async def manual_refresh():
+async def manual_refresh(auth: bool = Depends(verify_mutating_auth)):
     global current_pipeline_task
     if pipeline_state.get("running") and current_pipeline_task and not current_pipeline_task.done():
         return {"status": "busy", "message": "Ingestion pipeline is already actively running.", "state": pipeline_state}
@@ -618,7 +632,7 @@ async def manual_refresh():
     return {"status": "ok", "message": "Ingestion and synthesis pipeline triggered in background.", "state": pipeline_state}
 
 @app.post("/api/refresh/cancel")
-async def cancel_refresh():
+async def cancel_refresh(auth: bool = Depends(verify_mutating_auth)):
     global current_pipeline_task
     if current_pipeline_task and not current_pipeline_task.done():
         current_pipeline_task.cancel()
@@ -632,7 +646,7 @@ async def cancel_refresh():
     return {"status": "cancelled", "message": "Pipeline cancelled successfully.", "state": pipeline_state}
 
 @app.post("/api/refresh/reset")
-async def reset_refresh():
+async def reset_refresh(auth: bool = Depends(verify_mutating_auth)):
     global current_pipeline_task
     if current_pipeline_task and not current_pipeline_task.done():
         current_pipeline_task.cancel()
@@ -661,7 +675,7 @@ class SettingsUpdate(BaseModel):
     cron_schedule: Optional[str] = None
 
 @app.post("/api/settings")
-async def update_settings(payload: SettingsUpdate):
+async def update_settings(payload: SettingsUpdate, auth: bool = Depends(verify_mutating_auth)):
     cfg = load_config()
     if payload.max_episodes_retained is not None:
         cfg["max_episodes_retained"] = payload.max_episodes_retained
@@ -683,7 +697,7 @@ async def update_settings(payload: SettingsUpdate):
     }
 
 @app.post("/api/settings/cleanup")
-async def trigger_storage_cleanup():
+async def trigger_storage_cleanup(auth: bool = Depends(verify_mutating_auth)):
     cleanup_res = enforce_retention_policy()
     stats = get_storage_stats()
     return {
