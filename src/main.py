@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+import hashlib
 import xml.etree.ElementTree as ET
 import email.utils
 from contextlib import asynccontextmanager
@@ -215,9 +216,49 @@ def init_seed_data():
                     shutil.copyfile(src_f, dst_f)
                     logger.info(f"Upgraded episode JSON with full paper corpus: {dst_f}")
 
+def cleanup_duplicate_episodes():
+    """Scans EPISODES_DIR and purges any duplicate episodes with identical titles and summaries."""
+    if not os.path.exists(EPISODES_DIR):
+        return
+    files = [f for f in os.listdir(EPISODES_DIR) if f.startswith("ep-") and f.endswith(".json")]
+    def sort_key(fn: str) -> int:
+        try:
+            return int(fn.replace("ep-", "").replace(".json", ""))
+        except:
+            return 0
+    sorted_files = sorted(files, key=sort_key)
+    seen_signatures = {}
+    
+    for fn in sorted_files:
+        fp = os.path.join(EPISODES_DIR, fn)
+        try:
+            with open(fp, "r") as f:
+                data = json.load(f)
+            title = data.get("title", "").strip().lower()
+            summary = data.get("summary", "").strip().lower()
+            sig = hashlib.sha256(f"{title}::{summary}".encode("utf-8")).hexdigest()
+            
+            if sig in seen_signatures:
+                canonical_fn = seen_signatures[sig]
+                logger.warning(f"Detected duplicate episode {fn} (identical to {canonical_fn}). Purging duplicate...")
+                try:
+                    os.remove(fp)
+                    audio_fp = os.path.join(AUDIO_DIR, fn.replace(".json", ".mp3"))
+                    if os.path.exists(audio_fp):
+                        os.remove(audio_fp)
+                    logger.info(f"Successfully purged duplicate episode {fn}")
+                except Exception as e:
+                    logger.error(f"Failed to remove duplicate {fn}: {e}")
+            else:
+                seen_signatures[sig] = fn
+        except Exception as e:
+            logger.error(f"Error checking episode {fn} for duplicates: {e}")
+
 init_seed_data()
+cleanup_duplicate_episodes()
 
 def get_sorted_episode_files() -> List[str]:
+    cleanup_duplicate_episodes()
     def sort_key(filename: str) -> int:
         try:
             base = filename.replace("ep-", "").replace(".json", "")
@@ -248,6 +289,43 @@ async def run_daily_pipeline():
     try:
         corpus = await ingest_all_domains()
         
+        # Check if corpus has new articles compared to existing episodes
+        sorted_files = get_sorted_episode_files()
+        if sorted_files:
+            latest_file = sorted_files[0]
+            with open(os.path.join(EPISODES_DIR, latest_file), "r") as f:
+                latest_ep = json.load(f)
+            
+            # Extract URLs from latest episode
+            latest_urls = set()
+            for ch in latest_ep.get("chapters", []):
+                if ch.get("source_url"):
+                    latest_urls.add(ch["source_url"].strip().rstrip("/"))
+            for dom_takeaway in latest_ep.get("takeaways", {}).values():
+                for s in dom_takeaway.get("sources", []):
+                    if s.get("url"):
+                        latest_urls.add(s["url"].strip().rstrip("/"))
+
+            # Extract URLs from fetched corpus
+            fetched_urls = set()
+            for items in corpus.values():
+                for it in items:
+                    if it.get("url"):
+                        fetched_urls.add(it["url"].strip().rstrip("/"))
+
+            # Check for new URLs
+            new_urls = fetched_urls - latest_urls
+            if not new_urls and fetched_urls:
+                latest_num = latest_ep.get("episode_number", latest_ep.get("id", "142").replace("ep-", ""))
+                logger.info(f"No new papers or articles found in feeds since Episode #{latest_num}. Skipping duplicate synthesis.")
+                pipeline_state["stage"] = "complete"
+                pipeline_state["progress"] = 100
+                pipeline_state["message"] = f"Feeds already up-to-date! No new papers since Episode #{latest_num}."
+                pipeline_state["last_episode_id"] = latest_ep["id"]
+                pipeline_state["last_run"] = datetime.now(timezone.utc).isoformat()
+                pipeline_state["running"] = False
+                return
+
         # Calculate next episode number
         existing = [f for f in os.listdir(EPISODES_DIR) if f.startswith("ep-") and f.endswith(".json")]
         next_num = 143 if not existing else max([int(f.split("-")[1].split(".")[0]) for f in existing if f.split("-")[1].split(".")[0].isdigit()] + [142]) + 1
