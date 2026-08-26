@@ -1127,6 +1127,12 @@
     function changeEpisode(epId) {
       currentEpisodeId = epId;
       const ep = episodes[epId];
+      if (audioPlayer) {
+        audioPlayer.pause();
+        initAudioSource(epId);
+        document.getElementById('play-icon').classList.remove('hidden');
+        document.getElementById('pause-icon').classList.add('hidden');
+      }
       document.getElementById('ep-title').innerText = ep.title;
       document.getElementById('ep-hosts').innerText = ep.hosts;
       document.getElementById('ep-duration-badge').innerText = ep.duration + ' Mins';
@@ -1316,16 +1322,61 @@
     }
 
     // ==========================================
-    // AUDIO CONTROLS
+    // REAL HTML5 NEURAL AUDIO ENGINE
     // ==========================================
+    const audioPlayer = new Audio();
+    audioPlayer.preload = 'metadata';
     let isPlaying = false;
-    function togglePlay() {
-      isPlaying = !isPlaying;
-      document.getElementById('play-icon').classList.toggle('hidden', isPlaying);
-      document.getElementById('pause-icon').classList.toggle('hidden', !isPlaying);
+
+    function initAudioSource(epId) {
+      audioPlayer.src = '/audio/' + epId + '.mp3';
+      audioPlayer.load();
     }
 
+    initAudioSource('ep-142');
+
+    function togglePlay() {
+      if (audioPlayer.paused) {
+        audioPlayer.play().then(() => {
+          isPlaying = true;
+          document.getElementById('play-icon').classList.add('hidden');
+          document.getElementById('pause-icon').classList.remove('hidden');
+        }).catch(err => {
+          console.error("Audio playback error:", err);
+          // Fallback UI toggle if audio file is still synthesizing
+          isPlaying = !isPlaying;
+          document.getElementById('play-icon').classList.toggle('hidden', isPlaying);
+          document.getElementById('pause-icon').classList.toggle('hidden', !isPlaying);
+        });
+      } else {
+        audioPlayer.pause();
+        isPlaying = false;
+        document.getElementById('play-icon').classList.remove('hidden');
+        document.getElementById('pause-icon').classList.add('hidden');
+      }
+    }
+
+    audioPlayer.addEventListener('timeupdate', () => {
+      if (!isNaN(audioPlayer.duration) && audioPlayer.duration > 0) {
+        const curSecs = Math.floor(audioPlayer.currentTime);
+        const mins = Math.floor(curSecs / 60).toString().padStart(2, '0');
+        const secs = (curSecs % 60).toString().padStart(2, '0');
+        document.getElementById('current-time').innerText = `${mins}:${secs}`;
+        
+        const pct = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+        document.getElementById('progress-bar').style.width = pct + '%';
+      }
+    });
+
+    audioPlayer.addEventListener('ended', () => {
+      isPlaying = false;
+      document.getElementById('play-icon').classList.remove('hidden');
+      document.getElementById('pause-icon').classList.add('hidden');
+      document.getElementById('progress-bar').style.width = '0%';
+    });
+
     function setSpeed(speed) {
+      audioPlayer.playbackRate = speed;
       document.querySelectorAll('.speed-btn').forEach(b => {
         b.className = 'speed-btn px-2 sm:px-2.5 py-1 rounded-lg text-slate-400 hover:text-white text-[11px]';
         if (b.innerText === speed + 'x') {
@@ -1336,22 +1387,20 @@
 
     function jumpTo(seconds, label) {
       document.getElementById('current-time').innerText = label;
-      const ep = episodes[currentEpisodeId];
-      const pct = (seconds / ep.totalSeconds) * 100;
-      document.getElementById('progress-bar').style.width = pct + '%';
-      if (!isPlaying) togglePlay();
+      audioPlayer.currentTime = seconds;
+      if (audioPlayer.paused) {
+        togglePlay();
+      }
     }
 
     function seekAudio(event) {
       const rect = event.currentTarget.getBoundingClientRect();
       const clickX = event.clientX - rect.left;
-      const pct = (clickX / rect.width) * 100;
+      const pct = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
       document.getElementById('progress-bar').style.width = pct + '%';
-      const ep = episodes[currentEpisodeId];
-      const curSecs = Math.floor((pct / 100) * ep.totalSeconds);
-      const mins = Math.floor(curSecs / 60).toString().padStart(2, '0');
-      const secs = (curSecs % 60).toString().padStart(2, '0');
-      document.getElementById('current-time').innerText = `${mins}:${secs}`;
+      if (!isNaN(audioPlayer.duration) && audioPlayer.duration > 0) {
+        audioPlayer.currentTime = (pct / 100) * audioPlayer.duration;
+      }
     }
 
     // ==========================================

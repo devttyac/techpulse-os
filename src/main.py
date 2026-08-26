@@ -183,6 +183,13 @@ async def startup_event():
             scheduler.add_job(run_daily_pipeline, trigger)
             scheduler.start()
             logger.info(f"Scheduled daily pipeline with cron [{cron_expr}] SGT")
+    # Pre-generate seed episode audio in background if missing
+    ep142_mp3 = os.path.join(AUDIO_DIR, "ep-142.mp3")
+    if not os.path.exists(ep142_mp3):
+        with open(os.path.join(EPISODES_DIR, "ep-142.json"), "r") as fp:
+            ep142_data = json.load(fp)
+        asyncio.create_task(generate_episode_podcast_audio(ep142_data, AUDIO_DIR))
+
     except Exception as e:
         logger.warning(f"Could not parse cron expression: {e}")
 
@@ -278,10 +285,27 @@ status: permanent
 @app.get("/audio/{filename}")
 async def serve_audio(filename: str):
     file_path = os.path.join(AUDIO_DIR, filename)
+    
+    # If audio does not exist on disk, synthesize it on-the-fly
+    if not os.path.exists(file_path) or os.path.getsize(file_path) < 100:
+        ep_id = filename.replace(".mp3", "")
+        ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
+        if os.path.exists(ep_file):
+            with open(ep_file, "r") as fp:
+                ep_data = json.load(fp)
+            logger.info(f"Dynamically synthesizing neural audio on-demand for {ep_id}...")
+            await generate_episode_podcast_audio(ep_data, AUDIO_DIR)
+        else:
+            raise HTTPException(status_code=404, detail="Episode not found for audio synthesis")
+
     if not os.path.exists(file_path):
-        # Generate placeholder or raise 404
-        raise HTTPException(status_code=404, detail="Audio file not found")
-    return FileResponse(file_path, media_type="audio/mpeg")
+        raise HTTPException(status_code=404, detail="Audio file could not be generated")
+
+    return FileResponse(
+        file_path,
+        media_type="audio/mpeg",
+        headers={"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=86400"}
+    )
 
 @app.get("/feed.xml")
 async def podcast_rss(request: Request):
