@@ -12,30 +12,51 @@
     {
       "time": "00:00",
       "seconds": 0,
-      "title": "1. Intro & Multi-Agent Deterministic Routing",
+      "title": "1. Executive Intro & Episode Overview",
+      "source_name": "TechPulse",
+      "sourceUrl": "http://homelab.devtty.site:8088"
+    },
+    {
+      "time": "00:25",
+      "seconds": 25,
+      "title": "2. AI: Deterministic Main-as-Router Pattern",
       "source_name": "Anthropic",
-      "source_url": "https://www.anthropic.com/research/building-effective-agents"
+      "sourceUrl": "https://www.anthropic.com/research/building-effective-agents"
     },
     {
-      "time": "01:15",
-      "seconds": 75,
-      "title": "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg",
+      "time": "01:25",
+      "seconds": 85,
+      "title": "3. Cloud: Azure Landing Zones & AWS Multi-Region Failover",
+      "source_name": "Azure Architecture",
+      "sourceUrl": "https://techcommunity.microsoft.com/t5/s/rss/board?board.id=AzureArchitectureBlog"
+    },
+    {
+      "time": "02:15",
+      "seconds": 135,
+      "title": "4. Data: Microsoft Fabric Direct Lake vs Snowflake Iceberg",
       "source_name": "MS Fabric",
-      "source_url": "https://blog.fabric.microsoft.com/"
+      "sourceUrl": "https://blog.fabric.microsoft.com/"
     },
     {
-      "time": "02:35",
-      "seconds": 155,
-      "title": "3. Zero-Trust SPIFFE Workload Tokens in Banking",
+      "time": "03:05",
+      "seconds": 185,
+      "title": "5. Security: SPIFFE/SPIRE Workload Identity in Banking (MAS TRM)",
       "source_name": "SPIFFE.io",
-      "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"
+      "sourceUrl": "https://spiffe.io/docs/latest/spiffe-about/overview/"
     },
     {
-      "time": "04:00",
-      "seconds": 240,
-      "title": "4. MAS FEAT Model Risk Compliance & Socratic QA",
+      "time": "03:55",
+      "seconds": 235,
+      "title": "6. SRE: Kernel eBPF Telemetry & Transactional Outbox CDC",
+      "source_name": "eBPF.io",
+      "sourceUrl": "https://ebpf.io/what-is-ebpf/"
+    },
+    {
+      "time": "04:45",
+      "seconds": 285,
+      "title": "7. FinOps & Singapore MAS FEAT Governance Outro",
       "source_name": "MAS Veritas",
-      "source_url": "https://www.mas.gov.sg/schemes-and-initiatives/veritas"
+      "sourceUrl": "https://www.mas.gov.sg/schemes-and-initiatives/veritas"
     }
   ],
   "takeaways": {
@@ -68,6 +89,72 @@
       "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
       "cite": "Source: Anthropic Research 2026",
       "color_class": "bg-indigo-500/20 text-indigo-300"
+    }
+  ],
+  "script_segments": [
+    {
+      "speaker": "Host A",
+      "text": "Welcome to TechPulse OS, Episode 142. I'm your Enterprise Cloud Architect host."
+    },
+    {
+      "speaker": "Host B",
+      "text": "And I'm your Principal SRE and Governance Lead. Today we deliver an in-depth architectural breakdown across AI agent systems, Microsoft Azure multi-cloud resiliency, Microsoft Fabric Direct Lake versus Snowflake Iceberg, and zero-trust banking perimeters under Singapore MAS guidelines."
+    },
+    {
+      "speaker": "Host A",
+      "text": "Let's dive straight into Chapter 1: Agentic Architecture. Both Anthropic and OpenAI have published updated guidance on governing autonomous LLM systems in production. The single most important architectural pattern is replacing monolithic, recursive swarms with a deterministic 'Main-as-Router' pattern."
+    },
+    {
+      "speaker": "Host B",
+      "text": "Why is this shift happening? Because in recursive agent swarms, sub-agents can call other sub-agents in unconstrained loops, leading to prompt drift, cascading hallucinations, and exponential API cost overruns. In the Main-as-Router pattern, the main session acts strictly as an orchestrator. It manages state, executes dry-run approval gates before any filesystem or API mutations, and caps retry attempts at three before triggering human-in-the-loop escalation."
+    },
+    {
+      "speaker": "Host A",
+      "text": "If you're framing this in a System Design interview: emphasize that decoupling stateful planning from tool execution guarantees deterministic audit logging and predictable cost bounds, which enterprise compliance boards require."
+    },
+    {
+      "speaker": "Host A",
+      "text": "Moving to Chapter 2: Cloud & Platforms. We're tracking multi-region Kubernetes failover across Microsoft Azure Landing Zones and AWS. Enterprise mission-critical workloads are adopting automated active-passive traffic shedding using Azure Front Door and AWS Global Accelerator combined with Cloudflare Magic Transit."
+    },
+    {
+      "speaker": "Host B",
+      "text": "On the storage layer, rather than attempting complex synchronous multi-region database writes that suffer from high cross-region latency, teams are utilizing Azure Managed Disks cross-region replication paired with Rook-Ceph availability-zone meshes. This keeps Recovery Point Objective under five seconds while isolating blast radiuses."
+    },
+    {
+      "speaker": "Host A",
+      "text": "In Chapter 3: Enterprise Lakehouses. Microsoft Fabric's Direct Lake mode is fundamentally shifting Power BI and analytical engineering. In legacy architectures, you had to choose between slow DirectQuery on source data or scheduled VertiPaq imports with 24-hour data staleness."
+    },
+    {
+      "speaker": "Host B",
+      "text": "Direct Lake solves this by paging Delta Parquet files directly from OneLake storage straight into VertiPaq RAM on demand. There are no import refresh pipelines to maintain. Meanwhile, Snowflake's managed Apache Iceberg tables allow organizations to maintain a vendor-neutral catalog accessible across Spark, Databricks, and Trino engines simultaneously."
+    },
+    {
+      "speaker": "Host A",
+      "text": "Now to Chapter 4: Zero Trust Security. In tier-one financial institutions, long-lived static API keys and database credentials are being systematically eradicated in favor of SPIFFE and SPIRE workload identity federation."
+    },
+    {
+      "speaker": "Host B",
+      "text": "SPIFFE issues ephemeral cryptographic X.509 SVID tokens to microservices and Kubernetes pods. These certificates rotate automatically every sixty minutes without requiring application restarts or downtime. This directly satisfies Singapore MAS Technology Risk Management Section 9, neutralizing credential leakage blast radius."
+    },
+    {
+      "speaker": "Host A",
+      "text": "In SRE and Systems Architecture: eBPF is replacing user-space APM daemons. By attaching sandboxed bytecode directly to Linux kernel socket buffers, teams capture TCP connection latency and network anomalies with under one percent CPU overhead, propagating W3C distributed trace context seamlessly into OpenTelemetry."
+    },
+    {
+      "speaker": "Host B",
+      "text": "In distributed data consistency, the Transactional Outbox Pattern using Debezium Change Data Capture is replacing fragile Two-Phase Commits (2PC). By reading database Write-Ahead Logs directly, it guarantees event delivery to Kafka brokers with sub-ten-millisecond latency, even during partial network partitions."
+    },
+    {
+      "speaker": "Host A",
+      "text": "Wrapping up with FinOps and AI Governance: Automated compute pausing on Fabric F-SKUs combined with AWS Graviton4 ARM64 spot instances has cut batch ETL costs by over thirty-five percent."
+    },
+    {
+      "speaker": "Host B",
+      "text": "And on the regulatory frontier: Singapore MAS FEAT principles and SR 11-7 Model Risk frameworks mandate immutable audit trails capturing prompt snapshots, model temperature, and hallucination scoring for every production GenAI decision."
+    },
+    {
+      "speaker": "Host A",
+      "text": "That concludes today's deep-dive briefing for Episode 142. Open the TechPulse OS dashboard to review complete source papers, and test your retention with today's interactive flashcards. We'll see you tomorrow."
     }
   ]
 }
