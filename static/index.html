@@ -1376,9 +1376,9 @@
         function playArticleAudio(domain, domainTitle) {
       const audio = getAudio();
       if (!audio) return;
-      audio.src = '/audio/article-' + domain + '.mp3';
+      audio.src = '/audio/article-' + domain + '.mp3?v=full_papers_12m';
       audio.load();
-      showAudioStatus('▶ Playing Full Paper Readout: ' + domainTitle);
+      showAudioStatus('▶ Playing Full Technical Paper: ' + domainTitle);
       audio.play().then(() => {
         isPlaying = true;
         document.getElementById('play-icon').classList.add('hidden');
@@ -1393,9 +1393,10 @@
     function initAudioSource(epId) {
       const audio = getAudio();
       if (!audio) return;
-      audio.src = '/audio/' + epId + '.mp3';
+      // Append version query parameter to guarantee browser pulls the 3.1MB 12-minute paper readout
+      audio.src = '/audio/' + epId + '.mp3?v=full_papers_12m';
       audio.load();
-      showAudioStatus('Ready: ' + epId + '.mp3 (5:20 dual-host)');
+      showAudioStatus('Ready: ' + epId + '.mp3 — Full Technical Paper Narration (12:00)');
     }
 
     function togglePlay() {

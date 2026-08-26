@@ -141,7 +141,7 @@ SEED_EPISODES = {
 }
 
 def init_seed_data():
-    # 1. Populate from seed_data if volume is freshly mounted
+    # 1. Populate from seed_data, always replacing if seed file is larger/newer
     seed_dir = os.path.join(os.path.dirname(__file__), "..", "seed_data")
     if os.path.exists(seed_dir):
         for root, dirs, files in os.walk(seed_dir):
@@ -151,17 +151,18 @@ def init_seed_data():
             for file in files:
                 src_f = os.path.join(root, file)
                 dst_f = os.path.join(target_dir, file)
-                if not os.path.exists(dst_f) or os.path.getsize(dst_f) == 0:
+                # Overwrite if destination is missing or smaller than seed
+                if not os.path.exists(dst_f) or os.path.getsize(dst_f) < os.path.getsize(src_f):
                     try:
                         shutil.copyfile(src_f, dst_f)
-                        logger.info(f"Populated seed asset to persistent volume: {dst_f}")
+                        logger.info(f"Force-updated seed asset to volume: {dst_f} ({os.path.getsize(src_f)} bytes)")
                     except Exception as e:
                         logger.error(f"Failed to copy seed file {src_f}: {e}")
 
     # 2. Populate JSON episode definitions
     for ep_id, data in SEED_EPISODES.items():
         ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
-        if not os.path.exists(ep_file):
+        if not os.path.exists(ep_file) or os.path.getsize(ep_file) < 500:
             with open(ep_file, "w") as f:
                 json.dump(data, f, indent=2)
             logger.info(f"Initialized seed episode JSON: {ep_id}")
@@ -308,67 +309,34 @@ async def serve_audio(filename: str):
     file_path = os.path.join(AUDIO_DIR, filename)
     seed_path = os.path.join(os.path.dirname(__file__), "..", "seed_data", "audio", filename)
     
-    # 1. If seed file exists, try copying to volume, but serve seed_path if volume write fails
+    # Always ensure volume file is up to date with full-article seed audio
     if os.path.exists(seed_path):
-        try:
-            os.makedirs(AUDIO_DIR, exist_ok=True)
-            if not os.path.exists(file_path) or os.path.getsize(file_path) < os.path.getsize(seed_path):
+        if not os.path.exists(file_path) or os.path.getsize(file_path) < os.path.getsize(seed_path):
+            try:
+                os.makedirs(AUDIO_DIR, exist_ok=True)
                 shutil.copyfile(seed_path, file_path)
-                logger.info(f"Restored seed audio to volume: {file_path}")
-        except Exception as e:
-            logger.warning(f"Could not write to volume ({e}). Serving seed file directly.")
-            return FileResponse(
-                seed_path,
-                media_type="audio/mpeg",
-                headers={
-                    "Accept-Ranges": "bytes",
-                    "Cache-Control": "no-cache",
-                    "Access-Control-Allow-Origin": "*"
-                }
-            )
+                logger.info(f"Overwrote stale audio {filename} with full-paper audio ({os.path.getsize(seed_path)} bytes)")
+            except Exception as e:
+                logger.warning(f"Could not overwrite volume ({e}). Serving seed file directly.")
+                return FileResponse(
+                    seed_path,
+                    media_type="audio/mpeg",
+                    headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
+                )
 
-    # 2. If volume file exists, serve it
     if os.path.exists(file_path) and os.path.getsize(file_path) > 1000:
         return FileResponse(
             file_path,
             media_type="audio/mpeg",
-            headers={
-                "Accept-Ranges": "bytes",
-                "Cache-Control": "no-cache",
-                "Access-Control-Allow-Origin": "*"
-            }
+            headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
         )
 
-    # 3. Direct seed fallback
     if os.path.exists(seed_path):
         return FileResponse(
             seed_path,
             media_type="audio/mpeg",
-            headers={
-                "Accept-Ranges": "bytes",
-                "Cache-Control": "no-cache",
-                "Access-Control-Allow-Origin": "*"
-            }
+            headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
         )
-
-    # 4. On-demand synthesis fallback
-    ep_id = filename.replace(".mp3", "")
-    ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
-    if os.path.exists(ep_file):
-        with open(ep_file, "r") as fp:
-            ep_data = json.load(fp)
-        logger.info(f"Dynamically synthesizing neural audio for {ep_id}...")
-        await generate_episode_podcast_audio(ep_data, AUDIO_DIR)
-        if os.path.exists(file_path):
-            return FileResponse(
-                file_path,
-                media_type="audio/mpeg",
-                headers={
-                    "Accept-Ranges": "bytes",
-                    "Cache-Control": "no-cache",
-                    "Access-Control-Allow-Origin": "*"
-                }
-            )
 
     raise HTTPException(status_code=404, detail="Audio file not found")
 
