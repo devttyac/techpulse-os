@@ -1,0 +1,34 @@
+{
+  "id": "ep-140",
+  "episode_number": 140,
+  "date": "Aug 24, 2026",
+  "title": "Modern Data Stack: Microsoft Fabric Real-Time Analytics vs Snowflake Iceberg Catalogs",
+  "summary": "Deep dive into Delta Parquet on OneLake, open Iceberg metadata management, and enterprise capacity cost modeling.",
+  "hosts": "Host A (Data Architect) & Host B (Analytics Lead)",
+  "duration": "05:10",
+  "total_seconds": 310,
+  "audio_url": "/audio/ep-140.mp3",
+  "chapters": [
+    {
+      "time": "00:00",
+      "seconds": 0,
+      "title": "1. Microsoft Fabric OneLake Delta Parquet Architecture",
+      "source_name": "MS Learn",
+      "source_url": "https://learn.microsoft.com/en-us/fabric/"
+    },
+    {
+      "time": "01:45",
+      "seconds": 105,
+      "title": "2. Apache Iceberg Metadata Scaling on S3/Blob Storage",
+      "source_name": "Snowflake",
+      "source_url": "https://www.snowflake.com/en/blog/"
+    },
+    {
+      "time": "03:30",
+      "seconds": 210,
+      "title": "3. Cost Comparison: Fabric F-SKU vs Snowflake Warehouses",
+      "source_name": "FinOps",
+      "source_url": "https://www.finops.org/framework/"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  techpulse-os:
+    build: .
+    container_name: techpulse-os
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Singapore
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - HOST_URL=${HOST_URL:-http://localhost:8000}
+      - CRON_SCHEDULE=${CRON_SCHEDULE:-0 6 * * *}
+      - STORAGE_DIR=/app/data
+    volumes:
+      - techpulse_data:/app/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  techpulse_data:
+    driver: local

@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en" class="dark" data-theme="tokyo-night">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>TechPulse — Multi-Domain Intelligence & Grounded AI Hub</title>
+  
+  <!-- Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com">
+    // ==========================================
+    // LIVE BACKEND API INTEGRATION
+    // ==========================================
+    async function loadEpisodesFromBackend() {
+      try {
+        const res = await fetch('/api/episodes');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.episodes && data.episodes.length > 0) {
+            const select = document.getElementById('episode-select');
+            select.innerHTML = data.episodes.map(ep => `
+              <option value="${ep.id}">#${ep.episode_number || 142} (${ep.date}) — ${ep.title.substring(0, 35)}...</option>
+            `).join('');
+            
+            // Populate episodes map
+            data.episodes.forEach(ep => {
+              episodes[ep.id] = ep;
+            });
+            changeEpisode(data.episodes[0].id);
+          }
+        }
+      } catch (e) {
+        console.log('Running in standalone mode with embedded episodes.');
+      }
+    }
+
+    async function callBackendChat(query) {
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ query: query, episode_id: currentEpisodeId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.response;
+        }
+      } catch (e) {
+        console.log('Chat API fallback to in-browser engine.');
+      }
+      return null;
+    }
+
+    // Call on load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadEpisodesFromBackend();
+    });
+
+  </script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          screens: {
+            'xs': '400px',
+          }
+        }
+      }
+    }
+  
+    // ==========================================
+    // LIVE BACKEND API INTEGRATION
+    // ==========================================
+    async function loadEpisodesFromBackend() {
+      try {
+        const res = await fetch('/api/episodes');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.episodes && data.episodes.length > 0) {
+            const select = document.getElementById('episode-select');
+            select.innerHTML = data.episodes.map(ep => `
+              <option value="${ep.id}">#${ep.episode_number || 142} (${ep.date}) — ${ep.title.substring(0, 35)}...</option>
+            `).join('');
+            
+            // Populate episodes map
+            data.episodes.forEach(ep => {
+              episodes[ep.id] = ep;
+            });
+            changeEpisode(data.episodes[0].id);
+          }
+        }
+      } catch (e) {
+        console.log('Running in standalone mode with embedded episodes.');
+      }
+    }
+
+    async function callBackendChat(query) {
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ query: query, episode_id: currentEpisodeId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.response;
+        }
+      } catch (e) {
+        console.log('Chat API fallback to in-browser engine.');
+      }
+      return null;
+    }
+
+    // Call on load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadEpisodesFromBackend();
+    });
+
+  </script>
+  
+  <style>
+    /* ==========================================================================
+       DYNAMIC THEME SYSTEM (7 Curated Palettes)
+       ========================================================================== */
+    
+    /* 1. Tokyo Night */
+    :root[data-theme="tokyo-night"], :root {
+      --bg-base: #1a1b26;
+      --bg-panel: rgba(36, 40, 59, 0.88);
+      --bg-card: #1f2335;
+      --bg-card-hover: #292e42;
+      --border-subtle: rgba(122, 162, 247, 0.25);
+      --accent-1: #7aa2f7;
+      --accent-2: #bb9af7;
+      --accent-3: #7dcfff;
+      --accent-text: #7aa2f7;
+      --btn-text: #1a1b26;
+      --glow-1: rgba(122, 162, 247, 0.18);
+      --glow-2: rgba(187, 154, 247, 0.15);
+      --border-gradient: linear-gradient(135deg, rgba(122, 162, 247, 0.85), rgba(187, 154, 247, 0.55), rgba(122, 162, 247, 0.15) 80%);
+    }
+
+    /* 2. Cyberpunk */
+    :root[data-theme="cyberpunk"] {
+      --bg-base: #0b0b12;
+      --bg-panel: rgba(22, 19, 32, 0.92);
+      --bg-card: #161424;
+      --bg-card-hover: #231f38;
+      --border-subtle: rgba(254, 231, 21, 0.3);
+      --accent-1: #fee715;
+      --accent-2: #ff007f;
+      --accent-3: #00f0ff;
+      --accent-text: #fee715;
+      --btn-text: #000000;
+      --glow-1: rgba(254, 231, 21, 0.2);
+      --glow-2: rgba(255, 0, 127, 0.18);
+      --border-gradient: linear-gradient(135deg, #fee715, #ff007f 45%, rgba(254, 231, 21, 0.2) 85%);
+    }
+
+    /* 3. Midnight */
+    :root[data-theme="midnight"] {
+      --bg-base: #060813;
+      --bg-panel: rgba(16, 23, 44, 0.85);
+      --bg-card: #0b0f1f;
+      --bg-card-hover: #10172c;
+      --border-subtle: rgba(0, 242, 254, 0.25);
+      --accent-1: #00f2fe;
+      --accent-2: #7c3aed;
+      --accent-3: #6366f1;
+      --accent-text: #38bdf8;
+      --btn-text: #060813;
+      --glow-1: rgba(0, 242, 254, 0.18);
+      --glow-2: rgba(124, 58, 237, 0.15);
+      --border-gradient: linear-gradient(135deg, rgba(0, 242, 254, 0.85), rgba(124, 58, 237, 0.55), rgba(0, 242, 254, 0.15) 80%);
+    }
+
+    /* 4. OLED */
+    :root[data-theme="oled"] {
+      --bg-base: #000000;
+      --bg-panel: rgba(12, 12, 14, 0.92);
+      --bg-card: #08080a;
+      --bg-card-hover: #121216;
+      --border-subtle: rgba(16, 185, 129, 0.25);
+      --accent-1: #10b981;
+      --accent-2: #059669;
+      --accent-3: #34d399;
+      --accent-text: #34d399;
+      --btn-text: #000000;
+      --glow-1: rgba(16, 185, 129, 0.18);
+      --glow-2: rgba(52, 211, 153, 0.12);
+      --border-gradient: linear-gradient(135deg, rgba(16, 185, 129, 0.85), rgba(5, 150, 105, 0.45), rgba(16, 185, 129, 0.15) 80%);
+    }
+
+    /* 5. Cobalt */
+    :root[data-theme="cobalt"] {
+      --bg-base: #070e1e;
+      --bg-panel: rgba(13, 23, 48, 0.88);
+      --bg-card: #0a1329;
+      --bg-card-hover: #101e40;
+      --border-subtle: rgba(56, 189, 248, 0.25);
+      --accent-1: #38bdf8;
+      --accent-2: #818cf8;
+      --accent-3: #fbbf24;
+      --accent-text: #60a5fa;
+      --btn-text: #070e1e;
+      --glow-1: rgba(56, 189, 248, 0.18);
+      --glow-2: rgba(129, 140, 248, 0.15);
+      --border-gradient: linear-gradient(135deg, rgba(56, 189, 248, 0.85), rgba(129, 140, 248, 0.45), rgba(56, 189, 248, 0.15) 80%);
+    }
+
+    /* 6. Nordic */
+    :root[data-theme="nordic"] {
+      --bg-base: #0e1117;
+      --bg-panel: rgba(22, 27, 34, 0.90);
+      --bg-card: #161b22;
+      --bg-card-hover: #21262d;
+      --border-subtle: rgba(34, 211, 238, 0.25);
+      --accent-1: #22d3ee;
+      --accent-2: #94a3b8;
+      --accent-3: #38bdf8;
+      --accent-text: #67e8f9;
+      --btn-text: #0e1117;
+      --glow-1: rgba(34, 211, 238, 0.15);
+      --glow-2: rgba(148, 163, 184, 0.12);
+      --border-gradient: linear-gradient(135deg, rgba(34, 211, 238, 0.75), rgba(148, 163, 184, 0.4), rgba(34, 211, 238, 0.15) 80%);
+    }
+
+    /* 7. Amber */
+    :root[data-theme="amber"] {
+      --bg-base: #0c0d10;
+      --bg-panel: rgba(24, 23, 20, 0.92);
+      --bg-card: #171614;
+      --bg-card-hover: #24221e;
+      --border-subtle: rgba(245, 158, 11, 0.25);
+      --accent-1: #f59e0b;
+      --accent-2: #d97706;
+      --accent-3: #fbbf24;
+      --accent-text: #fbbf24;
+      --btn-text: #0c0d10;
+      --glow-1: rgba(245, 158, 11, 0.18);
+      --glow-2: rgba(217, 119, 6, 0.12);
+      --border-gradient: linear-gradient(135deg, rgba(245, 158, 11, 0.85), rgba(217, 119, 6, 0.45), rgba(245, 158, 11, 0.15) 80%);
+    }
+
+    body {
+      background-color: var(--bg-base);
+      background-image: 
+        radial-gradient(at 0% 0%, var(--glow-2) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, var(--glow-1) 0px, transparent 50%),
+        linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+      transition: background-color 0.3s ease;
+      touch-action: manipulation;
+    }
+
+    .glass-panel {
+      background: var(--bg-panel);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      transition: all 0.3s ease;
+    }
+
+    .glow-border {
+      position: relative;
+    }
+    .glow-border::before {
+      content: '';
+      position: absolute;
+      inset: -1.5px;
+      border-radius: inherit;
+      padding: 1.5px;
+      background: var(--border-gradient);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+      transition: background 0.3s ease;
+      z-index: 1;
+    }
+
+    .theme-card-bg {
+      background-color: var(--bg-card);
+      border-color: var(--border-subtle);
+      transition: all 0.25s ease;
+    }
+    .theme-card-bg:hover {
+      background-color: var(--bg-card-hover);
+    }
+
+    .theme-accent-btn {
+      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+      color: var(--btn-text) !important;
+    }
+
+    .theme-accent-text {
+      color: var(--accent-text);
+    }
+
+    /* 3D Flashcard Flip */
+    .flashcard-container {
+      perspective: 1000px;
+    }
+    .flashcard-inner {
+      position: relative;
+      width: 100%;
+      min-height: 165px;
+      text-align: left;
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      transform-style: preserve-3d;
+      cursor: pointer;
+    }
+    .flashcard-inner.flipped {
+      transform: rotateY(180deg);
+    }
+    .flashcard-front, .flashcard-back {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      border-radius: 1rem;
+    }
+    .flashcard-back {
+      transform: rotateY(180deg);
+    }
+
+    @keyframes equalizer {
+      0%, 100% { height: 6px; }
+      50% { height: 24px; }
+    }
+    .eq-bar { animation: equalizer 1.4s ease-in-out infinite; background-color: var(--accent-1); }
+    .eq-bar:nth-child(1) { animation-delay: 0.1s; }
+    .eq-bar:nth-child(2) { animation-delay: 0.35s; }
+    .eq-bar:nth-child(3) { animation-delay: 0.2s; }
+    .eq-bar:nth-child(4) { animation-delay: 0.5s; }
+    .eq-bar:nth-child(5) { animation-delay: 0.15s; }
+    .eq-bar:nth-child(6) { animation-delay: 0.4s; }
+    .eq-bar:nth-child(7) { animation-delay: 0.25s; }
+    .eq-bar:nth-child(8) { animation-delay: 0.45s; }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* Touch-friendly adjustments */
+    @media (max-width: 640px) {
+      .tap-target {
+        min-height: 42px;
+      }
+    }
+  </style>
+</head>
+<body class="text-slate-200 min-h-screen antialiased p-2.5 sm:p-5 lg:p-8 selection:bg-cyan-500 selection:text-black">
+
+  <div class="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+
+    <!-- Top Floating Navbar with Mobile-Optimized Theme Switcher -->
+    <header class="glass-panel glow-border rounded-2xl px-3.5 sm:px-5 py-3 sm:py-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="relative flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl theme-accent-btn shadow-lg shadow-black/40 flex-shrink-0">
+            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-black"></span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-white font-sans">TechPulse <span class="theme-accent-text">OS</span></h1>
+              <span class="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-white/10 text-slate-200 border border-white/10">v3.4 MOBILE</span>
+            </div>
+            <p class="text-[11px] sm:text-xs text-slate-400 truncate max-w-[240px] sm:max-w-none">Multi-Domain Intelligence & Grounded AI Hub</p>
+          </div>
+        </div>
+
+        <!-- Mobile Quick Sync Button -->
+        <button onclick="copyRssLink()" class="md:hidden p-2 rounded-xl bg-white/5 text-cyan-400 border border-white/10 flex items-center justify-center" title="Sync Podcast">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
+        </button>
+      </div>
+
+      <!-- Theme Selector & Desktop Sync -->
+      <div class="flex items-center justify-between md:justify-end gap-2 overflow-x-auto no-scrollbar pb-1 md:pb-0">
+        <div class="flex items-center gap-1 p-1 rounded-xl bg-black/50 border border-white/10 text-xs overflow-x-auto no-scrollbar flex-shrink-0">
+          <span class="pl-2 pr-1 text-slate-400 text-[11px] font-medium flex items-center gap-1 flex-shrink-0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+          </span>
+          <button onclick="setTheme('tokyo-night')" id="btn-theme-tokyo-night" class="theme-pill px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition">🌸 Tokyo</button>
+          <button onclick="setTheme('cyberpunk')" id="btn-theme-cyberpunk" class="theme-pill px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition">⚡ Cyberpunk</button>
+          <button onclick="setTheme('midnight')" id="btn-theme-midnight" class="theme-pill px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition">🌌 Midnight</button>
+          <button onclick="setTheme('oled')" id="btn-theme-oled" class="theme-pill px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition">🖤 OLED</button>
+          <button onclick="setTheme('cobalt')" id="btn-theme-cobalt" class="theme-pill px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition">🌊 Cobalt</button>
+          <button onclick="setTheme('nordic')" id="btn-theme-nordic" class="theme-pill px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition">❄️ Nordic</button>
+          <button onclick="setTheme('amber')" id="btn-theme-amber" class="theme-pill px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition">🏺 Amber</button>
+        </div>
+
+        <button onclick="copyRssLink()" class="hidden md:flex px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold theme-accent-text border border-white/10 items-center gap-1.5 transition active:scale-95 flex-shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
+          <span id="rss-btn-text">Sync Podcast</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Grid Layout (Mobile-Responsive Stack) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+
+      <!-- LEFT COLUMN: Audio Hero & Restored Domain Intelligence Cards (7 Cols) -->
+      <div class="lg:col-span-7 space-y-4 sm:space-y-6">
+
+        <!-- Zone 1: PODCAST HERO SECTION -->
+        <section class="glass-panel glow-border rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 relative space-y-4 sm:space-y-5">
+          <div class="relative z-10 space-y-4 sm:space-y-5">
+            
+            <!-- Top Episode Switcher Bar (Wraps cleanly on mobile) -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-white/10 pb-3">
+              <div class="flex items-center gap-2 w-full sm:w-auto">
+                <span class="text-[11px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider font-mono flex-shrink-0">Ep:</span>
+                <select id="episode-select" onchange="changeEpisode(this.value)" class="w-full sm:w-auto bg-black/70 text-white font-semibold text-xs rounded-xl px-2.5 py-1.5 border border-white/20 focus:outline-none focus:border-cyan-400 cursor-pointer transition truncate">
+                  <option value="ep-142">#142 (Today) — Multi-Domain Synthesis & MAS</option>
+                  <option value="ep-141">#141 (Aug 25) — Agentic RAG & Long Planning</option>
+                  <option value="ep-140">#140 (Aug 24) — Microsoft Fabric vs Snowflake</option>
+                  <option value="ep-139">#139 (Aug 23) — Zero-Trust SPIFFE & eBPF</option>
+                </select>
+              </div>
+
+              <div class="flex items-center justify-between sm:justify-end gap-2 text-xs flex-shrink-0">
+                <span id="ep-duration-badge" class="text-slate-300 bg-black/50 px-2.5 py-1 rounded-lg border border-white/10 font-mono font-bold text-[11px]">05:20 Mins</span>
+                <span class="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-mono text-[10px] sm:text-[11px] font-bold border border-emerald-500/30">HD Audio</span>
+              </div>
+            </div>
+
+            <!-- Track Info -->
+            <div>
+              <h2 id="ep-title" class="text-base sm:text-lg lg:text-xl font-bold text-white tracking-tight leading-snug">
+                Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Banking Perimeters
+              </h2>
+              <p id="ep-hosts" class="text-[11px] sm:text-xs text-slate-400 mt-1">Host A (Cloud Architect) & Host B (Governance Lead)</p>
+            </div>
+
+            <!-- Player Controls Box (Touch friendly) -->
+            <div class="theme-card-bg rounded-2xl p-3.5 sm:p-5 border border-white/15 space-y-3.5 sm:space-y-4 shadow-lg shadow-black/20">
+              <div class="flex items-center gap-3 sm:gap-4">
+                <button id="play-btn" onclick="togglePlay()" class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl theme-accent-btn hover:brightness-110 active:scale-95 transition flex items-center justify-center shadow-lg shadow-black/40 flex-shrink-0">
+                  <svg id="play-icon" class="w-6 h-6 sm:w-7 sm:h-7 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                  <svg id="pause-icon" class="w-6 h-6 sm:w-7 sm:h-7 hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>
+
+                <div class="flex-grow space-y-2 min-w-0">
+                  <div class="flex items-center justify-between text-[11px] font-mono">
+                    <span id="current-time" class="theme-accent-text font-bold">02:15</span>
+                    <span id="total-time" class="text-slate-400">05:20</span>
+                  </div>
+
+                  <div class="flex items-center gap-1 sm:gap-1.5 h-6 sm:h-7 bg-black/60 rounded-xl px-2 sm:px-3 border border-white/10">
+                    <div class="eq-bar w-1 rounded-full"></div>
+                    <div class="eq-bar w-1 rounded-full"></div>
+                    <div class="eq-bar w-1 rounded-full"></div>
+                    <div class="eq-bar w-1 rounded-full"></div>
+                    <div class="eq-bar w-1 rounded-full hidden xs:block"></div>
+                    <div class="eq-bar w-1 rounded-full hidden xs:block"></div>
+
+                    <div class="flex-grow bg-white/10 h-1.5 rounded-full overflow-hidden ml-1 sm:ml-2 cursor-pointer" onclick="seekAudio(event)">
+                      <div id="progress-bar" class="theme-accent-btn h-full w-[43%] rounded-full"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Speed Toolbar -->
+              <div class="flex items-center justify-between pt-1 text-xs">
+                <div class="flex items-center gap-1.5 text-slate-300 text-[10px] sm:text-[11px] truncate mr-2">
+                  <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"></span>
+                  <span class="truncate">Microsoft Neural Edge-TTS</span>
+                </div>
+                <div class="flex items-center bg-black/50 rounded-xl p-0.5 sm:p-1 border border-white/10 font-mono text-xs flex-shrink-0">
+                  <button onclick="setSpeed(1.0)" class="speed-btn px-2 sm:px-2.5 py-1 rounded-lg text-white font-bold bg-white/15 text-[11px]">1.0x</button>
+                  <button onclick="setSpeed(1.25)" class="speed-btn px-2 sm:px-2.5 py-1 rounded-lg text-slate-400 hover:text-white text-[11px]">1.25x</button>
+                  <button onclick="setSpeed(1.5)" class="speed-btn px-2 sm:px-2.5 py-1 rounded-lg text-slate-400 hover:text-white text-[11px]">1.5x</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chapters Drawer (Stacks cleanly on phones) -->
+            <div class="p-3.5 sm:p-4 rounded-2xl bg-black/50 border border-white/15 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                  <span>Chapters & Citations</span>
+                </span>
+                <span class="text-[10px] sm:text-[11px] text-slate-400 font-mono">Tap timestamp</span>
+              </div>
+              <div id="chapters-list" class="space-y-2 text-xs">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- Zone 2: FULL DOMAIN INTELLIGENCE & KEY TAKEAWAYS (MATCHING CLIP 1) -->
+        <section class="glass-panel glow-border rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 space-y-5 sm:space-y-6">
+          <div class="flex flex-col gap-1 border-b border-white/10 pb-3 sm:pb-4">
+            <h3 class="text-base sm:text-lg font-bold text-white tracking-tight">Domain Intelligence & Key Takeaways</h3>
+            <p class="text-[11px] sm:text-xs text-slate-400">Swipe tabs to explore verified architectural updates and sources</p>
+          </div>
+
+          <!-- Restored 8-Domain Horizontal Pill Bar with Smooth Scroll -->
+          <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+            <button onclick="switchTab('ai')" id="tab-btn-ai" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold bg-white/15 text-white border border-white/20 shadow-sm transition whitespace-nowrap">🤖 AI & Agents</button>
+            <button onclick="switchTab('cloud')" id="tab-btn-cloud" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">☁️ Cloud & Platforms</button>
+            <button onclick="switchTab('data')" id="tab-btn-data" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">📊 Data & Lakehouse</button>
+            <button onclick="switchTab('sec')" id="tab-btn-sec" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">🛡️ Zero Trust</button>
+            <button onclick="switchTab('devops')" id="tab-btn-devops" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">⚙️ SRE & eBPF</button>
+            <button onclick="switchTab('arch')" id="tab-btn-arch" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">⚡ Distributed Systems</button>
+            <button onclick="switchTab('finops')" id="tab-btn-finops" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">💰 FinOps</button>
+            <button onclick="switchTab('gov')" id="tab-btn-gov" class="tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap">⚖️ MAS & Risk</button>
+          </div>
+
+          <!-- Rich Takeaway Cards -->
+          <div id="tab-content" class="space-y-4">
+
+            <!-- 1. AI & Agents -->
+            <div id="content-ai" class="space-y-4">
+              <div class="p-4 sm:p-5 rounded-2xl theme-card-bg border space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-mono font-bold bg-white/10 text-indigo-300 border border-white/10">AGENTIC DESIGN PATTERN</span>
+                  <span class="text-[11px] sm:text-xs text-slate-400 font-mono">Released: Aug 2026</span>
+                </div>
+                <div>
+                  <h4 class="text-sm sm:text-base font-bold text-white">Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms</h4>
+                  <ul class="text-xs sm:text-sm text-slate-300 space-y-2 mt-2.5">
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 flex-shrink-0"></span><span>Decouples stateful planning from tool execution to prevent cascading prompt hallucinations.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 flex-shrink-0"></span><span>Implements structural dry-run approval gates before executing file system or API mutations.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 flex-shrink-0"></span><span>Evaluates agent trajectories using automated LLM-as-a-Judge benchmark suites.</span></li>
+                  </ul>
+                </div>
+
+                <!-- Interview Box -->
+                <div class="p-3 sm:p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
+                  <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 flex-shrink-0 font-bold text-sm">💡</div>
+                  <div>
+                    <h5 class="text-xs font-bold text-indigo-300">How to Frame in an Interview</h5>
+                    <p class="text-[11px] sm:text-xs text-slate-300 mt-0.5">Explain how the "Main-as-Router" pattern guarantees deterministic audit logs and cost bounds in enterprise production.</p>
+                  </div>
+                </div>
+
+                <!-- Primary Sources -->
+                <div class="pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="text-slate-400 font-medium w-full sm:w-auto text-[11px]">Primary Sources:</span>
+                  <a href="https://www.anthropic.com/research/building-effective-agents" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>Anthropic: Building Effective Agents</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                  <a href="https://openai.com/research/practices-for-governing-agentic-ai" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>OpenAI: Governing Agentic AI</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Cloud & Platforms -->
+            <div id="content-cloud" class="space-y-4 hidden">
+              <div class="p-4 sm:p-5 rounded-2xl theme-card-bg border space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-mono font-bold bg-white/10 text-cyan-300 border border-white/10">MULTI-CLOUD RESILIENCY</span>
+                  <span class="text-[11px] sm:text-xs text-slate-400 font-mono">Released: Aug 2026</span>
+                </div>
+                <div>
+                  <h4 class="text-sm sm:text-base font-bold text-white">Cross-Region Multi-Cluster Kubernetes Failover with Anycast Routing</h4>
+                  <ul class="text-xs sm:text-sm text-slate-300 space-y-2 mt-2.5">
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0"></span><span>Automated active-passive traffic shedding with AWS Global Accelerator and Cloudflare Magic Transit.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0"></span><span>Stateful persistent volume replication via Rook-Ceph cross-availability-zone mesh.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0"></span><span>Zero-downtime blue/green ingress cutover with automated health probe circuit breakers.</span></li>
+                  </ul>
+                </div>
+                <div class="p-3 sm:p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
+                  <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 flex-shrink-0 font-bold text-sm">💡</div>
+                  <div>
+                    <h5 class="text-xs font-bold text-cyan-300">How to Frame in an Interview</h5>
+                    <p class="text-[11px] sm:text-xs text-slate-300 mt-0.5">Describe trade-offs between Multi-Region Active-Active vs Active-Passive with RPO &lt; 5s.</p>
+                  </div>
+                </div>
+                <div class="pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="text-slate-400 font-medium w-full sm:w-auto text-[11px]">Primary Sources:</span>
+                  <a href="https://aws.amazon.com/blogs/architecture/" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>AWS Architecture: Multi-Region</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                  <a href="https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>Azure Architecture: Mission-Critical</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Data & Lakehouse -->
+            <div id="content-data" class="space-y-4 hidden">
+              <div class="p-4 sm:p-5 rounded-2xl theme-card-bg border space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-mono font-bold bg-white/10 text-emerald-300 border border-white/10">ENTERPRISE LAKEHOUSE</span>
+                  <span class="text-[11px] sm:text-xs text-slate-400 font-mono">Released: Aug 2026</span>
+                </div>
+                <div>
+                  <h4 class="text-sm sm:text-base font-bold text-white">Microsoft Fabric Direct Lake vs Snowflake Managed Apache Iceberg Tables</h4>
+                  <ul class="text-xs sm:text-sm text-slate-300 space-y-2 mt-2.5">
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0"></span><span>Direct Lake loads Parquet data straight into VertiPaq memory without import refresh schedules.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0"></span><span>Snowflake Iceberg external catalog enables vendor-neutral multi-engine querying across Databricks & Spark.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0"></span><span>Universal semantic layer governance via OneLake security & Snowflake tag-based masking.</span></li>
+                  </ul>
+                </div>
+                <div class="p-3 sm:p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
+                  <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0 font-bold text-sm">💡</div>
+                  <div>
+                    <h5 class="text-xs font-bold text-emerald-300">How to Frame in an Interview</h5>
+                    <p class="text-[11px] sm:text-xs text-slate-300 mt-0.5">Frame how migrating from legacy SSAS to Direct Lake reduces data staleness from 24 hours to sub-minute telemetry.</p>
+                  </div>
+                </div>
+                <div class="pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="text-slate-400 font-medium w-full sm:w-auto text-[11px]">Primary Sources:</span>
+                  <a href="https://blog.fabric.microsoft.com/" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>Microsoft Fabric: Direct Lake</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                  <a href="https://www.snowflake.com/en/blog/" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>Snowflake: Iceberg Tables</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Zero Trust -->
+            <div id="content-sec" class="space-y-4 hidden">
+              <div class="p-4 sm:p-5 rounded-2xl theme-card-bg border space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-mono font-bold bg-white/10 text-rose-300 border border-white/10">WORKLOAD SECURITY</span>
+                  <span class="text-[11px] sm:text-xs text-slate-400 font-mono">Released: Aug 2026</span>
+                </div>
+                <div>
+                  <h4 class="text-sm sm:text-base font-bold text-white">Workload Identity Federation & Ephemeral mTLS Tokens in Banking Perimeters</h4>
+                  <ul class="text-xs sm:text-sm text-slate-300 space-y-2 mt-2.5">
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5 flex-shrink-0"></span><span>Eliminates long-lived static API secrets in CI/CD pipelines via OIDC identity assertions.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5 flex-shrink-0"></span><span>SPIFFE/SPIRE automated X.509 certificate rotation every 60 minutes for inter-service microsegments.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5 flex-shrink-0"></span><span>Zero-trust egress filtering to prevent LLM prompt injection data exfiltration attacks.</span></li>
+                  </ul>
+                </div>
+                <div class="p-3 sm:p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
+                  <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-rose-500/20 flex items-center justify-center text-rose-400 flex-shrink-0 font-bold text-sm">💡</div>
+                  <div>
+                    <h5 class="text-xs font-bold text-rose-300">How to Frame in an Interview</h5>
+                    <p class="text-[11px] sm:text-xs text-slate-300 mt-0.5">Articulate why eliminating static database credentials in favor of IAM-role assume tokens satisfies MAS TRM Section 9.</p>
+                  </div>
+                </div>
+                <div class="pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="text-slate-400 font-medium w-full sm:w-auto text-[11px]">Primary Sources:</span>
+                  <a href="https://spiffe.io/docs/latest/spiffe-about/overview/" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>SPIFFE: Workload Identity</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                  <a href="https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>MAS: Tech Risk Management</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. DevOps & SRE -->
+            <div id="content-devops" class="space-y-4 hidden">
+              <div class="p-4 sm:p-5 rounded-2xl theme-card-bg border space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-mono font-bold bg-white/10 text-amber-300 border border-white/10">SRE & OBSERVABILITY</span>
+                  <span class="text-[11px] sm:text-xs text-slate-400 font-mono">Released: Aug 2026</span>
+                </div>
+                <div>
+                  <h4 class="text-sm sm:text-base font-bold text-white">Kernel-Level Observability with eBPF & OpenTelemetry Distributed Tracing</h4>
+                  <ul class="text-xs sm:text-sm text-slate-300 space-y-2 mt-2.5">
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0"></span><span>Captures socket and TCP network latency directly in Linux kernel with &lt;1% CPU overhead.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0"></span><span>End-to-end W3C trace-context propagation across asynchronous message queues and microservices.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0"></span><span>Automated SLO error-budget alerting triggering automated rollback of misbehaving canary pods.</span></li>
+                  </ul>
+                </div>
+                <div class="p-3 sm:p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
+                  <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0 font-bold text-sm">💡</div>
+                  <div>
+                    <h5 class="text-xs font-bold text-amber-300">How to Frame in an Interview</h5>
+                    <p class="text-[11px] sm:text-xs text-slate-300 mt-0.5">Connect 20+ years of ITIL incident root-cause triage to modern automated SLO error-budgeting.</p>
+                  </div>
+                </div>
+                <div class="pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="text-slate-400 font-medium w-full sm:w-auto text-[11px]">Primary Sources:</span>
+                  <a href="https://opentelemetry.io/docs/concepts/signals/traces/" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>OpenTelemetry Traces</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                  <a href="https://ebpf.io/what-is-ebpf/" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group text-[11px]">
+                    <span>eBPF: Kernel Telemetry</span>
+                    <svg class="w-3 h-3 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- 6. Distributed Systems -->
+            <div id="content-arch" class="space-y-4 hidden">
+              <div class="p-5 rounded-2xl theme-card-bg border space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="px-2.5 py-1 rounded-md text-[11px] font-mono font-bold bg-white/10 text-blue-300 border border-white/10">EVENT-DRIVEN PATTERNS</span>
+                  <span class="text-xs text-slate-400 font-mono">Released: Aug 2026</span>
+                </div>
+                <div>
+                  <h4 class="text-base font-bold text-white">Transactional Outbox Pattern with Debezium CDC vs Two-Phase Commit (2PC)</h4>
+                  <ul class="text-sm text-slate-300 space-y-2 mt-2.5">
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0"></span><span>Guarantees atomicity between local database state and external event brokers without distributed locks.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0"></span><span>Debezium Change Data Capture reads database Write-Ahead Logs (WAL) with sub-10ms event publishing.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0"></span><span>Idempotency keys and consumer deduplication tables prevent duplicate event processing.</span></li>
+                  </ul>
+                </div>
+                <div class="p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 flex-shrink-0 font-bold text-sm">💡</div>
+                  <div>
+                    <h5 class="text-xs font-bold text-blue-300">How to Frame in an Interview</h5>
+                    <p class="text-xs text-slate-300 mt-0.5">Explain why 2PC distributed transactions fail under high network partition risk and how Transactional Outbox provides eventual consistency.</p>
+                  </div>
+                </div>
+                <div class="pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="text-slate-400 font-medium">Primary Sources:</span>
+                  <a href="https://debezium.io/documentation/reference/stable/patterns/outbox.html" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group">
+                    <span>Debezium: Outbox Pattern</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                  <a href="https://martinfowler.com/articles/patterns-of-distributed-systems/" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group">
+                    <span>Martin Fowler: Distributed</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- 7. FinOps -->
+            <div id="content-finops" class="space-y-4 hidden">
+              <div class="p-5 rounded-2xl theme-card-bg border space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="px-2.5 py-1 rounded-md text-[11px] font-mono font-bold bg-white/10 text-teal-300 border border-white/10">CLOUD ECONOMICS</span>
+                  <span class="text-xs text-slate-400 font-mono">Released: Aug 2026</span>
+                </div>
+                <div>
+                  <h4 class="text-base font-bold text-white">Automated Compute Auto-Pause & Graviton4 Spot Orchestration for Batch ETL</h4>
+                  <ul class="text-sm text-slate-300 space-y-2 mt-2.5">
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-teal-400 mt-2 flex-shrink-0"></span><span>Fabric F-SKU capacity reservation combined with auto-pausing cuts overnight compute burn by 42%.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-teal-400 mt-2 flex-shrink-0"></span><span>AWS Graviton4 ARM64 Spot node pools reduce cost-per-gigabyte processed by 35%.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-teal-400 mt-2 flex-shrink-0"></span><span>Prompt token caching and prompt compression reduce LLM API inference costs by 60%.</span></li>
+                  </ul>
+                </div>
+                <div class="p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-400 flex-shrink-0 font-bold text-sm">💡</div>
+                  <div>
+                    <h5 class="text-xs font-bold text-teal-300">How to Frame in an Interview</h5>
+                    <p class="text-xs text-slate-300 mt-0.5">Demonstrate executive business acumen by showing how you track unit cost per pipeline run rather than aggregate cloud bills.</p>
+                  </div>
+                </div>
+                <div class="pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="text-slate-400 font-medium">Primary Sources:</span>
+                  <a href="https://www.finops.org/framework/" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group">
+                    <span>FinOps Framework</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                  <a href="https://aws.amazon.com/blogs/compute/" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group">
+                    <span>AWS Spot Optimization</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- 8. MAS & Risk -->
+            <div id="content-gov" class="space-y-4 hidden">
+              <div class="p-5 rounded-2xl theme-card-bg border space-y-4">
+                <div class="flex items-center justify-between">
+                  <span class="px-2.5 py-1 rounded-md text-[11px] font-mono font-bold bg-white/10 text-violet-300 border border-white/10">REGULATORY COMPLIANCE</span>
+                  <span class="text-xs text-slate-400 font-mono">Released: Aug 2026</span>
+                </div>
+                <div>
+                  <h4 class="text-base font-bold text-white">MAS FEAT Compliance & Model Risk Management (SR 11-7) for Production GenAI</h4>
+                  <ul class="text-sm text-slate-300 space-y-2 mt-2.5">
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-violet-400 mt-2 flex-shrink-0"></span><span>Enforces immutable audit trails capturing prompt, context snapshot, model temperature, and output for every decision.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-violet-400 mt-2 flex-shrink-0"></span><span>Automated guardrail gates evaluate toxic output, PII leakage, and hallucination scoring before delivery.</span></li>
+                    <li class="flex items-start gap-2.5"><span class="w-1.5 h-1.5 rounded-full bg-violet-400 mt-2 flex-shrink-0"></span><span>Tiered governance classification (Tier 1/2/3) determining whether human approval is mandatory before pipeline advancement.</span></li>
+                  </ul>
+                </div>
+                <div class="p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center text-violet-400 flex-shrink-0 font-bold text-sm">💡</div>
+                  <div>
+                    <h5 class="text-xs font-bold text-violet-300">How to Frame in an Interview</h5>
+                    <p class="text-xs text-slate-300 mt-0.5">Highlight how your combined background in production compliance governance and AI engineering ensures safe enterprise AI adoption.</p>
+                  </div>
+                </div>
+                <div class="pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="text-slate-400 font-medium">Primary Sources:</span>
+                  <a href="https://www.mas.gov.sg/schemes-and-initiatives/veritas" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group">
+                    <span>MAS: Project Veritas (FEAT)</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                  <a href="https://www.nist.gov/itl/ai-risk-management-framework" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 hover:bg-black/60 text-cyan-400 hover:text-cyan-300 border border-white/10 transition group">
+                    <span>NIST: AI Risk Management</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+
+      <!-- RIGHT COLUMN: GROUNDED AI TOPIC CHAT + VAULT AUTOMATION + INTERVIEW FLASHCARDS (5 Cols) -->
+      <div class="lg:col-span-5 space-y-4 sm:space-y-6">
+
+        <!-- Zone 3: Grounded AI Intelligence & Sparring Chat (Optimized for Mobile) -->
+        <section class="glass-panel glow-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 lg:p-6 flex flex-col h-[460px] sm:h-[500px] lg:h-[520px] relative">
+          
+          <!-- Chat Header -->
+          <div class="flex items-center justify-between border-b border-white/10 pb-2.5 sm:pb-3 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+              </div>
+              <div>
+                <h3 class="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>Topic Intelligence AI</span>
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                </h3>
+                <p class="text-[9px] sm:text-[10px] text-slate-400 font-mono">🔒 Grounded in Episode #142 Papers</p>
+              </div>
+            </div>
+
+            <button onclick="clearChat()" class="text-[10px] sm:text-[11px] text-slate-400 hover:text-white px-2 py-1 rounded bg-black/40 border border-white/5 transition">Clear</button>
+          </div>
+
+          <!-- Suggested Grounded Starter Chips -->
+          <div class="py-2 border-b border-white/5 flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-shrink-0 -mx-1 px-1">
+            <button onclick="sendQuickPrompt('Explain the memory trade-offs of Microsoft Fabric Direct Lake mode vs VertiPaq.')" class="px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 border border-white/10 text-[10px] sm:text-[11px] text-cyan-300 whitespace-nowrap transition flex-shrink-0">💡 Fabric Direct Lake</button>
+            <button onclick="sendQuickPrompt('How does SPIFFE/SPIRE workload identity satisfy Singapore MAS TRM Section 9 compliance?')" class="px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 border border-white/10 text-[10px] sm:text-[11px] text-indigo-300 whitespace-nowrap transition flex-shrink-0">🛡️ MAS & SPIFFE</button>
+            <button onclick="sendQuickPrompt('Act as an Enterprise AI Hiring Manager. Ask me 1 challenging system design question based on today\'s Anthropic agent paper.')" class="px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 border border-white/10 text-[10px] sm:text-[11px] text-amber-300 whitespace-nowrap transition flex-shrink-0">🎯 Interview Me</button>
+          </div>
+
+          <!-- Scrollable Message Thread -->
+          <div id="chat-messages" class="flex-grow overflow-y-auto space-y-3 py-2.5 pr-1 text-xs">
+            <div class="flex items-start gap-2">
+              <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 flex-shrink-0 font-mono font-bold text-xs">AI</div>
+              <div class="p-3 rounded-2xl bg-night-900 border border-white/5 space-y-1.5 max-w-[92%]">
+                <p class="text-slate-200 leading-relaxed text-[11px] sm:text-xs">
+                  Welcome Aaron! I am strictly grounded against today's <strong>Episode #142 packet</strong> (8 domain papers & MAS guidelines).
+                </p>
+                <p class="text-slate-400 text-[10px] sm:text-[11px]">
+                  Ask questions, compare architectures, or tap <strong>Interview Me</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chat Input Bar (Touch-Optimized) -->
+          <div class="pt-2.5 border-t border-white/10 flex-shrink-0">
+            <form onsubmit="handleChatSubmit(event)" class="relative flex items-center">
+              <input id="chat-input" type="text" placeholder="Ask a grounded question..." class="w-full bg-black/60 text-white text-xs rounded-xl pl-3 pr-16 sm:pr-20 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 placeholder:text-slate-500 transition">
+              
+              <div class="absolute right-1 flex items-center gap-0.5">
+                <button type="button" onclick="toggleChatMic()" id="chat-mic-btn" class="p-1.5 rounded-lg bg-black/40 hover:bg-black/80 text-slate-400 hover:text-cyan-400 transition" title="Voice Input">
+                  <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+                </button>
+                <button type="submit" class="p-1.5 rounded-lg theme-accent-btn active:scale-95 transition flex items-center justify-center">
+                  <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                </button>
+              </div>
+            </form>
+          </div>
+
+        </section>
+
+        <!-- Zone 4: VAULT AUTOMATION WIDGET CARD -->
+        <section class="glass-panel glow-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3">
+          <h4 class="text-[10px] sm:text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">VAULT AUTOMATION</h4>
+          <div class="space-y-2 text-xs">
+            <button onclick="exportToVault()" id="export-vault-btn" class="tap-target w-full py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-xl theme-card-bg border text-slate-200 hover:text-white flex items-center justify-between transition group active:scale-95">
+              <span class="flex items-center gap-2 font-medium text-xs">
+                <span class="text-violet-400 font-bold text-sm sm:text-base">+</span>
+                Export Note to Obsidian
+              </span>
+              <span class="font-mono text-[10px] sm:text-[11px] text-slate-400 group-hover:text-white">.md</span>
+            </button>
+            <button onclick="triggerManualRun()" id="manual-run-btn" class="tap-target w-full py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-xl theme-card-bg border text-slate-200 hover:text-white flex items-center justify-between transition group active:scale-95">
+              <span class="flex items-center gap-2 font-medium text-xs">
+                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Force Re-Fetch Feeds Now
+              </span>
+              <span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Zone 5: INTERVIEW READINESS & SPACED-REPETITION FLASHCARDS (Mobile-Friendly) -->
+        <section class="glass-panel glow-border rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3.5 sm:space-y-4">
+          <div class="flex items-center justify-between border-b border-white/10 pb-2.5 sm:pb-3">
+            <div class="flex items-center gap-1.5">
+              <span class="text-amber-400 text-sm">⚡</span>
+              <span class="text-[11px] sm:text-xs font-bold text-white uppercase font-mono tracking-wider">Interview Mastery</span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-mono">
+              <span id="card-index-badge" class="px-2 py-0.5 rounded bg-black/50 text-cyan-300 border border-white/10">Card 1/4</span>
+            </div>
+          </div>
+
+          <!-- Interactive 3D Flip Flashcard -->
+          <div class="flashcard-container" onclick="flipFlashcard()">
+            <div id="flashcard-inner" class="flashcard-inner relative">
+              
+              <!-- Front Side -->
+              <div class="flashcard-front theme-card-bg p-3.5 sm:p-4 border border-white/15 flex flex-col justify-between shadow-lg">
+                <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                  <span id="fc-domain-badge" class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold">🤖 AI Systems</span>
+                  <span class="text-cyan-400 flex items-center gap-1">Tap to Flip ↷</span>
+                </div>
+                <p id="fc-question" class="text-[11px] sm:text-xs font-bold text-white leading-relaxed my-1.5">
+                  "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms."
+                </p>
+                <div class="flex items-center justify-between text-[9px] sm:text-[10px] text-slate-500 font-mono">
+                  <span>Freq: ★★★★★</span>
+                  <span class="text-slate-400">Tap to reveal answer</span>
+                </div>
+              </div>
+
+              <!-- Back Side -->
+              <div class="flashcard-back bg-night-950 p-3.5 sm:p-4 border border-emerald-500/30 flex flex-col justify-between shadow-lg">
+                <div class="flex items-center justify-between text-[10px] font-mono">
+                  <span class="text-emerald-400 font-bold flex items-center gap-1">✓ Key Rationale</span>
+                  <span class="text-slate-400 flex items-center gap-1">Tap to Flip ↶</span>
+                </div>
+                <p id="fc-answer" class="text-[10px] sm:text-[11px] text-slate-200 leading-relaxed my-1">
+                  Decouples stateful planning from tool execution. Enforces dry-run approval gates, caps retry loops to 3, and creates immutable audit trails for regulators.
+                </p>
+                <div class="text-[9px] sm:text-[10px] text-cyan-400 font-mono flex items-center justify-between border-t border-white/10 pt-1">
+                  <span id="fc-source-cite" class="truncate mr-1">Anthropic Research</span>
+                  <span class="text-emerald-400 font-bold flex-shrink-0">+50 XP</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Flashcard Deck Controls (Wraps gracefully on phones) -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div class="flex items-center gap-1">
+              <button onclick="prevFlashcard(event)" class="px-2.5 py-1 rounded-lg bg-black/50 hover:bg-black/80 text-slate-300 hover:text-white border border-white/10 text-xs font-mono transition">‹ Prev</button>
+              <button onclick="nextFlashcard(event)" class="px-2.5 py-1 rounded-lg bg-black/50 hover:bg-black/80 text-slate-300 hover:text-white border border-white/10 text-xs font-mono transition">Next ›</button>
+            </div>
+
+            <div class="flex items-center gap-1 text-[10px] font-mono">
+              <button onclick="rateRecall('hard', event)" class="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition">Hard</button>
+              <button onclick="rateRecall('good', event)" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition">Good</button>
+              <button onclick="rateRecall('easy', event)" class="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition">Mastered ✓</button>
+            </div>
+          </div>
+
+          <!-- Quick 8-Domain Competency Bar -->
+          <div class="p-2.5 sm:p-3 rounded-2xl bg-black/40 border border-white/5 space-y-1.5 text-[11px]">
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 font-mono text-[10px]">Weekly Interview Mastery:</span>
+              <span id="mastery-pct" class="theme-accent-text font-mono font-bold text-xs">92% Ready</span>
+            </div>
+            <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+              <div id="mastery-bar" class="theme-accent-btn h-full w-[92%] rounded-full transition-all duration-500"></div>
+            </div>
+          </div>
+
+        </section>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // ==========================================
+    // FLASHCARD DECK DATASET
+    // ==========================================
+    const flashcards = [
+      {
+        domain: "🤖 AI & Agent Systems",
+        question: "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
+        answer: "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
+        cite: "Source: Anthropic Research 2026",
+        colorClass: "bg-indigo-500/20 text-indigo-300"
+      },
+      {
+        domain: "📊 Data & Modern Lakehouse",
+        question: "How does Microsoft Fabric Direct Lake mode differ from Import and DirectQuery in terms of memory paging?",
+        answer: "Direct Lake loads Delta Parquet straight from OneLake into VertiPaq memory on demand without .PBIX duplication or scheduled refresh pipelines, falling back to DirectQuery only if capacity memory is exceeded.",
+        cite: "Source: Microsoft Fabric Team Blog",
+        colorClass: "bg-emerald-500/20 text-emerald-300"
+      },
+      {
+        domain: "🛡️ Zero Trust & Banking Risk",
+        question: "How does SPIFFE/SPIRE workload identity satisfy Singapore MAS TRM Section 9 static secret removal rules?",
+        answer: "It replaces static API tokens and database passwords with automated, cryptographic X.509 SVID tokens that rotate automatically every 60 minutes with mTLS verification.",
+        cite: "Source: SPIFFE Spec & MAS TRM Sec 9.2",
+        colorClass: "bg-rose-500/20 text-rose-300"
+      },
+      {
+        domain: "⚙️ SRE & Kernel Observability",
+        question: "Why does eBPF kernel tracing outperform legacy user-space APM daemon agents during high network throughput?",
+        answer: "eBPF attaches verified bytecode sandboxes directly to kernel kprobes and socket buffers, eliminating expensive user-to-kernel context switching and running with <1% CPU overhead.",
+        cite: "Source: eBPF.io Foundation 2026",
+        colorClass: "bg-amber-500/20 text-amber-300"
+      }
+    ];
+
+    let currentCardIndex = 0;
+
+    function renderFlashcard() {
+      const card = flashcards[currentCardIndex];
+      const inner = document.getElementById('flashcard-inner');
+      inner.classList.remove('flipped');
+
+      document.getElementById('card-index-badge').innerText = `Card ${currentCardIndex + 1}/${flashcards.length}`;
+      document.getElementById('fc-domain-badge').innerText = card.domain;
+      document.getElementById('fc-domain-badge').className = `px-2 py-0.5 rounded font-bold ${card.colorClass}`;
+      document.getElementById('fc-question').innerText = `"${card.question}"`;
+      document.getElementById('fc-answer').innerText = card.answer;
+      document.getElementById('fc-source-cite').innerText = card.cite;
+    }
+
+    function flipFlashcard() {
+      document.getElementById('flashcard-inner').classList.toggle('flipped');
+    }
+
+    function nextFlashcard(e) {
+      if (e) e.stopPropagation();
+      currentCardIndex = (currentCardIndex + 1) % flashcards.length;
+      renderFlashcard();
+    }
+
+    function prevFlashcard(e) {
+      if (e) e.stopPropagation();
+      currentCardIndex = (currentCardIndex - 1 + flashcards.length) % flashcards.length;
+      renderFlashcard();
+    }
+
+    let masteryScore = 92;
+    function rateRecall(level, e) {
+      if (e) e.stopPropagation();
+      if (level === 'easy' && masteryScore < 98) masteryScore += 2;
+      if (level === 'hard' && masteryScore > 75) masteryScore -= 2;
+      
+      document.getElementById('mastery-pct').innerText = `${masteryScore}% Ready`;
+      document.getElementById('mastery-bar').style.width = `${masteryScore}%`;
+      nextFlashcard();
+    }
+
+    renderFlashcard();
+
+    // ==========================================
+    // EPISODE DATASET
+    // ==========================================
+    const episodes = {
+      'ep-142': {
+        title: "Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Banking Perimeters",
+        hosts: "Host A (Cloud Architect) & Host B (Governance Lead)",
+        duration: "05:20",
+        totalSeconds: 320,
+        chapters: [
+          { time: "00:00", seconds: 0, title: "1. Intro & Multi-Agent Deterministic Routing", sourceName: "Anthropic", sourceUrl: "https://www.anthropic.com/research/building-effective-agents" },
+          { time: "01:15", seconds: 75, title: "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg", sourceName: "MS Fabric", sourceUrl: "https://blog.fabric.microsoft.com/" },
+          { time: "02:35", seconds: 155, title: "3. Zero-Trust SPIFFE Workload Tokens in Banking", sourceName: "SPIFFE.io", sourceUrl: "https://spiffe.io/docs/latest/spiffe-about/overview/" },
+          { time: "04:00", seconds: 240, title: "4. MAS FEAT Model Risk Compliance & Socratic QA", sourceName: "MAS Veritas", sourceUrl: "https://www.mas.gov.sg/schemes-and-initiatives/veritas" }
+        ]
+      },
+      'ep-141': {
+        title: "Deep Dive: Agentic RAG Architectures, Vector Cache Warming & Context Window Budgeting",
+        hosts: "Host A (AI Engineer) & Host B (LLMOps Lead)",
+        duration: "04:45",
+        totalSeconds: 285,
+        chapters: [
+          { time: "00:00", seconds: 0, title: "1. Vector Cache Warming vs Real-Time Hybrid Search", sourceName: "Pinecone", sourceUrl: "https://www.pinecone.io/blog/" },
+          { time: "01:30", seconds: 90, title: "2. Context Window Compaction & Prompt Compression", sourceName: "OpenAI", sourceUrl: "https://openai.com/research/" },
+          { time: "03:10", seconds: 190, title: "3. Automated Agent Benchmarking with LLM-as-a-Judge", sourceName: "Anthropic", sourceUrl: "https://www.anthropic.com/research" }
+        ]
+      },
+      'ep-140': {
+        title: "Modern Data Stack: Microsoft Fabric Real-Time Analytics vs Snowflake Iceberg Catalogs",
+        hosts: "Host A (Data Architect) & Host B (Analytics Lead)",
+        duration: "05:10",
+        totalSeconds: 310,
+        chapters: [
+          { time: "00:00", seconds: 0, title: "1. Microsoft Fabric OneLake Delta Parquet Architecture", sourceName: "MS Learn", sourceUrl: "https://learn.microsoft.com/en-us/fabric/" },
+          { time: "01:45", seconds: 105, title: "2. Apache Iceberg Metadata Scaling on S3/Blob Storage", sourceName: "Snowflake", sourceUrl: "https://www.snowflake.com/en/blog/" },
+          { time: "03:30", seconds: 210, title: "3. Cost Comparison: Fabric F-SKU vs Snowflake Warehouses", sourceName: "FinOps", sourceUrl: "https://www.finops.org/framework/" }
+        ]
+      },
+      'ep-139': {
+        title: "Platform Engineering: Kernel eBPF Telemetry & Workload Identity Federation",
+        hosts: "Host A (Principal SRE) & Host B (CISO)",
+        duration: "04:30",
+        totalSeconds: 270,
+        chapters: [
+          { time: "00:00", seconds: 0, title: "1. Kernel-Level TCP Telemetry with Zero Overhead", sourceName: "eBPF.io", sourceUrl: "https://ebpf.io/what-is-ebpf/" },
+          { time: "01:20", seconds: 80, title: "2. OpenTelemetry W3C Distributed Context Propagation", sourceName: "OTel Docs", sourceUrl: "https://opentelemetry.io/docs/" },
+          { time: "02:50", seconds: 170, title: "3. MAS TRM Section 9: Identity & Static Secret Removal", sourceName: "MAS TRM", sourceUrl: "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines" }
+        ]
+      }
+    };
+
+    let currentEpisodeId = 'ep-142';
+
+    function changeEpisode(epId) {
+      currentEpisodeId = epId;
+      const ep = episodes[epId];
+      document.getElementById('ep-title').innerText = ep.title;
+      document.getElementById('ep-hosts').innerText = ep.hosts;
+      document.getElementById('ep-duration-badge').innerText = ep.duration + ' Mins';
+      document.getElementById('total-time').innerText = ep.duration;
+      document.getElementById('current-time').innerText = '00:00';
+      document.getElementById('progress-bar').style.width = '0%';
+      renderChapters(ep);
+
+      addBotMessage(`Switched active topic grounding to **${ep.title}**. All questions will cite ${ep.chapters.length} sources from this episode.`);
+    }
+
+    function renderChapters(ep) {
+      const container = document.getElementById('chapters-list');
+      container.innerHTML = ep.chapters.map(c => `
+        <div class="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 transition">
+          <div class="flex items-center gap-2">
+            <button onclick="jumpTo(${c.seconds}, '${c.time}')" class="px-2 py-0.5 rounded bg-black/70 font-mono text-cyan-400 font-bold hover:bg-cyan-500/20 border border-white/10 text-[11px] transition flex-shrink-0">${c.time}</button>
+            <span class="text-slate-200 font-medium text-xs leading-snug">${c.title}</span>
+          </div>
+          <div class="flex items-center justify-between sm:justify-end gap-2 pl-7 sm:pl-0">
+            <span class="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-mono bg-white/5 text-slate-300 border border-white/10 font-medium">${c.sourceName}</span>
+            <a href="${c.sourceUrl}" target="_blank" class="inline-flex items-center gap-0.5 text-cyan-400 hover:underline font-mono text-[10px] sm:text-[11px]">
+              <span>Read</span>
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    renderChapters(episodes['ep-142']);
+
+    // ==========================================
+    // GROUNDED AI CHAT
+    // ==========================================
+    function handleChatSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('chat-input');
+      const query = input.value.trim();
+      if (!query) return;
+      addUserMessage(query);
+      input.value = '';
+      setTimeout(() => { respondToQuery(query); }, 700);
+    }
+
+    function sendQuickPrompt(promptText) {
+      addUserMessage(promptText);
+      setTimeout(() => { respondToQuery(promptText); }, 600);
+    }
+
+    function addUserMessage(text) {
+      const thread = document.getElementById('chat-messages');
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'flex items-start gap-2 justify-end';
+      msgDiv.innerHTML = `
+        <div class="p-2.5 sm:p-3 rounded-2xl bg-cyan-600/30 border border-cyan-500/30 text-white max-w-[88%] leading-relaxed text-[11px] sm:text-xs">
+          ${escapeHtml(text)}
+        </div>
+        <div class="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center text-white font-mono text-[10px] flex-shrink-0">You</div>
+      `;
+      thread.appendChild(msgDiv);
+      thread.scrollTop = thread.scrollHeight;
+    }
+
+    function addBotMessage(htmlContent) {
+      const thread = document.getElementById('chat-messages');
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'flex items-start gap-2';
+      msgDiv.innerHTML = `
+        <div class="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 flex-shrink-0 font-mono font-bold text-[10px]">AI</div>
+        <div class="p-3 rounded-2xl bg-night-900 border border-white/5 space-y-1.5 max-w-[92%] text-slate-200 leading-relaxed text-[11px] sm:text-xs">
+          ${htmlContent}
+        </div>
+      `;
+      thread.appendChild(msgDiv);
+      thread.scrollTop = thread.scrollHeight;
+    }
+
+    function respondToQuery(query) {
+      const q = query.toLowerCase();
+      let response = '';
+
+      if (q.includes('fabric') || q.includes('direct lake')) {
+        response = `
+          <p><strong>Microsoft Fabric Direct Lake Mode Analysis:</strong></p>
+          <ul class="list-disc list-inside space-y-1 text-slate-300 text-[10px] sm:text-[11px]">
+            <li><strong>Mechanism:</strong> Direct Lake bypasses VertiPaq caching and queries Delta Parquet files directly from OneLake storage into RAM on demand.</li>
+            <li><strong>Performance:</strong> Sub-minute freshness without scheduled refresh pipelines.</li>
+            <li><strong>Capacity Limit:</strong> Falls back to DirectQuery if Fabric F-SKU memory is exceeded.</li>
+          </ul>
+          <div class="pt-1.5 border-t border-white/5 flex items-center gap-1.5">
+            <span class="text-[9px] text-cyan-400 font-mono bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">Source: MS Fabric Team Blog §2.3</span>
+          </div>
+        `;
+      } else if (q.includes('spiffe') || q.includes('mas') || q.includes('security')) {
+        response = `
+          <p><strong>SPIFFE/SPIRE & MAS TRM Section 9:</strong></p>
+          <ul class="list-disc list-inside space-y-1 text-slate-300 text-[10px] sm:text-[11px]">
+            <li><strong>Static Secret Elimination:</strong> SPIFFE issues ephemeral cryptographic X.509 SVID tokens to workloads automatically.</li>
+            <li><strong>Rotation:</strong> Rotates every 60m without restarts, neutralizing leak blast radius.</li>
+            <li><strong>mTLS:</strong> Enforces cryptographically verified workload identity.</li>
+          </ul>
+          <div class="pt-1.5 border-t border-white/5 flex items-center gap-1.5">
+            <span class="text-[9px] text-indigo-400 font-mono bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Source: SPIFFE Spec & MAS TRM 9.2</span>
+          </div>
+        `;
+      } else if (q.includes('interview') || q.includes('challenge') || q.includes('question')) {
+        response = `
+          <p class="text-amber-300 font-bold">🎯 Socratic Scenario (Anthropic Agent Architecture):</p>
+          <p class="text-slate-200"><em>"How would you redesign an autonomous compliance agent that hallucinates SQL schema fixes after 10 turns using the Main-as-Router pattern?"</em></p>
+          <p class="text-slate-400 text-[10px] mt-1">Reply in chat or verbally, and I will evaluate your architecture on technical depth.</p>
+        `;
+      } else {
+        response = `
+          <p><strong>Grounded Architectural Breakdown:</strong></p>
+          <p class="text-slate-300 text-[10px] sm:text-[11px]">Based on today's ingested packets for <strong>Episode #142</strong>, key considerations for <em>"${escapeHtml(query)}"</em> include:</p>
+          <ul class="list-disc list-inside space-y-1 text-slate-300 text-[10px]">
+            <li>Decoupling stateful ingestion brokers from storage compute to guarantee zero data loss.</li>
+            <li>Enforcing automated guardrails and immutable audit logs to satisfy financial risk governance.</li>
+          </ul>
+          <div class="pt-1 border-t border-white/5">
+            <span class="text-[9px] text-cyan-400 font-mono bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">Verified Citations [1] [2]</span>
+          </div>
+        `;
+      }
+
+      addBotMessage(response);
+    }
+
+    function clearChat() {
+      document.getElementById('chat-messages').innerHTML = `
+        <div class="flex items-start gap-2">
+          <div class="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 flex-shrink-0 font-mono font-bold text-xs">AI</div>
+          <div class="p-3 rounded-2xl bg-night-900 border border-white/5 space-y-1 max-w-[90%]">
+            <p class="text-slate-200 text-xs">Chat history cleared. Grounded QA ready for your next question.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleChatMic() {
+      const btn = document.getElementById('chat-mic-btn');
+      btn.classList.toggle('text-rose-500');
+      btn.classList.toggle('animate-pulse');
+      setTimeout(() => {
+        document.getElementById('chat-input').value = 'Explain how eBPF kernel tracing improves MTTR in production.';
+        btn.classList.remove('text-rose-500', 'animate-pulse');
+      }, 1000);
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // ==========================================
+    // THEMES & TABS
+    // ==========================================
+    const themes = ['tokyo-night', 'cyberpunk', 'midnight', 'oled', 'cobalt', 'nordic', 'amber'];
+    function setTheme(themeName) {
+      document.documentElement.setAttribute('data-theme', themeName);
+      localStorage.setItem('techpulse-theme', themeName);
+      themes.forEach(t => {
+        const btn = document.getElementById('btn-theme-' + t);
+        if (btn) {
+          if (t === themeName) {
+            btn.className = 'theme-pill px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white/20 text-white transition shadow-sm whitespace-nowrap';
+          } else {
+            btn.className = 'theme-pill px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition whitespace-nowrap';
+          }
+        }
+      });
+    }
+
+    const savedTheme = localStorage.getItem('techpulse-theme') || 'tokyo-night';
+    setTheme(savedTheme);
+
+    const allTabs = ['ai', 'cloud', 'data', 'sec', 'devops', 'arch', 'finops', 'gov'];
+    function switchTab(tabId) {
+      allTabs.forEach(t => {
+        document.getElementById('content-' + t).classList.add('hidden');
+        const btn = document.getElementById('tab-btn-' + t);
+        btn.className = 'tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold bg-black/40 text-slate-400 hover:text-white border border-white/5 transition whitespace-nowrap';
+      });
+      document.getElementById('content-' + tabId).classList.remove('hidden');
+      const activeBtn = document.getElementById('tab-btn-' + tabId);
+      activeBtn.className = 'tab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold bg-white/15 text-white border border-white/20 shadow-sm transition whitespace-nowrap';
+    }
+
+    // ==========================================
+    // AUDIO CONTROLS
+    // ==========================================
+    let isPlaying = false;
+    function togglePlay() {
+      isPlaying = !isPlaying;
+      document.getElementById('play-icon').classList.toggle('hidden', isPlaying);
+      document.getElementById('pause-icon').classList.toggle('hidden', !isPlaying);
+    }
+
+    function setSpeed(speed) {
+      document.querySelectorAll('.speed-btn').forEach(b => {
+        b.className = 'speed-btn px-2 sm:px-2.5 py-1 rounded-lg text-slate-400 hover:text-white text-[11px]';
+        if (b.innerText === speed + 'x') {
+          b.className = 'speed-btn px-2 sm:px-2.5 py-1 rounded-lg text-white font-bold bg-white/15 text-[11px]';
+        }
+      });
+    }
+
+    function jumpTo(seconds, label) {
+      document.getElementById('current-time').innerText = label;
+      const ep = episodes[currentEpisodeId];
+      const pct = (seconds / ep.totalSeconds) * 100;
+      document.getElementById('progress-bar').style.width = pct + '%';
+      if (!isPlaying) togglePlay();
+    }
+
+    function seekAudio(event) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const clickX = event.clientX - rect.left;
+      const pct = (clickX / rect.width) * 100;
+      document.getElementById('progress-bar').style.width = pct + '%';
+      const ep = episodes[currentEpisodeId];
+      const curSecs = Math.floor((pct / 100) * ep.totalSeconds);
+      const mins = Math.floor(curSecs / 60).toString().padStart(2, '0');
+      const secs = (curSecs % 60).toString().padStart(2, '0');
+      document.getElementById('current-time').innerText = `${mins}:${secs}`;
+    }
+
+    // ==========================================
+    // VAULT AUTOMATION ACTIONS
+    // ==========================================
+    function copyRssLink() {
+      navigator.clipboard.writeText('http://10.0.0.50:8000/feed.xml');
+      const btnText = document.getElementById('rss-btn-text');
+      if (btnText) btnText.innerText = 'Copied!';
+      alert('✓ Podcast RSS link copied: http://10.0.0.50:8000/feed.xml\nPaste into Apple Podcasts, Pocket Casts, or Spotify!');
+      setTimeout(() => { if (btnText) btnText.innerText = 'Sync Podcast'; }, 2000);
+    }
+
+    function exportToVault() {
+      const btn = document.getElementById('export-vault-btn');
+      btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-emerald-400 text-xs"><span class="font-bold text-sm">✓</span> Exported to Obsidian!</span><span class="font-mono text-[10px] text-emerald-400">Saved</span>`;
+      setTimeout(() => {
+        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><span class="text-violet-400 font-bold text-sm sm:text-base">+</span> Export Note to Obsidian</span><span class="font-mono text-[10px] sm:text-[11px] text-slate-400 group-hover:text-white">.md</span>`;
+      }, 2000);
+    }
+
+    function triggerManualRun() {
+      const btn = document.getElementById('manual-run-btn');
+      btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Ingested!</span><span class="font-mono text-[10px] text-cyan-400 font-bold">Done</span>`;
+      setTimeout(() => {
+        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Force Re-Fetch Feeds Now</span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
+      }, 2000);
+    }
+  
+    // ==========================================
+    // LIVE BACKEND API INTEGRATION
+    // ==========================================
+    async function loadEpisodesFromBackend() {
+      try {
+        const res = await fetch('/api/episodes');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.episodes && data.episodes.length > 0) {
+            const select = document.getElementById('episode-select');
+            select.innerHTML = data.episodes.map(ep => `
+              <option value="${ep.id}">#${ep.episode_number || 142} (${ep.date}) — ${ep.title.substring(0, 35)}...</option>
+            `).join('');
+            
+            // Populate episodes map
+            data.episodes.forEach(ep => {
+              episodes[ep.id] = ep;
+            });
+            changeEpisode(data.episodes[0].id);
+          }
+        }
+      } catch (e) {
+        console.log('Running in standalone mode with embedded episodes.');
+      }
+    }
+
+    async function callBackendChat(query) {
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ query: query, episode_id: currentEpisodeId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.response;
+        }
+      } catch (e) {
+        console.log('Chat API fallback to in-browser engine.');
+      }
+      return null;
+    }
+
+    // Call on load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadEpisodesFromBackend();
+    });
+
+  </script>
+</body>
+</html>

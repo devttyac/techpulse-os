@@ -1,0 +1,73 @@
+{
+  "id": "ep-142",
+  "episode_number": 142,
+  "date": "Aug 26, 2026",
+  "title": "Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Banking Perimeters",
+  "summary": "Today we analyze Anthropic's deterministic agent routing patterns, compare Microsoft Fabric Direct Lake against Snowflake Iceberg catalogs, review SPIFFE workload identity in banking perimeters, and examine MAS FEAT compliance for production LLMs.",
+  "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal SRE & Governance Lead)",
+  "duration": "05:20",
+  "total_seconds": 320,
+  "audio_url": "/audio/ep-142.mp3",
+  "chapters": [
+    {
+      "time": "00:00",
+      "seconds": 0,
+      "title": "1. Intro & Multi-Agent Deterministic Routing",
+      "source_name": "Anthropic",
+      "source_url": "https://www.anthropic.com/research/building-effective-agents"
+    },
+    {
+      "time": "01:15",
+      "seconds": 75,
+      "title": "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg",
+      "source_name": "MS Fabric",
+      "source_url": "https://blog.fabric.microsoft.com/"
+    },
+    {
+      "time": "02:35",
+      "seconds": 155,
+      "title": "3. Zero-Trust SPIFFE Workload Tokens in Banking",
+      "source_name": "SPIFFE.io",
+      "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"
+    },
+    {
+      "time": "04:00",
+      "seconds": 240,
+      "title": "4. MAS FEAT Model Risk Compliance & Socratic QA",
+      "source_name": "MAS Veritas",
+      "source_url": "https://www.mas.gov.sg/schemes-and-initiatives/veritas"
+    }
+  ],
+  "takeaways": {
+    "ai": {
+      "badge": "AGENTIC DESIGN PATTERN",
+      "release_date": "Aug 2026",
+      "title": "Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms",
+      "bullets": [
+        "Decouples stateful planning from tool execution to prevent cascading prompt hallucinations.",
+        "Implements structural dry-run approval gates before executing file system or API mutations.",
+        "Evaluates agent trajectories using automated LLM-as-a-Judge benchmark suites."
+      ],
+      "interview_framing": "Explain how the 'Main-as-Router' pattern guarantees deterministic audit logs and cost bounds in enterprise production.",
+      "sources": [
+        {
+          "title": "Anthropic: Building Effective Agents",
+          "url": "https://www.anthropic.com/research/building-effective-agents"
+        },
+        {
+          "title": "OpenAI: Governing Agentic AI",
+          "url": "https://openai.com/research/practices-for-governing-agentic-ai"
+        }
+      ]
+    }
+  },
+  "flashcards": [
+    {
+      "domain": "\ud83e\udd16 AI & Agent Systems",
+      "question": "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
+      "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
+      "cite": "Source: Anthropic Research 2026",
+      "color_class": "bg-indigo-500/20 text-indigo-300"
+    }
+  ]
+}
