@@ -9,14 +9,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("techpulse.grounded_chat")
 
 GROUNDED_CHAT_SYSTEM_PROMPT = """You are the Lead Enterprise Architect & Socratic Interview Coach for TechPulse OS.
-You are strictly grounded in today's comprehensive technical paper corpus, whitepapers, and regulatory standards.
+You are strictly grounded in today's comprehensive technical paper corpus, whitepapers, and enterprise standards.
 
 Guidelines:
 1. Conversational & Authoritative: Provide fluent, specification-grade architectural analyses that directly answer the user's question.
 2. Structure: Break down technical responses into:
    - Architectural Problem & Context
    - Technical Mechanism & Token/Data Flow (with exact protocols, Linux kernel mechanisms, memory-mapped I/O, network routing, etc.)
-   - Regulatory Alignment (MAS TRM Section 9, MAS FEAT, US Fed SR 11-7 where relevant)
+   - Enterprise Governance & Reliability (NIST AI RMF, NIST SP 800-207 Zero Trust, ISO 42001, OWASP where relevant)
    - Staff Architect Interview Framing
 3. Citations: Cite primary sources explicitly (e.g. [Source: Research Whitepaper]).
 4. If the user asks casual or conversational questions (e.g. greetings), respond naturally and authoritatively as their Lead Architect copilot without forcing a rigid template.
@@ -29,53 +29,52 @@ async def call_gemini_llm(api_key: str, prompt: str) -> tuple[Optional[str], Opt
         logger.warning(msg)
         return None, msg
 
-    logger.info(f"Initiating live Gemini generation with API key length: {len(clean_key)}")
+    # Tier 1: Modern google.genai SDK
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
     errors = []
 
-    models_to_try = [
-        os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-2.5-flash"
-    ]
-    models_to_try = list(dict.fromkeys(models_to_try))
-
-    # Tier 1: google.genai SDK
     try:
         from google import genai
         client = genai.Client(api_key=clean_key)
         for m in models_to_try:
             try:
-                res = client.models.generate_content(model=m, contents=prompt)
-                if res and res.text:
-                    logger.info(f"Gemini live grounding succeeded via SDK ({m})")
-                    return res.text, None
-            except Exception as ex:
-                err_msg = f"google.genai model {m} error: {ex}"
+                response = client.models.generate_content(
+                    model=m,
+                    contents=prompt
+                )
+                if response and response.text:
+                    logger.info(f"Modern google.genai SDK call succeeded ({m})")
+                    return response.text, None
+            except Exception as ex_m:
+                err_msg = f"Modern SDK ({m}) failed: {ex_m}"
                 logger.warning(err_msg)
                 errors.append(err_msg)
-    except Exception as e:
-        err_msg = f"google.genai SDK initialization failed: {e}"
+    except ImportError:
+        pass
+    except Exception as ex:
+        err_msg = f"Modern google.genai SDK initialization error: {ex}"
         logger.warning(err_msg)
         errors.append(err_msg)
 
-    # Tier 2: google.generativeai SDK
+    # Tier 2: Legacy google.generativeai SDK
     try:
         import google.generativeai as genai_legacy
         genai_legacy.configure(api_key=clean_key)
         for m in models_to_try:
             try:
                 model = genai_legacy.GenerativeModel(m)
-                res = model.generate_content(prompt)
-                if res and res.text:
-                    logger.info(f"Gemini live grounding succeeded via legacy SDK ({m})")
-                    return res.text, None
-            except Exception as ex:
-                err_msg = f"google.generativeai model {m} error: {ex}"
+                response = model.generate_content(prompt)
+                if response and response.text:
+                    logger.info(f"Legacy google.generativeai SDK call succeeded ({m})")
+                    return response.text, None
+            except Exception as ex_m:
+                err_msg = f"Legacy SDK ({m}) failed: {ex_m}"
                 logger.warning(err_msg)
                 errors.append(err_msg)
-    except Exception as e:
-        err_msg = f"google.generativeai SDK error: {e}"
+    except ImportError:
+        pass
+    except Exception as ex:
+        err_msg = f"Legacy google.generativeai SDK error: {ex}"
         logger.warning(err_msg)
         errors.append(err_msg)
 
@@ -138,7 +137,7 @@ CONCEPT_EXPANSIONS: Dict[str, Dict[str, str]] = {
         "title": "Structural Dry-Run Verification Gates",
         "definition": "A dry-run gate is a deterministic pre-execution validation step where an agent generates and inspects the exact intended mutations (diffs, SQL statements, API payloads) before committing them to production systems.",
         "pitfalls": "Relying solely on LLM confidence scores or verbal confirmation without inspectable structural diffs leads to silent deployment failures and compliance violations.",
-        "solution": "Structural diffs must be rendered and explicitly approved before mutation execution, satisfying regulatory audit standards (MAS FEAT and US Fed SR 11-7)."
+        "solution": "Structural diffs must be rendered and explicitly approved before mutation execution, satisfying enterprise audit and model risk standards (NIST AI RMF and ISO 42001)."
     },
     "spiffe": {
         "title": "SPIFFE/SPIRE Workload Identity & Cryptographic Zero-Trust",
@@ -150,7 +149,7 @@ CONCEPT_EXPANSIONS: Dict[str, Dict[str, str]] = {
         "title": "Automated 60-Minute Zero-Downtime Credential Rotation",
         "definition": "Short-lived credential rotation automatically renews cryptographic SVID certificates every 60 minutes in memory over UNIX domain sockets without restarting processes or severing active TCP connections.",
         "pitfalls": "Manual rotation cycles or long credential lifespans expand the blast radius of credential leaks, while process-restarting rotations cause downtime and connection drops.",
-        "solution": "In-memory dynamic TLS reloading (using Go GetCertificate or Envoy dynamic SDS) ensures zero-downtime renewal while strictly bounding leak validity to under 1 hour (MAS TRM 9.2)."
+        "solution": "In-memory dynamic TLS reloading (using Go GetCertificate or Envoy dynamic SDS) ensures zero-downtime renewal while strictly bounding leak validity to under 1 hour (NIST SP 800-207 Zero Trust)."
     },
     "failover": {
         "title": "Sub-60s Multi-Region Anycast Failover & Resiliency",

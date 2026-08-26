@@ -12,13 +12,13 @@ Your task is to analyze today's ingested engineering articles across 8 technolog
 
 The briefing hosts are:
 - Host A: Enterprise Cloud Architect & AI Systems Specialist
-- Host B: Principal SRE & Financial Sector AI Governance Lead
+- Host B: Principal Systems Architect & Engineering Governance Lead
 
 You MUST return a strictly valid JSON object matching this schema:
 {
   "title": "Executive headline summarizing today's key technical synthesis",
   "summary": "2-3 sentence executive synopsis of today's briefing",
-  "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal SRE & Governance Lead)",
+  "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal Systems Architect & Governance Lead)",
   "script_segments": [
     {"speaker": "Host A", "text": "...", "chapter_title": "1. Intro & Multi-Agent Deterministic Routing"},
     {"speaker": "Host B", "text": "...", "chapter_title": "1. Intro & Multi-Agent Deterministic Routing"}
@@ -26,8 +26,8 @@ You MUST return a strictly valid JSON object matching this schema:
   "chapters": [
     {"title": "1. Intro & Multi-Agent Deterministic Routing", "source_name": "Anthropic Engineering", "source_url": "https://www.anthropic.com/research/building-effective-agents"},
     {"title": "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg", "source_name": "MS Fabric Team Blog", "source_url": "https://blog.fabric.microsoft.com/"},
-    {"title": "3. Zero-Trust SPIFFE Workload Tokens in Banking", "source_name": "SPIFFE Foundation", "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"},
-    {"title": "4. MAS FEAT Model Risk Compliance & Socratic QA", "source_name": "MAS Veritas Initiative", "source_url": "https://www.mas.gov.sg/schemes-and-initiatives/veritas"}
+    {"title": "3. Zero-Trust SPIFFE Workload Identity in Microservices", "source_name": "SPIFFE Foundation", "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"},
+    {"title": "4. Enterprise AI Risk Governance (NIST AI RMF & ISO 42001)", "source_name": "NIST AI Safety", "source_url": "https://www.nist.gov/itl/ai-risk-management-framework"}
   ],
   "takeaways": {
     "ai": {
@@ -49,7 +49,7 @@ You MUST return a strictly valid JSON object matching this schema:
     {
       "domain": "🤖 AI & Agent Systems",
       "question": "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
-      "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
+      "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by enterprise production standards (NIST AI RMF & ISO 42001).",
       "cite": "Source: Anthropic Research 2026",
       "color_class": "bg-indigo-500/20 text-indigo-300"
     }
@@ -87,9 +87,9 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
         "episode_number": episode_num,
         "date": datetime.now(timezone.utc).strftime("%b %d, %Y"),
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "title": "Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Banking Perimeters",
-        "summary": "Today we analyze Anthropic's deterministic agent routing patterns, compare Microsoft Fabric Direct Lake against Snowflake Iceberg catalogs, review SPIFFE workload identity in banking perimeters, and examine MAS FEAT compliance for production LLMs.",
-        "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal SRE & Governance Lead)",
+        "title": "Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Workload Identity",
+        "summary": "Today we analyze Anthropic's deterministic agent routing patterns, compare Microsoft Fabric Direct Lake against Snowflake Iceberg catalogs, review SPIFFE workload identity in distributed microservices, and examine NIST AI Risk Management Framework standards for production LLMs.",
+        "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal Systems Architect & Governance Lead)",
         "duration": "05:20",
         "total_seconds": 320,
         "full_articles": full_articles,
@@ -101,7 +101,7 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
             },
             {
                 "speaker": "Host B",
-                "text": "That's a crucial architectural shift. In financial services and mission-critical systems, we cannot rely on unbounded prompt loops. The Main-as-Router pattern enforces strict state serialization and pre-execution dry-run approval gates, directly meeting Singapore MAS technology risk standards.",
+                "text": "That's a crucial architectural shift. In enterprise distributed systems, we cannot rely on unbounded prompt loops. The Main-as-Router pattern enforces strict state serialization and pre-execution dry-run approval gates, directly meeting production reliability and safety standards.",
                 "chapter_title": "1. Intro & Multi-Agent Deterministic Routing"
             },
             {
@@ -117,12 +117,12 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
             {
                 "speaker": "Host A",
                 "text": "In infrastructure security, static credentials in CI/CD pipelines are officially obsolete. SPIFFE and SPIRE automated workload identity federation issues ephemeral X.509 SVID certificates rotating every 60 minutes.",
-                "chapter_title": "3. Zero-Trust SPIFFE Workload Tokens in Banking"
+                "chapter_title": "3. Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation"
             },
             {
                 "speaker": "Host B",
-                "text": "Exactly. This satisfies MAS TRM Section 9 credential lifecycle mandates. Finally, on AI governance, Singapore MAS Project Veritas guidelines mandate immutable audit logging capturing prompt, context snapshot, model temperature, and output for every production GenAI decision.",
-                "chapter_title": "4. MAS FEAT Model Risk Compliance & Socratic QA"
+                "text": "Exactly. This satisfies NIST SP 800-207 Zero Trust credential lifecycle mandates. Finally, on AI governance, the NIST AI Risk Management Framework and ISO 42001 guidelines mandate immutable audit logging capturing prompt snapshots, model temperature, and output for every production GenAI decision.",
+                "chapter_title": "4. NIST AI Risk Management & Enterprise Model Safety"
             }
         ],
         "chapters": [
@@ -143,16 +143,16 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
             {
                 "time": "02:35",
                 "seconds": 155,
-                "title": "3. Zero-Trust SPIFFE Workload Tokens in Banking",
+                "title": "3. Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation",
                 "source_name": sec_item.get("source_name", "SPIFFE Foundation"),
                 "source_url": sec_item.get("url", "https://spiffe.io/docs/latest/spiffe-about/overview/")
             },
             {
                 "time": "04:00",
                 "seconds": 240,
-                "title": "4. MAS FEAT Model Risk Compliance & Socratic QA",
-                "source_name": gov_item.get("source_name", "MAS Veritas Initiative"),
-                "source_url": gov_item.get("url", "https://www.mas.gov.sg/schemes-and-initiatives/veritas")
+                "title": "4. NIST AI Risk Management & Enterprise Model Safety",
+                "source_name": gov_item.get("source_name", "NIST AI & Cybersecurity"),
+                "source_url": gov_item.get("url", "https://www.nist.gov/itl/ai-risk-management-framework")
             }
         ],
         "takeaways": {
@@ -205,16 +205,16 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
             "sec": {
                 "badge": "WORKLOAD SECURITY",
                 "release_date": "Aug 2026",
-                "title": "Workload Identity Federation & Ephemeral mTLS Tokens in Banking Perimeters",
+                "title": "Workload Identity Federation & Ephemeral mTLS Tokens in Zero-Trust Systems",
                 "bullets": [
                     "Eliminates long-lived static API secrets in CI/CD pipelines via OIDC identity assertions.",
                     "SPIFFE/SPIRE automated X.509 certificate rotation every 60 minutes for inter-service microsegments.",
                     "Zero-trust egress filtering to prevent LLM prompt injection data exfiltration attacks."
                 ],
-                "interview_framing": "Articulate why eliminating static database credentials in favor of IAM-role assume tokens satisfies MAS TRM Section 9.",
+                "interview_framing": "Articulate why eliminating static database credentials in favor of IAM-role assume tokens satisfies NIST SP 800-207 Zero Trust.",
                 "sources": [
                     {"title": "SPIFFE: Workload Identity Spec", "url": "https://spiffe.io/docs/latest/spiffe-about/overview/"},
-                    {"title": "MAS: Tech Risk Management", "url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"}
+                    {"title": "NIST: Zero Trust Architecture", "url": "https://csrc.nist.gov/publications/detail/sp/800-207/final"}
                 ]
             },
             "devops": {
@@ -265,16 +265,16 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
             "gov": {
                 "badge": "REGULATORY COMPLIANCE",
                 "release_date": "Aug 2026",
-                "title": "MAS FEAT Compliance & Model Risk Management (SR 11-7) for Production GenAI",
+                "title": "NIST AI Risk Management Framework (AI RMF 1.0) & Production AI Safety",
                 "bullets": [
                     "Enforces immutable audit trails capturing prompt, context snapshot, model temperature, and output for every decision.",
                     "Automated guardrail gates evaluate toxic output, PII leakage, and hallucination scoring before delivery.",
                     "Tiered governance classification (Tier 1/2/3) determining whether human approval is mandatory before pipeline advancement."
                 ],
-                "interview_framing": "Highlight how your combined background in production compliance governance and AI engineering ensures safe enterprise AI adoption.",
+                "interview_framing": "Highlight how your combined background in systems architecture, zero-trust infrastructure, and enterprise AI risk frameworks ensures safe, compliant production AI adoption.",
                 "sources": [
-                    {"title": "MAS Singapore: Project Veritas (FEAT)", "url": "https://www.mas.gov.sg/schemes-and-initiatives/veritas"},
-                    {"title": "NIST: AI Risk Management Framework", "url": "https://www.nist.gov/itl/ai-risk-management-framework"}
+                    {"title": "NIST: AI Risk Management Framework", "url": "https://www.nist.gov/itl/ai-risk-management-framework"},
+                    {"title": "ISO/IEC 42001: AI Management Systems", "url": "https://www.iso.org/standard/81230.html"}
                 ]
             }
         },
@@ -282,7 +282,7 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
             {
                 "domain": "🤖 AI & Agent Systems",
                 "question": "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
-                "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
+                "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by enterprise production standards (NIST AI RMF & ISO 42001).",
                 "cite": "Source: Anthropic Research 2026",
                 "color_class": "bg-indigo-500/20 text-indigo-300"
             },
@@ -294,10 +294,10 @@ def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]
                 "color_class": "bg-emerald-500/20 text-emerald-300"
             },
             {
-                "domain": "🛡️ Zero Trust & Banking Risk",
-                "question": "How does SPIFFE/SPIRE workload identity satisfy Singapore MAS TRM Section 9 static secret removal rules?",
+                "domain": "🛡️ Zero Trust & Security",
+                "question": "How does SPIFFE/SPIRE workload identity satisfy NIST SP 800-207 Zero Trust static secret removal rules?",
                 "answer": "It replaces static API tokens and database passwords with automated, cryptographic X.509 SVID tokens that rotate automatically every 60 minutes with mTLS verification.",
-                "cite": "Source: SPIFFE Spec & MAS TRM Sec 9.2",
+                "cite": "Source: SPIFFE Spec & NIST SP 800-207",
                 "color_class": "bg-rose-500/20 text-rose-300"
             },
             {

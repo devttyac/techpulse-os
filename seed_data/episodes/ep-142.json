@@ -33,7 +33,7 @@
     {
       "time": "09:20",
       "seconds": 560,
-      "title": "\ud83d\udcc4 Security: Zero-Trust SPIFFE Workload Tokens & MAS TRM 9 (Full Paper)",
+      "title": "\ud83d\udcc4 Security: Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation (Full Paper)",
       "source_name": "CNCF Security TAG",
       "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"
     }
@@ -48,7 +48,7 @@
         "Structural Dry-Run Gates: Production agents must output deterministic diffs and state mutations for explicit user or policy approval before filesystem/API writes.",
         "Hard Retry Caps & State Isolation: Enforcing a strict 3-retry cap with automated escalation prevents token waste and cascading hallucination loops."
       ],
-      "interview_framing": "Frame the Main-as-Router pattern as an enterprise reliability necessity. Highlight how deterministic routing prevents runaway agent tool-calling loops while satisfying MAS FEAT and SR 11-7 model risk governance standards.",
+      "interview_framing": "Frame the Main-as-Router pattern as an enterprise reliability necessity. Highlight how deterministic routing prevents runaway agent tool-calling loops while satisfying NIST AI RMF and ISO 42001 model risk governance standards.",
       "sources": [
         {
           "title": "Anthropic Agent Workflows Research",
@@ -69,7 +69,7 @@
         "Stateless Pod Replication with FluxCD: GitOps controllers reconcile identical container deployments across dual Azure AKS clusters simultaneously.",
         "Cross-Region Azure Storage Replication: Object store writes replicate asynchronously with <5s RPO guarantees."
       ],
-      "interview_framing": "When asked how to architect a mission-critical financial system across cloud regions, explain why you chose active-passive with Anycast over active-active (avoiding two-phase commit database latency penalties while hitting RTO < 30s).",
+      "interview_framing": "When asked how to architect a mission-critical enterprise system across cloud regions, explain why you chose active-passive with Anycast over active-active (avoiding two-phase commit database latency penalties while hitting RTO < 30s).",
       "sources": [
         {
           "title": "Azure Architecture Center: Multi-Region AKS",
@@ -105,21 +105,21 @@
     "sec": {
       "badge": "ZERO TRUST CREDENTIAL REMOVAL",
       "release_date": "Aug 26, 2026",
-      "title": "Zero-Trust SPIFFE Workload Identity in Banking & MAS TRM Sec 9",
+      "title": "Zero-Trust SPIFFE Workload Identity in Microservices & NIST SP 800-207",
       "bullets": [
         "Node-Local SPIRE Kernel Attestation: Attests workload identity using Linux kernel cgroups, container hashes, and Kubernetes service accounts.",
         "Ephemeral X.509 SVID Issuance: Delivers short-lived certificates directly into container memory via UNIX domain sockets, completely removing static secrets from CI/CD.",
-        "Automated 60-Minute Rotation: SVIDs rotate automatically every 60 minutes with zero downtime, fulfilling MAS TRM Section 9.2 mandates."
+        "Automated 60-Minute Rotation: SVIDs rotate automatically every 60 minutes with zero downtime, fulfilling zero-trust credential lifecycle mandates."
       ],
-      "interview_framing": "Position SPIFFE/SPIRE as the gold standard for zero-trust microsegmentation. Explain how eliminating static API keys removes the single largest attack surface for cloud credential exfiltration in banking.",
+      "interview_framing": "Position SPIFFE/SPIRE as the gold standard for zero-trust microsegmentation. Explain how eliminating static API keys removes the single largest attack surface for cloud credential exfiltration in enterprise architecture.",
       "sources": [
         {
           "title": "CNCF SPIFFE/SPIRE Specification",
           "url": "https://spiffe.io/docs/latest/spire-about/spire-concepts/"
         },
         {
-          "title": "MAS Technology Risk Management Guidelines (TRM Sec 9)",
-          "url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
+          "title": "NIST SP 800-207: Zero Trust Architecture",
+          "url": "https://csrc.nist.gov/publications/detail/sp/800-207/final"
         }
       ]
     },
@@ -147,13 +147,13 @@
     "arch": {
       "badge": "DISTRIBUTED CONSENSUS",
       "release_date": "Aug 26, 2026",
-      "title": "Dual-Active Anycast Routing & WAN Latency Bounds in Core Banking",
+      "title": "Dual-Active Anycast Routing & WAN Latency Bounds in High-Scale Systems",
       "bullets": [
         "BGP Anycast Ingress: Directs global traffic to the topologically closest edge point-of-presence (PoP).",
         "Asynchronous Log Shipping: Replicates commit logs across data centers with bounded lag to avoid blocking synchronous write transactions.",
         "Circuit-Breaker Traffic Shedding: Automatically sheds non-critical analytical requests during WAN partition events."
       ],
-      "interview_framing": "Discuss the trade-offs between linearizable distributed consensus (Raft/Paxos) and eventual consistency in payment ledgers, detailing how WAN round-trip latency impacts transaction throughput.",
+      "interview_framing": "Discuss the trade-offs between linearizable distributed consensus (Raft/Paxos) and eventual consistency in transaction ledgers, detailing how WAN round-trip latency impacts transaction throughput.",
       "sources": [
         {
           "title": "Google Spanner Distributed Consensus Architecture",
@@ -181,21 +181,21 @@
     "gov": {
       "badge": "REGULATORY COMPLIANCE",
       "release_date": "Aug 26, 2026",
-      "title": "Singapore MAS FEAT Principles & US Fed SR 11-7 Model Governance",
+      "title": "NIST AI Risk Management Framework (AI RMF 1.0) & ISO/IEC 42001 Governance",
       "bullets": [
         "Audit Trail Immutability: Every agent tool invocation and prompt trajectory is signed and stored in append-only storage.",
         "Fairness & Explainability: Enforces deterministic scoring rubrics and drift monitoring on generative AI outputs.",
-        "Model Inventory & Risk Tiering: Enforces independent validation and human-in-the-loop approvals for Tier-1 customer-facing financial models."
+        "Model Inventory & Risk Tiering: Enforces independent validation and human-in-the-loop approvals for Tier-1 mission-critical enterprise models."
       ],
-      "interview_framing": "Emphasize your readiness for enterprise fintech by explaining how your system design embeds compliance directly into CI/CD pipelines rather than treating governance as an afterthought.",
+      "interview_framing": "Emphasize your readiness for enterprise systems by explaining how your system design embeds compliance and safety guardrails directly into CI/CD pipelines.",
       "sources": [
         {
-          "title": "Monetary Authority of Singapore FEAT Principles",
-          "url": "https://www.mas.gov.sg/publications/monographs-or-information-paper/2018/FEAT"
+          "title": "NIST AI Risk Management Framework",
+          "url": "https://www.nist.gov/itl/ai-risk-management-framework"
         },
         {
-          "title": "Federal Reserve SR 11-7 Model Risk Management",
-          "url": "https://www.federalreserve.gov/supervisionreg/srletters/sr1107.htm"
+          "title": "ISO/IEC 42001: AI Management Systems",
+          "url": "https://www.iso.org/standard/81230.html"
         }
       ]
     }
@@ -204,7 +204,7 @@
     {
       "domain": "\ud83e\udd16 AI & Agent Systems",
       "question": "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
-      "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
+      "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by enterprise production standards (NIST AI RMF & ISO 42001).",
       "cite": "Source: Anthropic Research 2026",
       "color_class": "bg-indigo-500/20 text-indigo-300"
     }
@@ -216,7 +216,7 @@
     },
     {
       "speaker": "Host B",
-      "text": "And I'm your Principal SRE and Governance Lead. Today we deliver an in-depth architectural breakdown across AI agent systems, Microsoft Azure multi-cloud resiliency, Microsoft Fabric Direct Lake versus Snowflake Iceberg, and zero-trust banking perimeters under Singapore MAS guidelines."
+      "text": "And I'm your Principal Systems Architect and Governance Lead. Today we deliver an in-depth architectural breakdown across AI agent systems, Microsoft Azure multi-cloud resiliency, Microsoft Fabric Direct Lake versus Snowflake Iceberg, and zero-trust infrastructure perimeters."
     },
     {
       "speaker": "Host A",
@@ -248,11 +248,11 @@
     },
     {
       "speaker": "Host A",
-      "text": "Now to Chapter 4: Zero Trust Security. In tier-one financial institutions, long-lived static API keys and database credentials are being systematically eradicated in favor of SPIFFE and SPIRE workload identity federation."
+      "text": "Now to Chapter 4: Zero Trust Security. In enterprise environments, long-lived static API keys and database credentials are being systematically eradicated in favor of SPIFFE and SPIRE workload identity federation."
     },
     {
       "speaker": "Host B",
-      "text": "SPIFFE issues ephemeral cryptographic X.509 SVID tokens to microservices and Kubernetes pods. These certificates rotate automatically every sixty minutes without requiring application restarts or downtime. This directly satisfies Singapore MAS Technology Risk Management Section 9, neutralizing credential leakage blast radius."
+      "text": "SPIFFE issues ephemeral cryptographic X.509 SVID tokens to microservices and Kubernetes pods. These certificates rotate automatically every sixty minutes without requiring application restarts or downtime. This directly satisfies NIST SP 800-207 Zero Trust mandates, neutralizing credential leakage blast radius."
     },
     {
       "speaker": "Host A",
@@ -268,7 +268,7 @@
     },
     {
       "speaker": "Host B",
-      "text": "And on the regulatory frontier: Singapore MAS FEAT principles and SR 11-7 Model Risk frameworks mandate immutable audit trails capturing prompt snapshots, model temperature, and hallucination scoring for every production GenAI decision."
+      "text": "And on the regulatory frontier: NIST AI Risk Management and ISO 42001 frameworks mandate immutable audit trails capturing prompt snapshots, model temperature, and hallucination scoring for every production GenAI decision."
     },
     {
       "speaker": "Host A",
@@ -276,9 +276,9 @@
     }
   ],
   "full_articles": {
-    "ai": "Title: Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms in Enterprise Production\nSource: Anthropic Research & OpenAI Applied AI (2026)\n\n1. The Problem of Unconstrained Agentic Swarms:\nIn early agentic architectures, developers implemented recursive swarm patterns where agents dynamically spawned subagents, delegated subtasks, and resolved dependencies recursively. In production environments, this introduces fatal failure modes:\n- Cascading Prompt Drift: Context windows passing through multiple recursive hops become diluted, leading to unpredictable tool hallucinations.\n- Unbounded API Cost and Execution Loops: An ambiguous edge case triggers recursive self-invocation loops, resulting in hundreds of dollars of inference costs within minutes.\n- Regulatory Non-Compliance: Financial regulators (MAS FEAT & US Fed SR 11-7) require deterministic audit trails explaining every automated decision. Recursive swarms produce non-deterministic trajectories that fail regulatory audit.\n\n2. The Main-as-Router Architectural Solution:\nThe main session functions strictly as a centralized router and governance layer.\n- Stateful Planning Decoupling: Planning orchestrators decompose requirements into isolated, sequential specialist tasks. Specialists execute within isolated sub-contexts and return structured artifacts.\n- Structural Dry-Run Approval Gates: Before any specialist can mutate the filesystem, execute shell commands, or trigger production APIs, it must submit a structured dry-run plan for explicit human/router approval.\n- Strict Retry Caps: If a specialist step fails 3 times consecutively, the router halts execution immediately, flags the task as blocked, and triggers human escalation.\n\n3. System Design Interview Framing:\nDecoupling planning from tool execution turns probabilistic LLM behavior into a verifiable, deterministic state machine with immutable audit logs.",
+    "ai": "Title: Deterministic Main-as-Router Pattern vs Monolithic Multi-Agent Swarms in Enterprise Production\nSource: Anthropic Research & OpenAI Applied AI (2026)\n\n1. The Problem of Unconstrained Agentic Swarms:\nIn early agentic architectures, developers implemented recursive swarm patterns where agents dynamically spawned subagents, delegated subtasks, and resolved dependencies recursively. In production environments, this introduces fatal failure modes:\n- Cascading Prompt Drift: Context windows passing through multiple recursive hops become diluted, leading to unpredictable tool hallucinations.\n- Unbounded API Cost and Execution Loops: An ambiguous edge case triggers recursive self-invocation loops, resulting in hundreds of dollars of inference costs within minutes.\n- Regulatory Non-Compliance: Enterprise production standards (NIST AI RMF & ISO 42001) require deterministic audit trails explaining every automated decision. Recursive swarms produce non-deterministic trajectories that fail regulatory audit.\n\n2. The Main-as-Router Architectural Solution:\nThe main session functions strictly as a centralized router and governance layer.\n- Stateful Planning Decoupling: Planning orchestrators decompose requirements into isolated, sequential specialist tasks. Specialists execute within isolated sub-contexts and return structured artifacts.\n- Structural Dry-Run Approval Gates: Before any specialist can mutate the filesystem, execute shell commands, or trigger production APIs, it must submit a structured dry-run plan for explicit human/router approval.\n- Strict Retry Caps: If a specialist step fails 3 times consecutively, the router halts execution immediately, flags the task as blocked, and triggers human escalation.\n\n3. System Design Interview Framing:\nDecoupling planning from tool execution turns probabilistic LLM behavior into a verifiable, deterministic state machine with immutable audit logs.",
     "cloud": "Title: Cross-Region Multi-Cluster Kubernetes Failover & Azure Landing Zone Architecture\nSource: Microsoft Azure Architecture Center & AWS Architecture (2026)\n\n1. Designing for Regional Cloud Resiliency:\nAchieving high availability with RTO < 60s and RPO < 5s across geographic regions without suffering WAN latency penalties (50-120ms per cross-region synchronous transaction).\n\n2. Decoupled Ingress & Storage Replication Architecture:\n- Traffic Ingress Layer: Azure Front Door, AWS Global Accelerator, and Cloudflare Magic Transit manage global Anycast IP routing with automated health probes polling every 5s. Three consecutive failures reroute traffic to standby region within 15s.\n- Compute Layer: Identical Kubernetes clusters in Azure East US and Azure West US provisioned via GitOps (ArgoCD) with blue-green cutover.\n- Storage Layer: Azure Managed Disks cross-region asynchronous snapshot replication and Rook-Ceph AZ meshes. Database layers utilize asynchronous replication with automated failover promotion scripts, keeping RPO < 5s.",
     "data": "Title: Microsoft Fabric Direct Lake Architecture vs Snowflake Managed Iceberg Tables\nSource: Microsoft Fabric Engineering & Snowflake Technical Architecture (2026)\n\n1. The Modern Enterprise Lakehouse Dilemma:\nChoosing between slow DirectQuery (high warehouse compute costs) vs scheduled VertiPaq Import (24-hour data staleness & duplicate storage).\n\n2. Direct Lake Mode Architecture:\n- Direct Lake reads Delta Parquet files directly from OneLake storage into VertiPaq memory on demand via memory-mapped I/O without trans-coding or copying data.\n- Achieves sub-second query execution across billion-row datasets with sub-minute data freshness.\n- If query memory exceeds provisioned Fabric F-SKU capacity limits, it falls back gracefully to DirectQuery mode.\n\n3. Snowflake Managed Iceberg Tables:\nEnables vendor-neutral open Parquet and Iceberg metadata on customer cloud storage, queryable across Snowflake, Apache Spark, and Trino under Polaris Catalog governance.",
-    "sec": "Title: Zero-Trust SPIFFE/SPIRE Workload Identity Federation in Banking Perimeters\nSource: CNCF Security TAG & Singapore MAS Technology Risk Management (2026)\n\n1. Vulnerability of Static Secrets:\nShared database credentials and long-lived API tokens in CI/CD pipelines represent the highest attack blast radius in financial infrastructure.\n\n2. SPIFFE/SPIRE Architecture:\n- Workload Attestation: SPIRE agent inspects container cgroups, Kubernetes service account tokens, and image hashes.\n- Ephemeral SVID Issuance: Issues X.509 SVID certificates into container memory via UNIX domain sockets.\n- 60-Minute Automated Rotation: Certificates rotate every 60 minutes with zero downtime or app restarts.\n\n3. MAS TRM Section 9 Compliance:\nSatisfies strict MAS requirements for eliminating static credentials and enforcing cryptographic mutual TLS across all microsegments."
+    "sec": "Title: Zero-Trust SPIFFE/SPIRE Workload Identity Federation in Distributed Systems\nSource: CNCF Security TAG & NIST SP 800-207 (2026)\n\n1. Vulnerability of Static Secrets:\nShared database credentials and long-lived API tokens in CI/CD pipelines represent the highest attack blast radius in modern cloud infrastructure.\n\n2. SPIFFE/SPIRE Architecture:\n- Workload Attestation: SPIRE agent inspects container cgroups, Kubernetes service account tokens, and image hashes.\n- Ephemeral SVID Issuance: Issues X.509 SVID certificates into container memory via UNIX domain sockets.\n- 60-Minute Automated Rotation: Certificates rotate every 60 minutes with zero downtime or app restarts.\n\n3. NIST SP 800-207 Compliance:\nSatisfies zero-trust requirements for eliminating static credentials and enforcing cryptographic mutual TLS across all microsegments."
   }
 }

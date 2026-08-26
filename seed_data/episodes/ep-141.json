@@ -174,17 +174,17 @@
     "gov": {
       "badge": "DATA PRIVACY & SOVEREIGNTY",
       "release_date": "Aug 25, 2026",
-      "title": "Singapore PDPC Guidelines on Synthetic Data & Privacy-Preserving AI",
+      "title": "Enterprise Privacy-Preserving AI & Synthetic Data Governance",
       "bullets": [
         "Differential Privacy Mechanisms: Injects bounded mathematical noise into training datasets to prevent model inversion attacks.",
         "Synthetic Data Generation: Generates statistically representative test datasets for AI evaluation without exposing customer PII.",
-        "Data Localization Compliance: Ensures Singapore resident financial data remains processed within local sovereign cloud boundaries."
+        "Data Localization & Encryption: Ensures sensitive data remains processed within compliant regional sovereign cloud boundaries."
       ],
-      "interview_framing": "Articulate how synthetic data pipelines satisfy Singapore PDPC requirements and enable rapid LLM development without compromising customer privacy.",
+      "interview_framing": "Articulate how synthetic data pipelines satisfy enterprise data privacy requirements and enable rapid LLM development without compromising customer privacy.",
       "sources": [
         {
-          "title": "Singapore PDPC AI Governance Framework",
-          "url": "https://www.pdpc.gov.sg/help-and-resources/2020/01/model-ai-governance-framework"
+          "title": "NIST Privacy Framework & Synthetic Data",
+          "url": "https://www.nist.gov/privacy-framework"
         }
       ]
     }

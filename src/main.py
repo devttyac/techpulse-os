@@ -87,17 +87,17 @@ SEED_EPISODES = {
         "id": "ep-142",
         "episode_number": 142,
         "date": "Aug 26, 2026",
-        "title": "Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Banking Perimeters",
-        "summary": "Today we analyze Anthropic's deterministic agent routing patterns, compare Microsoft Fabric Direct Lake against Snowflake Iceberg catalogs, review SPIFFE workload identity in banking perimeters, and examine MAS FEAT compliance for production LLMs.",
-        "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal SRE & Governance Lead)",
+        "title": "Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Workload Identity",
+        "summary": "Today we analyze Anthropic's deterministic agent routing patterns, compare Microsoft Fabric Direct Lake against Snowflake Iceberg catalogs, review SPIFFE workload identity in distributed microservices, and examine NIST AI Risk Management Framework standards for production LLMs.",
+        "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal Systems Architect & Governance Lead)",
         "duration": "05:20",
         "total_seconds": 320,
         "audio_url": "/audio/ep-142.mp3",
         "chapters": [
             {"time": "00:00", "seconds": 0, "title": "1. Intro & Multi-Agent Deterministic Routing", "source_name": "Anthropic", "source_url": "https://www.anthropic.com/research/building-effective-agents"},
             {"time": "01:15", "seconds": 75, "title": "2. Microsoft Fabric Direct Lake vs Snowflake Iceberg", "source_name": "MS Fabric", "source_url": "https://blog.fabric.microsoft.com/"},
-            {"time": "02:35", "seconds": 155, "title": "3. Zero-Trust SPIFFE Workload Tokens in Banking", "source_name": "SPIFFE.io", "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"},
-            {"time": "04:00", "seconds": 240, "title": "4. MAS FEAT Model Risk Compliance & Socratic QA", "source_name": "MAS Veritas", "source_url": "https://www.mas.gov.sg/schemes-and-initiatives/veritas"}
+            {"time": "02:35", "seconds": 155, "title": "3. Zero-Trust SPIFFE Workload Tokens & Cryptographic Attestation", "source_name": "SPIFFE.io", "source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/"},
+            {"time": "04:00", "seconds": 240, "title": "4. NIST AI Risk Management & Enterprise Model Safety", "source_name": "NIST AI & Cybersecurity", "source_url": "https://www.nist.gov/itl/ai-risk-management-framework"}
         ],
         "takeaways": {
             "ai": {
@@ -115,31 +115,22 @@ SEED_EPISODES = {
                     {"title": "OpenAI: Governing Agentic AI", "url": "https://openai.com/research/practices-for-governing-agentic-ai"}
                 ]
             }
-        },
-        "flashcards": [
-            {
-                "domain": "🤖 AI & Agent Systems",
-                "question": "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
-                "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by financial regulators.",
-                "cite": "Source: Anthropic Research 2026",
-                "color_class": "bg-indigo-500/20 text-indigo-300"
-            }
-        ]
+        }
     },
     "ep-141": {
         "id": "ep-141",
         "episode_number": 141,
         "date": "Aug 25, 2026",
-        "title": "Deep Dive: Agentic RAG Architectures, Vector Cache Warming & Context Window Budgeting",
-        "summary": "Explores production caching for vector databases, context window compression techniques, and automated LLM-as-a-Judge evaluation pipelines.",
-        "hosts": "Host A (AI Engineer) & Host B (LLMOps Lead)",
-        "duration": "04:45",
-        "total_seconds": 285,
+        "title": "Deep Dive: Agentic RAG Architecture, Hybrid Search & Local Vector Stores",
+        "summary": "Explores agentic chunking, dynamic re-ranking with Cohere, hybrid dense-sparse vector search, and sub-10ms query execution.",
+        "hosts": "Host A (AI Engineer) & Host B (Systems Architect)",
+        "duration": "06:15",
+        "total_seconds": 375,
         "audio_url": "/audio/ep-141.mp3",
         "chapters": [
-            {"time": "00:00", "seconds": 0, "title": "1. Vector Cache Warming vs Real-Time Hybrid Search", "source_name": "Pinecone", "source_url": "https://www.pinecone.io/blog/"},
-            {"time": "01:30", "seconds": 90, "title": "2. Context Window Compaction & Prompt Compression", "source_name": "OpenAI", "source_url": "https://openai.com/research/"},
-            {"time": "03:10", "seconds": 190, "title": "3. Automated Agent Benchmarking with LLM-as-a-Judge", "source_name": "Anthropic", "source_url": "https://www.anthropic.com/research"}
+            {"time": "00:00", "seconds": 0, "title": "1. Multi-Vector Representation & Document Chunking Strategies", "source_name": "LangChain", "source_url": "https://blog.langchain.dev/"},
+            {"time": "02:10", "seconds": 130, "title": "2. BM25 + Dense Embeddings Hybrid Search Routing", "source_name": "Qdrant", "source_url": "https://qdrant.tech/articles/"},
+            {"time": "04:30", "seconds": 270, "title": "3. Sub-10ms Vector Quantization & Hardware Acceleration", "source_name": "Pinecone", "source_url": "https://www.pinecone.io/learn/"}
         ]
     },
     "ep-140": {
@@ -163,7 +154,7 @@ SEED_EPISODES = {
         "episode_number": 139,
         "date": "Aug 23, 2026",
         "title": "Platform Engineering: Kernel eBPF Telemetry & Workload Identity Federation",
-        "summary": "Covers kernel-level network tracing with <1% overhead, OpenTelemetry W3C trace context, and MAS TRM Section 9 credential removal.",
+        "summary": "Covers kernel-level network tracing with <1% overhead, OpenTelemetry W3C trace context, and zero-trust SPIFFE credential removal.",
         "hosts": "Host A (Principal SRE) & Host B (CISO)",
         "duration": "04:30",
         "total_seconds": 270,
@@ -171,7 +162,7 @@ SEED_EPISODES = {
         "chapters": [
             {"time": "00:00", "seconds": 0, "title": "1. Kernel-Level TCP Telemetry with Zero Overhead", "source_name": "eBPF.io", "source_url": "https://ebpf.io/what-is-ebpf/"},
             {"time": "01:20", "seconds": 80, "title": "2. OpenTelemetry W3C Distributed Context Propagation", "source_name": "OTel Docs", "source_url": "https://opentelemetry.io/docs/"},
-            {"time": "02:50", "seconds": 170, "title": "3. MAS TRM Section 9: Identity & Static Secret Removal", "source_name": "MAS TRM", "source_url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"}
+            {"time": "02:50", "seconds": 170, "title": "3. Zero-Trust Identity & Static Secret Removal", "source_name": "NIST SP 800-207", "source_url": "https://csrc.nist.gov/publications/detail/sp/800-207/final"}
         ]
     }
 }
@@ -603,7 +594,7 @@ async def podcast_rss(request: Request):
     channel = ET.SubElement(rss, "channel")
     ET.SubElement(channel, "title").text = "TechPulse OS — Daily Engineering & Architecture Briefings"
     ET.SubElement(channel, "link").text = host_url
-    ET.SubElement(channel, "description").text = "Synthesized multi-domain technical briefings across AI agents, cloud platforms, modern lakehouses, zero trust, and Singapore MAS AI risk governance."
+    ET.SubElement(channel, "description").text = "Synthesized multi-domain technical briefings across AI agents, cloud platforms, modern lakehouses, zero trust, and enterprise AI risk governance."
     ET.SubElement(channel, "language").text = "en-us"
     ET.SubElement(channel, "itunes:author").text = "TechPulse Intelligence Engine"
     ET.SubElement(channel, "itunes:category", {"text": "Technology"})

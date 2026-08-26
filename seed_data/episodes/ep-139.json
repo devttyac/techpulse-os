@@ -3,7 +3,7 @@
   "episode_number": 139,
   "date": "Aug 23, 2026",
   "title": "Platform Engineering: Kernel eBPF Telemetry & Workload Identity Federation",
-  "summary": "Covers kernel-level network tracing with <1% overhead, OpenTelemetry W3C trace context, and MAS TRM Section 9 credential removal.",
+  "summary": "Covers kernel-level network tracing with <1% overhead, OpenTelemetry W3C trace context, and zero-trust SPIFFE credential removal.",
   "hosts": "Host A (Principal SRE) & Host B (CISO)",
   "duration": "10:45",
   "total_seconds": 645,
@@ -26,9 +26,9 @@
     {
       "time": "02:50",
       "seconds": 170,
-      "title": "3. MAS TRM Section 9: Identity & Static Secret Removal",
-      "source_name": "MAS TRM",
-      "source_url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
+      "title": "3. Zero-Trust Identity & Static Secret Removal",
+      "source_name": "NIST SP 800-207",
+      "source_url": "https://csrc.nist.gov/publications/detail/sp/800-207/final"
     }
   ],
   "takeaways": {
@@ -86,21 +86,21 @@
     "sec": {
       "badge": "KERNEL WORKLOAD IDENTITY",
       "release_date": "Aug 23, 2026",
-      "title": "Zero-Trust SPIFFE/SPIRE Attestation & MAS TRM Section 9 Compliance",
+      "title": "Zero-Trust SPIFFE/SPIRE Attestation & NIST SP 800-207 Compliance",
       "bullets": [
         "Cryptographic cgroup Attestation: Validates container process binary paths, namespaces, and Kubernetes tokens directly inside the Linux kernel.",
         "Ephemeral SVID Credential Injection: Delivers X.509 certificates to workloads via UNIX domain sockets, removing database passwords from environment variables.",
-        "MAS TRM Section 9.2 Compliance: Meets strict regulatory mandates for end-to-end mTLS encryption and automated 60-minute secret rotation."
+        "Zero-Trust Compliance: Meets strict mandates for end-to-end mTLS encryption and automated 60-minute secret rotation."
       ],
-      "interview_framing": "Explain how SPIFFE eliminates shared static passwords in financial institutions, drastically reducing the blast radius of container compromises.",
+      "interview_framing": "Explain how SPIFFE eliminates shared static passwords in enterprise environments, drastically reducing the blast radius of container compromises.",
       "sources": [
         {
           "title": "CNCF SPIFFE/SPIRE Production Architecture",
           "url": "https://spiffe.io/"
         },
         {
-          "title": "Singapore MAS TRM Sec 9 Guidelines",
-          "url": "https://www.mas.gov.sg/regulation/guidelines/technology-risk-management-guidelines"
+          "title": "NIST SP 800-207 Zero Trust Architecture",
+          "url": "https://csrc.nist.gov/publications/detail/sp/800-207/final"
         }
       ]
     },
