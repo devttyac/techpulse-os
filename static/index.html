@@ -848,7 +848,7 @@
                   <span>Topic Intelligence AI</span>
                   <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 </h3>
-                <p class="text-[9px] sm:text-[10px] text-slate-400 font-mono">🔒 Grounded in Episode #142 Papers</p>
+                <p class="text-[9px] sm:text-[10px] text-slate-400 font-mono"><span id="chat-ep-badge">🔒 Grounded in Episode #142 Papers</span></p>
               </div>
             </div>
 
@@ -1128,27 +1128,121 @@
       }
     };
 
-    let currentEpisodeId = 'ep-142';
+        let currentEpisodeId = 'ep-142';
+
+    function renderDomainTakeaways(ep) {
+      const grid = document.getElementById('takeaways-grid');
+      if (!grid) return;
+      
+      const takeaways = ep.takeaways || {};
+      const domains = Object.keys(takeaways);
+      
+      if (domains.length === 0) {
+        // Fallback for episodes with simple summaries
+        grid.innerHTML = `
+          <div class="col-span-full p-6 rounded-2xl bg-white/[0.03] border border-white/10 text-center space-y-2">
+            <h3 class="text-white font-bold text-base">${escapeHtml(ep.title)}</h3>
+            <p class="text-slate-300 text-xs max-w-2xl mx-auto leading-relaxed">${escapeHtml(ep.summary || '')}</p>
+          </div>
+        `;
+        return;
+      }
+
+      const domainColors = {
+        ai: { border: 'border-indigo-500/30', bg: 'bg-indigo-500/10', text: 'text-indigo-400', badge: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30', btn: 'bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border-indigo-500/40', glow: 'bg-indigo-400' },
+        cloud: { border: 'border-sky-500/30', bg: 'bg-sky-500/10', text: 'text-sky-400', badge: 'bg-sky-500/20 text-sky-300 border-sky-500/30', btn: 'bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border-sky-500/40', glow: 'bg-sky-400' },
+        data: { border: 'border-emerald-500/30', bg: 'bg-emerald-500/10', text: 'text-emerald-400', badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', btn: 'bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border-emerald-500/40', glow: 'bg-emerald-400' },
+        sec: { border: 'border-rose-500/30', bg: 'bg-rose-500/10', text: 'text-rose-400', badge: 'bg-rose-500/20 text-rose-300 border-rose-500/30', btn: 'bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 border-rose-500/40', glow: 'bg-rose-400' },
+        devops: { border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30', btn: 'bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border-amber-500/40', glow: 'bg-amber-400' },
+        default: { border: 'border-cyan-500/30', bg: 'bg-cyan-500/10', text: 'text-cyan-400', badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30', btn: 'bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border-cyan-500/40', glow: 'bg-cyan-400' }
+      };
+
+      grid.innerHTML = domains.map(dom => {
+        const d = takeaways[dom];
+        const style = domainColors[dom] || domainColors.default;
+        const bulletsHtml = (d.bullets || []).map(b => `
+          <li class="flex items-start gap-2 text-slate-300 text-xs leading-relaxed">
+            <span class="text-rose-400 font-bold mt-0.5">•</span>
+            <span>${escapeHtml(b)}</span>
+          </li>
+        `).join('');
+
+        return `
+          <div class="p-4 sm:p-5 rounded-2xl bg-night-900/90 border ${style.border} hover:border-white/20 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-lg group">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold ${style.badge}">
+                  ${escapeHtml(d.badge || dom.toUpperCase())}
+                </span>
+                <span class="text-[10px] font-mono text-slate-400">${escapeHtml(d.release_date || ep.date || 'Aug 2026')}</span>
+              </div>
+              <h3 class="text-sm sm:text-base font-bold text-white tracking-tight leading-snug group-hover:text-cyan-300 transition">
+                ${escapeHtml(d.title)}
+              </h3>
+              <ul class="space-y-2">
+                ${bulletsHtml}
+              </ul>
+            </div>
+            ${d.interview_framing ? `
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+              <div class="flex items-center gap-1.5 text-amber-300 text-[10px] font-bold uppercase tracking-wider font-mono">
+                <span>💡 How to Frame in an Interview</span>
+              </div>
+              <p class="text-slate-300 text-[11px] leading-relaxed italic">
+                "${escapeHtml(d.interview_framing)}"
+              </p>
+            </div>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
 
     function changeEpisode(epId) {
       currentEpisodeId = epId;
       const ep = episodes[epId];
+      if (!ep) return;
+
       if (audioPlayer) {
         audioPlayer.pause();
         initAudioSource(epId);
         document.getElementById('play-icon').classList.remove('hidden');
         document.getElementById('pause-icon').classList.add('hidden');
       }
+
+      // Update Player Metadata
       document.getElementById('ep-title').innerText = ep.title;
-      document.getElementById('ep-hosts').innerText = ep.hosts;
-      document.getElementById('ep-duration-badge').innerText = ep.duration + ' Mins';
-      document.getElementById('total-time').innerText = ep.duration;
+      const hostEl = document.getElementById('ep-hosts');
+      if (hostEl) hostEl.innerText = ep.hosts || 'Host A & Host B';
+      
+      const badgeEl = document.getElementById('ep-duration-badge');
+      if (badgeEl) badgeEl.innerText = (ep.duration || '05:00') + ' Mins';
+      
+      document.getElementById('total-time').innerText = ep.duration || '05:00';
       document.getElementById('current-time').innerText = '00:00';
       document.getElementById('progress-bar').style.width = '0%';
+
+      // Update Chat Badge
+      const chatBadge = document.getElementById('chat-ep-badge');
+      if (chatBadge) {
+        chatBadge.innerText = `🔒 Grounded in Episode #${ep.episode_number || epId.replace('ep-', '')} Papers`;
+      }
+
+      // Render Chapters
       renderChapters(ep);
 
-      addBotMessage(`Switched active topic grounding to **${ep.title}**. All questions will cite ${ep.chapters.length} sources from this episode.`);
+      // Render Domain Takeaways for this episode
+      renderDomainTakeaways(ep);
+
+      // Update Flashcards
+      if (ep.flashcards && ep.flashcards.length > 0) {
+        flashcards = ep.flashcards;
+        currentCardIndex = 0;
+        renderFlashcard();
+      }
+
+      addBotMessage(`Switched active topic grounding to **Episode #${ep.episode_number || epId} (${ep.title})**. All questions and interview scenarios are now grounded in this episode's whitepapers.`);
     }
+
 
     function renderChapters(ep) {
       const container = document.getElementById('chapters-list');
