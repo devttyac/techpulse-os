@@ -2330,20 +2330,31 @@
           }).join('');
           
           response = `
-            <div class="space-y-3 text-slate-200 text-xs">
+            <div class="space-y-3.5 text-slate-200 text-xs">
               <div>
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-cyan-300 border border-white/10">${escapeHtml(matched.d.badge || matched.dom.toUpperCase())}</span>
                 <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">${escapeHtml(matched.d.title)}</h4>
               </div>
-              <div class="space-y-1.5 text-slate-300 text-[11px] sm:text-xs">
-                <p class="leading-relaxed">In the technical briefing for <strong>Episode #${epNum}</strong>, this mechanism operates as follows:</p>
-                <ul class="list-disc list-inside space-y-2 pl-1 text-slate-300">
-                  ${topBullets}
-                </ul>
+              <div class="p-3 rounded-xl bg-night-900 border border-white/5 space-y-2.5 text-slate-300 text-[11px] sm:text-xs">
+                <div>
+                  <h5 class="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold mb-1">1. Architectural Foundation & Definition</h5>
+                  <p class="leading-relaxed">In enterprise distributed systems, <strong>${escapeHtml(matched.d.title)}</strong> represents a key operational mechanism for high-reliability production.</p>
+                </div>
+                <div>
+                  <h5 class="text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">2. Production Pitfalls & Failure Modes</h5>
+                  <p class="leading-relaxed">Without strict architectural guardrails, distributed components suffer from non-deterministic execution states and compliance risks.</p>
+                </div>
+                <div>
+                  <h5 class="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold mb-1">3. Episode #${epNum} Implementation Mechanics</h5>
+                  <p class="leading-relaxed mb-1.5">In Episode #${epNum}, this mechanism is implemented through the following validated architectural controls:</p>
+                  <ul class="list-disc list-inside space-y-1.5 pl-1 text-slate-300">
+                    ${topBullets}
+                  </ul>
+                </div>
               </div>
               ${matched.d.interview_framing ? `
               <div class="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[11px] text-slate-300 space-y-1">
-                <strong class="text-amber-300 font-mono text-[10px]">💡 Architectural Context & Interview Framing:</strong>
+                <strong class="text-amber-300 font-mono text-[10px]">💡 Staff Architect Interview & Regulatory Framing:</strong>
                 <p class="leading-relaxed">${escapeHtml(matched.d.interview_framing)}</p>
               </div>` : ''}
             </div>
