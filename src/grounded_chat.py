@@ -126,7 +126,7 @@ def dynamic_rag_synthesize(query: str, active_episode: Dict[str, Any]) -> str:
     for dom, text in full_articles.items():
         sentences = [s.strip() for s in re.split(r'\n+|\.\s+', text) if len(s.strip()) > 20]
         for s in sentences:
-            score = sum(2 if kw in s.lower() else 0 for kw in keywords)
+            score = sum(3 if kw in s.lower() else 0 for kw in keywords)
             if score > 0:
                 scored_hits.append((score, dom, s))
 
@@ -135,21 +135,32 @@ def dynamic_rag_synthesize(query: str, active_episode: Dict[str, Any]) -> str:
         title = data.get("title", "")
         badge = data.get("badge", "")
         for b in data.get("bullets", []):
-            score = sum(3 if kw in b.lower() else (2 if kw in title.lower() or kw in badge.lower() else 0) for kw in keywords)
+            score = sum(4 if kw in b.lower() else (1 if kw in title.lower() or kw in badge.lower() else 0) for kw in keywords)
             if score > 0:
                 scored_hits.append((score, dom, b))
 
     scored_hits.sort(key=lambda x: x[0], reverse=True)
 
     if scored_hits and scored_hits[0][0] > 0:
-        top_hits = scored_hits[:3]
+        best_score = scored_hits[0][0]
+        # Keep only the highest-scoring matching points (up to 2)
+        top_hits = [h for h in scored_hits if h[0] >= max(1, best_score - 2)][:2]
         matched_dom = top_hits[0][1]
         dom_meta = takeaways.get(matched_dom, {})
 
-        bullets_html = "".join([f'<li class="leading-relaxed">{hit[2]}</li>' for hit in top_hits])
-        framing_html = f"""<div class="p-2 rounded-lg bg-black/40 border border-white/10 text-[11px] text-slate-300">
-  <strong class="text-amber-300">💡 Interview & Architecture Framing:</strong>
-  <p class="mt-0.5 leading-relaxed">{dom_meta.get('interview_framing')}</p>
+        bullets_formatted = []
+        for hit in top_hits:
+            text = hit[2]
+            if ":" in text:
+                hdr, body = text.split(":", 1)
+                bullets_formatted.append(f'<li class="leading-relaxed"><strong class="text-cyan-300">{hdr.strip()}:</strong>{body}</li>')
+            else:
+                bullets_formatted.append(f'<li class="leading-relaxed">{text}</li>')
+
+        bullets_html = "".join(bullets_formatted)
+        framing_html = f"""<div class="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[11px] text-slate-300 space-y-1">
+  <strong class="text-amber-300 font-mono text-[10px]">💡 Architectural Context & Interview Framing:</strong>
+  <p class="leading-relaxed">{dom_meta.get('interview_framing')}</p>
 </div>""" if dom_meta.get("interview_framing") else ""
 
         sources_html = "".join([f'<a href="{s.get("url")}" target="_blank" class="px-2 py-0.5 rounded bg-black/40 text-cyan-300 border border-white/10 text-[10px] font-mono hover:underline">{s.get("title")}</a> ' for s in dom_meta.get("sources", [])])
@@ -158,15 +169,17 @@ def dynamic_rag_synthesize(query: str, active_episode: Dict[str, Any]) -> str:
   {sources_html}
 </div>""" if sources_html else ""
 
-        return f"""<div class="space-y-3">
+        return f"""<div class="space-y-3 text-slate-200 text-xs">
   <div>
     <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-cyan-300 border border-white/10">{dom_meta.get('badge', matched_dom.upper())}</span>
     <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">{dom_meta.get('title', ep_title)}</h4>
   </div>
 
   <div class="space-y-1.5 text-slate-300 text-[11px] sm:text-xs">
-    <p class="font-semibold text-slate-100">Grounded Technical Analysis (Episode #{ep_num}):</p>
-    <ul class="list-disc list-inside space-y-1.5 pl-1 text-slate-300">
+    <p class="leading-relaxed">
+      In the technical briefing for <strong>Episode #{ep_num}</strong>, this mechanism operates as follows:
+    </p>
+    <ul class="list-disc list-inside space-y-2 pl-1 text-slate-300">
       {bullets_html}
     </ul>
   </div>

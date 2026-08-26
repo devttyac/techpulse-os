@@ -963,6 +963,7 @@
     ];
 
     let currentCardIndex = 0;
+    let currentEpisodeId = 'ep-142';
     function renderFlashcard() {
       const card = flashcards[currentCardIndex] || flashcards[0];
       if (!card) return;
@@ -2319,24 +2320,31 @@
 
         if (bestHits.length > 0) {
           const matched = bestHits[0];
-          const topBullets = bestHits.slice(0, 3).map(h => `<li class="leading-relaxed">${escapeHtml(h.text)}</li>`).join('');
+          const topHits = bestHits.slice(0, 2);
+          const topBullets = topHits.map(h => {
+            const parts = h.text.split(':');
+            if (parts.length > 1) {
+              return `<li class="leading-relaxed"><strong class="text-cyan-300">${escapeHtml(parts[0].trim())}:</strong>${escapeHtml(parts.slice(1).join(':'))}</li>`;
+            }
+            return `<li class="leading-relaxed">${escapeHtml(h.text)}</li>`;
+          }).join('');
           
           response = `
-            <div class="space-y-3">
+            <div class="space-y-3 text-slate-200 text-xs">
               <div>
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-cyan-300 border border-white/10">${escapeHtml(matched.d.badge || matched.dom.toUpperCase())}</span>
                 <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">${escapeHtml(matched.d.title)}</h4>
               </div>
               <div class="space-y-1.5 text-slate-300 text-[11px] sm:text-xs">
-                <p class="font-semibold text-slate-100">Grounded Technical Analysis (Episode #${epNum}):</p>
-                <ul class="list-disc list-inside space-y-1.5 pl-1 text-slate-300">
+                <p class="leading-relaxed">In the technical briefing for <strong>Episode #${epNum}</strong>, this mechanism operates as follows:</p>
+                <ul class="list-disc list-inside space-y-2 pl-1 text-slate-300">
                   ${topBullets}
                 </ul>
               </div>
               ${matched.d.interview_framing ? `
-              <div class="p-2 rounded-lg bg-black/40 border border-white/10 text-[11px] text-slate-300">
-                <strong class="text-amber-300">💡 Interview Framing:</strong>
-                <p class="mt-0.5 leading-relaxed">${escapeHtml(matched.d.interview_framing)}</p>
+              <div class="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[11px] text-slate-300 space-y-1">
+                <strong class="text-amber-300 font-mono text-[10px]">💡 Architectural Context & Interview Framing:</strong>
+                <p class="leading-relaxed">${escapeHtml(matched.d.interview_framing)}</p>
               </div>` : ''}
             </div>
           `;
@@ -2787,6 +2795,7 @@
         });
       }
 
+      changeEpisode('ep-142');
       renderFlashcard();
       updateMasteryUI();
       renderChapters(episodes['ep-142']);
