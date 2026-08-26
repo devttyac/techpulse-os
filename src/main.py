@@ -183,15 +183,18 @@ async def startup_event():
             scheduler.add_job(run_daily_pipeline, trigger)
             scheduler.start()
             logger.info(f"Scheduled daily pipeline with cron [{cron_expr}] SGT")
-    # Pre-generate seed episode audio in background if missing
-    ep142_mp3 = os.path.join(AUDIO_DIR, "ep-142.mp3")
-    if not os.path.exists(ep142_mp3):
-        with open(os.path.join(EPISODES_DIR, "ep-142.json"), "r") as fp:
-            ep142_data = json.load(fp)
-        asyncio.create_task(generate_episode_podcast_audio(ep142_data, AUDIO_DIR))
-
     except Exception as e:
         logger.warning(f"Could not parse cron expression: {e}")
+
+    # Pre-generate seed episode audio in background if missing
+    try:
+        ep142_mp3 = os.path.join(AUDIO_DIR, "ep-142.mp3")
+        if not os.path.exists(ep142_mp3):
+            with open(os.path.join(EPISODES_DIR, "ep-142.json"), "r") as fp:
+                ep142_data = json.load(fp)
+            asyncio.create_task(generate_episode_podcast_audio(ep142_data, AUDIO_DIR))
+    except Exception as e:
+        logger.error(f"Error checking seed audio on startup: {e}")
 
 class ChatRequest(BaseModel):
     query: str
