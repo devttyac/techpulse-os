@@ -65,7 +65,7 @@ async def fetch_feed_items(client: httpx.AsyncClient, domain: str, feed_meta: Di
     items = []
 
     try:
-        response = await client.get(url, timeout=12.0, headers={"User-Agent": "TechPulseOS/1.0 (Automated Ingest)"})
+        response = await client.get(url, timeout=6.0, headers={"User-Agent": "TechPulseOS/1.0 (Automated Ingest)"})
         if response.status_code != 200:
             logger.warning(f"Feed [{name}] returned status {response.status_code}")
             return items

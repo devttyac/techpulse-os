@@ -2943,57 +2943,75 @@
     }
 
     let refreshPollTimer = null;
+    let refreshSafetyTimer = null;
+
     async function triggerManualRun() {
       const btn = document.getElementById('manual-run-btn');
       if (!btn) return;
 
+      const resetButton = () => {
+        if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
+        if (refreshSafetyTimer) { clearTimeout(refreshSafetyTimer); refreshSafetyTimer = null; }
+        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Force Re-Fetch Feeds Now</span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
+      };
+
       try {
-        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Ingesting Feeds (20%)...</span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
+        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Scanning Feeds (15%)...</span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
         
         await fetch('/api/refresh', { method: 'POST' });
-        
+
         if (refreshPollTimer) clearInterval(refreshPollTimer);
-        refreshPollTimer = setInterval(async () => {
+        if (refreshSafetyTimer) clearTimeout(refreshSafetyTimer);
+
+        // Safety timeout: auto-reset button after 60s if server ever unresponsiveness
+        refreshSafetyTimer = setTimeout(() => {
+          resetButton();
+        }, 60000);
+        
+        const checkStatus = async () => {
           try {
             const statusRes = await fetch('/api/refresh/status');
             if (statusRes.ok) {
               const state = await statusRes.json();
               if (state.running) {
                 const stageText = state.stage === 'checking' ? 'Scanning Feeds (15%)' :
-                                  state.stage === 'ingesting' ? 'Ingesting Feeds (20%)' :
-                                  state.stage === 'synthesizing' ? 'Synthesizing (50%)' :
-                                  state.stage === 'audio_tts' ? 'Generating Audio (75%)' : 'Processing...';
+                                  state.stage === 'ingesting' ? 'Ingesting Feeds (25%)' :
+                                  state.stage === 'synthesizing' ? 'Synthesizing (60%)' :
+                                  state.stage === 'audio_tts' ? 'Generating Audio (85%)' : 'Processing...';
                 btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> ${stageText}</span><span class="font-mono text-[10px] text-cyan-400 font-bold">${state.progress || 20}%</span>`;
               } else if (state.stage === 'up_to_date') {
-                clearInterval(refreshPollTimer);
-                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-300 text-xs"><span class="font-bold text-sm">ℹ</span> ${escapeHtml(state.message || 'Feeds are up-to-date! No new whitepapers published as yet.')}</span><span class="font-mono text-[10px] text-cyan-400 font-bold">Current</span>`;
-                setTimeout(() => {
-                  btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Force Re-Fetch Feeds Now</span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
-                }, 4000);
+                if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
+                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-300 text-xs"><span class="font-bold text-sm">ℹ</span> Feeds up-to-date! No new papers published yet.</span><span class="font-mono text-[10px] text-cyan-400 font-bold">Current</span>`;
+                setTimeout(resetButton, 3500);
               } else if (state.stage === 'complete') {
-                clearInterval(refreshPollTimer);
+                if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
                 btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-emerald-400 text-xs"><span class="font-bold text-sm">✓</span> ${escapeHtml(state.message || 'Episode Ready!')}</span><span class="font-mono text-[10px] text-emerald-400 font-bold">100%</span>`;
                 await loadEpisodesFromBackend();
                 if (state.last_episode_id) {
                   changeEpisode(state.last_episode_id);
                 }
-                setTimeout(() => {
-                  btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Force Re-Fetch Feeds Now</span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
-                }, 4000);
+                setTimeout(resetButton, 4000);
               } else if (state.stage === 'error') {
-                clearInterval(refreshPollTimer);
-                btn.innerHTML = `<span class="text-rose-400 text-xs">Pipeline Failed</span>`;
-                setTimeout(() => {
-                  btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Force Re-Fetch Feeds Now</span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
-                }, 3000);
+                if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
+                btn.innerHTML = `<span class="text-rose-400 text-xs font-semibold">⚠️ Pipeline Error</span>`;
+                setTimeout(resetButton, 3000);
+              } else {
+                // If not running and idle, reset
+                resetButton();
               }
             }
           } catch (e) {
             console.error("Pipeline poll error:", e);
           }
-        }, 1500);
+        };
+
+        // Immediate first check
+        await checkStatus();
+        refreshPollTimer = setInterval(checkStatus, 1500);
+
       } catch (err) {
         console.error("Trigger manual run error:", err);
+        resetButton();
       }
     }
 
