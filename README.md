@@ -7,7 +7,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com/)
 [![Docker Ready](https://img.shields.io/badge/Docker-Compose%20%7C%20Dockge-2496ED.svg)](https://www.docker.com/)
 [![Audio: Edge--TTS](https://img.shields.io/badge/Neural%20Audio-Edge--TTS%20(Zero%20Cost)-5D3FD3.svg)](https://github.com/rany2/edge-tts)
-[![LLM: Gemini 2.0](https://img.shields.io/badge/LLM-Gemini%202.0%20Flash-4285F4.svg)](https://ai.google.dev/)
+[![LLM: Gemini 3.6](https://img.shields.io/badge/LLM-Gemini%203.6%20Flash-4285F4.svg)](https://ai.google.dev/)
 [![Feed: RSS 2.0](https://img.shields.io/badge/Podcast%20RSS-Apple%20%7C%20Pocket%20Casts-FFA500.svg)](#-mobile-podcast-app-sync)
 
 ---
@@ -28,7 +28,7 @@ Every morning, TechPulse OS autonomously scrapes vendor engineering blogs and pr
  │   [ 8-Domain RSS Feeds ] ──► [ Async Ingestion & Content Deduplicator ]                │
  │   (Anthropic, AWS, Azure,    │                                                         │
  │    Fabric, SPIFFE, CNCF)     ▼                                                         │
- │   [ Gemini 2.0 Flash ]   ──► [ 8-Domain Deep Takeaways + Dialogue Script + Citations ] │
+ │   [ Gemini 3.6 Flash ]   ──► [ 8-Domain Deep Takeaways + Dialogue Script + Citations ] │
  │                              │                                                         │
  │                              ▼                                                         │
  │   [ Edge-TTS Engine ]    ──► [ Dual-Host Neural MP3 Audio + Timecoded Chapter Offsets] │
@@ -169,7 +169,7 @@ Access the interactive web dashboard at **`http://localhost:8000`** (or your ser
 ## 🛠️ Tech Stack
 
 - **Backend**: FastAPI (Python 3.11+), Uvicorn, APScheduler, httpx, BeautifulSoup4, Feedparser.
-- **Synthesis**: Google Gemini 2.0 Flash / 1.5 Flash via `google-genai`.
+- **Synthesis**: Google Gemini 3.6 Flash / 2.5 Flash via `google-genai` and direct REST cascade.
 - **Audio Generation**: Microsoft Edge Neural TTS (`edge-tts`), Mutagen ID3 / MP3 chapter tagger.
 - **Frontend**: Vanilla ES6+, Tailwind CSS, HTML5 Audio API, Glassmorphic CSS.
 - **Containerization**: Docker, Docker Compose, Dockge compatible.
