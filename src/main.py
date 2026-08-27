@@ -40,7 +40,7 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 DEFAULT_CONFIG = {
     "max_episodes_retained": 14,
     "chapters_per_episode": 8,
-    "gemini_model": "gemini-2.0-flash",
+    "gemini_model": "gemini-3.6-flash",
     "cron_schedule": "0 7 * * *"
 }
 

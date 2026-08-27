@@ -21,17 +21,26 @@ Guidelines:
 4. If the user asks casual or conversational questions (e.g. greetings), respond naturally and authoritatively as their Lead Architect copilot without forcing a rigid template.
 """
 
-async def call_gemini_llm(api_key: str, prompt: str) -> tuple[Optional[str], Optional[str]]:
+async def call_gemini_llm(api_key: str, prompt: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
     clean_key = api_key.strip().strip('"').strip("'")
     if not clean_key or len(clean_key) < 10 or clean_key.startswith("${"):
         msg = f"GEMINI_API_KEY is not configured or is a placeholder in container: '{clean_key[:8]}...' (len={len(clean_key)})"
         logger.warning(msg)
-        return None, msg
+        return None, None, msg
 
-    # Tier 1: Modern google.genai SDK
-    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    # Model cascade with priority: env var -> modern recommended -> aliases
+    env_model = os.getenv("GEMINI_MODEL", "").strip()
+    candidate_models = [m for m in [env_model, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-flash"] if m]
+    seen = set()
+    models_to_try = []
+    for m in candidate_models:
+        if m not in seen:
+            seen.add(m)
+            models_to_try.append(m)
+
     errors = []
 
+    # Tier 1: Modern google.genai SDK
     try:
         from google import genai
         client = genai.Client(api_key=clean_key)
@@ -43,7 +52,7 @@ async def call_gemini_llm(api_key: str, prompt: str) -> tuple[Optional[str], Opt
                 )
                 if response and response.text:
                     logger.info(f"Modern google.genai SDK call succeeded ({m})")
-                    return response.text, None
+                    return response.text, m, None
             except Exception as ex_m:
                 err_msg = f"Modern SDK ({m}) failed: {ex_m}"
                 logger.warning(err_msg)
@@ -65,7 +74,7 @@ async def call_gemini_llm(api_key: str, prompt: str) -> tuple[Optional[str], Opt
                 response = model.generate_content(prompt)
                 if response and response.text:
                     logger.info(f"Legacy google.generativeai SDK call succeeded ({m})")
-                    return response.text, None
+                    return response.text, m, None
             except Exception as ex_m:
                 err_msg = f"Legacy SDK ({m}) failed: {ex_m}"
                 logger.warning(err_msg)
@@ -94,7 +103,7 @@ async def call_gemini_llm(api_key: str, prompt: str) -> tuple[Optional[str], Opt
                         text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                         if text:
                             logger.info(f"Direct REST Gemini call succeeded ({m})")
-                            return text, None
+                            return text, m, None
                 else:
                     err_msg = f"REST Gemini call ({m}) HTTP {r.status_code}: {r.text[:200]}"
                     logger.warning(err_msg)
@@ -105,7 +114,7 @@ async def call_gemini_llm(api_key: str, prompt: str) -> tuple[Optional[str], Opt
             errors.append(err_msg)
 
     combined_errors = "; ".join(errors)
-    return None, combined_errors
+    return None, None, combined_errors
 
 # Enterprise Architectural Concept Knowledge Base
 CONCEPT_EXPANSIONS: Dict[str, Dict[str, str]] = {
@@ -313,11 +322,11 @@ SUMMARY: {active_episode.get('summary')}
 === USER QUESTION ===
 {query}
 """
-        llm_response, error_detail = await call_gemini_llm(api_key, prompt)
+        llm_response, used_model, error_detail = await call_gemini_llm(api_key, prompt)
         if llm_response:
             return {
                 "response": llm_response,
-                "model": "gemini-2.0-flash (live-grounded-corpus)",
+                "model": f"{used_model} (live-grounded-corpus)",
                 "grounded_episode_id": active_episode.get("id")
             }
         else:

@@ -384,36 +384,45 @@ async def synthesize_briefing(domain_corpus: Dict[str, List[Dict[str, Any]]], ep
         logger.info("GEMINI_API_KEY not configured. Using deterministic synthesis pipeline.")
         return generate_deterministic_fallback(domain_corpus, episode_num)
 
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    env_model = os.getenv("GEMINI_MODEL", "").strip()
+    candidate_models = [m for m in [env_model, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-flash"] if m]
+    seen = set()
+    models_to_try = []
+    for m in candidate_models:
+        if m not in seen:
+            seen.add(m)
+            models_to_try.append(m)
 
-    try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
-        
-        # Prepare article corpus summary for LLM
-        corpus_text = ""
-        for domain, articles in domain_corpus.items():
-            corpus_text += f"\n\n### DOMAIN: {domain.upper()}\n"
-            for a in articles[:3]:
-                corpus_text += f"- [{a.get('source_name')}]: {a.get('title')} ({a.get('url')})\n  Summary: {a.get('summary')}\n"
+    # Prepare article corpus summary for LLM
+    corpus_text = ""
+    for domain, articles in domain_corpus.items():
+        corpus_text += f"\n\n### DOMAIN: {domain.upper()}\n"
+        for a in articles[:3]:
+            corpus_text += f"- [{a.get('source_name')}]: {a.get('title')} ({a.get('url')})\n  Summary: {a.get('summary')}\n"
 
-        prompt = f"{SYSTEM_SYNTHESIS_PROMPT}\n\n## INGESTED ARTICLE CORPUS:\n{corpus_text}"
-        
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config={'response_mime_type': 'application/json'}
-        )
-        
-        parsed = json.loads(response.text)
-        parsed["id"] = f"ep-{episode_num}"
-        parsed["episode_number"] = episode_num
-        parsed["date"] = datetime.now(timezone.utc).strftime("%b %d, %Y")
-        parsed["created_at"] = datetime.now(timezone.utc).isoformat()
-        parsed["duration"] = parsed.get("duration", "05:20")
-        parsed["total_seconds"] = parsed.get("total_seconds", 320)
-        parsed["full_articles"] = full_articles
-        return parsed
-    except Exception as e:
-        logger.error(f"Error calling Gemini API for synthesis ({model_name}): {e}. Falling back to deterministic pipeline.")
-        return generate_deterministic_fallback(domain_corpus, episode_num)
+    prompt = f"{SYSTEM_SYNTHESIS_PROMPT}\n\n## INGESTED ARTICLE CORPUS:\n{corpus_text}"
+
+    for m in models_to_try:
+        try:
+            from google import genai
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=m,
+                contents=prompt,
+                config={'response_mime_type': 'application/json'}
+            )
+            parsed = json.loads(response.text)
+            parsed["id"] = f"ep-{episode_num}"
+            parsed["episode_number"] = episode_num
+            parsed["date"] = datetime.now(timezone.utc).strftime("%b %d, %Y")
+            parsed["created_at"] = datetime.now(timezone.utc).isoformat()
+            parsed["duration"] = parsed.get("duration", "05:20")
+            parsed["total_seconds"] = parsed.get("total_seconds", 320)
+            parsed["full_articles"] = full_articles
+            logger.info(f"Synthesis succeeded with model: {m}")
+            return parsed
+        except Exception as e:
+            logger.warning(f"Synthesis with model {m} failed: {e}. Trying fallback models...")
+
+    logger.error("All candidate models failed for synthesis. Falling back to deterministic pipeline.")
+    return generate_deterministic_fallback(domain_corpus, episode_num)
