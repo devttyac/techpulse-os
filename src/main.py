@@ -953,6 +953,14 @@ async def podcast_rss(request: Request):
     xml_str = ET.tostring(rss, encoding="utf-8", method="xml")
     return Response(content=xml_str, media_type="application/rss+xml")
 
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/favicon.svg", include_in_schema=False)
+async def serve_favicon():
+    fav_file = os.path.join(STATIC_DIR, "favicon.svg")
+    if os.path.exists(fav_file):
+        return FileResponse(fav_file, media_type="image/svg+xml")
+    raise HTTPException(status_code=404, detail="Favicon not found")
+
 # Root Route with No-Cache headers to prevent stale UI caching
 @app.get("/", response_class=FileResponse)
 async def serve_root():
