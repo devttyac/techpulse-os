@@ -19,7 +19,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from src.ingestion import ingest_all_domains
-from src.synthesizer import synthesize_briefing
+from src.synthesizer import synthesize_briefing, local_now
 from src.tts_engine import generate_episode_podcast_audio, generate_all_domain_audios
 from src.grounded_chat import process_grounded_chat
 
@@ -457,12 +457,22 @@ async def run_daily_pipeline():
         current_corpus_hash = hashlib.sha256("".join(all_corpus_urls).encode("utf-8")).hexdigest()
         
         # Check if corpus has new articles compared to existing episodes
+        previous_titles: Optional[List[str]] = None
         sorted_files = get_sorted_episode_files()
         if sorted_files:
             latest_file = sorted_files[0]
             with open(os.path.join(EPISODES_DIR, latest_file), "r") as f:
                 latest_ep = json.load(f)
-            
+
+            # Feed the prior episode's chapter titles to validate_synthesis's
+            # anti-repeat rule so it actually fires in production. Only trust
+            # a complete, well-formed prior chapter list (exactly 8, no Nones)
+            # -- a malformed or short prior episode must not cause spurious
+            # rejections of an otherwise-good synthesis.
+            prior_chapter_titles = [c.get("title") for c in latest_ep.get("chapters", [])]
+            if len(prior_chapter_titles) == 8 and all(t is not None for t in prior_chapter_titles):
+                previous_titles = prior_chapter_titles
+
             latest_hash = latest_ep.get("corpus_hash")
             latest_ingested = set(latest_ep.get("ingested_urls", []))
             
@@ -473,7 +483,10 @@ async def run_daily_pipeline():
                 is_same_corpus = set(all_corpus_urls).issubset(latest_ingested)
             # Check 3: If latest_ep has no hash yet, check if latest episode was created today (same date)
             if not is_same_corpus and not latest_hash and not latest_ingested:
-                today_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
+                # Must use the same local-time basis as the "date" field stamped by
+                # synthesizer.py (Asia/Singapore), not UTC — otherwise this dedup
+                # check silently breaks once "date" moves off UTC (see task 7).
+                today_str = local_now().strftime("%b %d, %Y")
                 if latest_ep.get("date") == today_str:
                     latest_ep["corpus_hash"] = current_corpus_hash
                     latest_ep["ingested_urls"] = all_corpus_urls
@@ -500,8 +513,12 @@ async def run_daily_pipeline():
         pipeline_state["progress"] = 50
         pipeline_state["message"] = f"New papers found! Synthesizing briefing for Episode #{next_num}..."
 
-        # Step 2: Synthesis with 60s hard timeout
-        briefing_data = await asyncio.wait_for(synthesize_briefing(corpus, next_num), timeout=60.0)
+        # Step 2: Synthesis with 120s hard timeout (schema-constrained output is
+        # 3-5x larger than before -- 8 full takeaways vs 1 -- and this single
+        # budget covers the entire 4-model cascade)
+        briefing_data = await asyncio.wait_for(
+            synthesize_briefing(corpus, next_num, previous_titles=previous_titles), timeout=120.0
+        )
         briefing_data["corpus_hash"] = current_corpus_hash
         briefing_data["ingested_urls"] = all_corpus_urls
         
