@@ -90,7 +90,32 @@ curl -s http://localhost:8000/healthz | jq
 
 ---
 
-## 5. Security & Isolation Standard
+## 5. Remote-Context Deployment (Build Directly from GitHub)
+
+The reference `docker-compose.yml` builds from a local checkout (`build: .`). Where the Docker host has no checkout, or the host is managed by an orchestrator that deploys from a compose file alone, use a remote build context instead:
+
+```yaml
+services:
+  techpulse-os:
+    build:
+      context: https://github.com/<owner>/<repo>.git#main
+    pull_policy: build
+    restart: always
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - /path/on/host/techpulse-data:/app/data
+```
+
+- **Git URL as build context.** Compose clones the repository at the named ref (`#main`) and builds from it, so the host needs no local copy of the code. Pin a tag or commit (`#v3.5.0`) where a reproducible deployment matters.
+- **Pair it with `pull_policy: build`.** With a `build:` service and no `image:`, `docker compose pull` skips the service and `up -d` reuses the existing image. An orchestrator's "update" action can then report success while deploying nothing. `pull_policy: build` forces a rebuild on every `up`, so an update deploys the latest code. Confirm the deployed version afterwards with `curl -s http://localhost:8000/healthz | jq .version`.
+- **Bind mount in place of the named volume.** Where you want the data directory on a known host path (for backups or inspection), replace `techpulse_data:/app/data` with an absolute host path. Create the directory first and ensure the container user can write to it. Remove the unused top-level `volumes:` entry.
+
+**Tradeoff:** with `pull_policy: build`, every `up` performs a build and therefore depends on the git host being reachable. A host reboot is not affected, because `restart: always` restarts the container from the existing image without building.
+
+---
+
+## 6. Security & Isolation Standard
 - The container runs in an isolated bridge network with zero public ingress ports required.
 - All secrets are injected strictly via container environment variables.
 - Persistent volumes (`techpulse_data`) retain all generated briefings and audio across container restarts.

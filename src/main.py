@@ -28,6 +28,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("techpulse.main")
 
+APP_VERSION = "3.5.0"
+
 STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 EPISODES_DIR = os.path.join(STORAGE_DIR, "episodes")
 AUDIO_DIR = os.path.join(STORAGE_DIR, "audio")
@@ -108,7 +110,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="TechPulse OS",
     description="Multi-Domain Technical Intelligence & Socratic Sparring Platform",
-    version="3.4.0",
+    version=APP_VERSION,
     lifespan=lifespan
 )
 
@@ -589,7 +591,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "techpulse-os",
-        "version": "3.4.0",
+        "version": APP_VERSION,
         "gemini_api_key_configured": key_configured,
         "episodes_count": ep_count,
         "scheduler_running": scheduler.running,
