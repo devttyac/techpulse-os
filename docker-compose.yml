@@ -3,10 +3,11 @@ version: '3.8'
 services:
   techpulse-os:
     build: .
+    pull_policy: build
     container_name: techpulse-os
     restart: always
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     environment:
       - TZ=Asia/Singapore
       - GEMINI_API_KEY=${GEMINI_API_KEY}
