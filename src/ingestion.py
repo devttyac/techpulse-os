@@ -50,7 +50,7 @@ DOMAIN_FEEDS: Dict[str, List[Dict[str, str]]] = {
     ]
 }
 
-# Feed links become "Read" links in the PWA and chapter links in podcast apps, so
+# Feed links become "Read" links in the SPA and chapter links in podcast apps, so
 # only absolute http(s) URLs with a host, at a sane length, may enter the corpus.
 MAX_LINK_LENGTH = 2048
 

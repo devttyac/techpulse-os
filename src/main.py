@@ -1065,7 +1065,7 @@ async def serve_root():
         )
     raise HTTPException(status_code=404, detail="Frontend index.html not found")
 
-# Mount PWA Static Frontend
+# Mount SPA Static Frontend
 if os.path.exists(STATIC_DIR):
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
