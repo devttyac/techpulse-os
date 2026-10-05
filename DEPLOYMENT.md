@@ -52,7 +52,7 @@ PORT=8000
 
 - **Generate and set a key:** run `openssl rand -hex 32`, then put the output in `.env` as `API_SECRET_KEY=<value>` and restart with `docker compose up -d --build`.
 - **Leave it blank for read-only mode:** the app still starts and serves `GET` requests, but every other `/api/*` request (settings changes, refresh, chat, export) is rejected with `401`. The startup log prints a `READ-ONLY mode` warning naming the variable.
-- **First use in the PWA:** the app prompts for the key once and stores it in the browser. If the server rejects it, the app clears the stored key and prompts again.
+- **First use in the web interface:** the app prompts for the key once and stores it in the browser. If the server rejects it, the app clears the stored key and prompts again.
 - **Not covered here:** `/healthz` stays open for the Docker health check. `/feed.xml` and `/audio/*` are not gated by this key, because podcast clients cannot send custom headers.
 - **Never commit the key.** Keep it in `.env`, which is excluded from version control.
 
