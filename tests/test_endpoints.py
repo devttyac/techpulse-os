@@ -2,15 +2,33 @@ import asyncio
 import httpx
 import sys
 import os
+import shutil
+import tempfile
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
-from src.main import app
+# ORDER IS LOAD-BEARING: src.main reads STORAGE_DIR into module-level constants
+# at import time, so the environment must be configured BEFORE the import below.
+# Setting it afterwards has no effect and the suite would use the real data dir.
+# The key is a throwaway test literal, not a credential.
+TEST_API_KEY = "test-key-for-endpoint-suite"
+_TMP_STORAGE = tempfile.mkdtemp(prefix="techpulse-endpoints-test-")
+os.environ["STORAGE_DIR"] = _TMP_STORAGE
+os.environ["API_SECRET_KEY"] = TEST_API_KEY
+
+from src.main import app, init_seed_data  # noqa: E402
 
 async def run_asgi_tests():
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    # httpx.ASGITransport does not run FastAPI's lifespan hook, so replicate the
+    # seed step it would perform; otherwise a clean checkout has zero episodes.
+    init_seed_data()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-API-Key": TEST_API_KEY},
+    ) as client:
         # 1. Test /healthz
         r_health = await client.get("/healthz")
         assert r_health.status_code == 200, f"Healthcheck failed: {r_health.status_code}"
@@ -88,4 +106,8 @@ async def run_asgi_tests():
     print("=======================================================")
 
 if __name__ == "__main__":
-    asyncio.run(run_asgi_tests())
+    try:
+        asyncio.run(run_asgi_tests())
+    finally:
+        # ignore_errors so a cleanup failure can never mask a test failure.
+        shutil.rmtree(_TMP_STORAGE, ignore_errors=True)
