@@ -3,6 +3,7 @@ import html
 import json
 import logging
 import os
+import re
 import shutil
 import hashlib
 import xml.etree.ElementTree as ET
@@ -440,6 +441,28 @@ def _safe_url(value: Any) -> str:
     if parsed.scheme.lower() in ("http", "https") and parsed.netloc:
         return candidate
     return ""
+
+_HTML_TAG_RE = re.compile(r"<[^>]*>")
+
+def _plain_text(value: Any) -> str:
+    """Reduce possibly-HTML text to inert plain text for RSS <description>.
+
+    Podcast clients commonly render <description> as HTML, so escaping is not
+    enough (they decode entities back into live markup). Instead: unescape
+    entities, then strip tags, repeating until stable so entity-encoded or
+    nested markup (e.g. &lt;script&gt;, <scr<b>ipt>) cannot survive; finally drop any
+    stray angle brackets and collapse whitespace. Stdlib only.
+    """
+    if not isinstance(value, str):
+        return ""
+    text = value
+    for _ in range(10):
+        previous = text
+        text = _HTML_TAG_RE.sub("", html.unescape(text))
+        if text == previous:
+            break
+    text = text.replace("<", "").replace(">", "")
+    return " ".join(text.split())
 
 def get_sorted_episode_files() -> List[str]:
     cleanup_duplicate_episodes()
@@ -952,7 +975,7 @@ async def podcast_rss(request: Request):
             pub_date_rfc = email.utils.formatdate(usegmt=True)
 
         ET.SubElement(item, "pubDate").text = pub_date_rfc
-        ET.SubElement(item, "description").text = ep.get("summary")
+        ET.SubElement(item, "description").text = _plain_text(ep.get("summary"))
         
         # HTML Show notes with direct article links
         show_notes_html = f"<p>{html.escape(str(ep.get('summary', '')), quote=True)}</p><h3>Podcast Chapters & Source Links:</h3><ul>"
