@@ -5,6 +5,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from typing import Dict, List, Any
+from urllib.parse import urlparse
 import feedparser
 import httpx
 from bs4 import BeautifulSoup
@@ -49,6 +50,21 @@ DOMAIN_FEEDS: Dict[str, List[Dict[str, str]]] = {
     ]
 }
 
+# Feed links become "Read" links in the PWA and chapter links in podcast apps, so
+# only absolute http(s) URLs with a host, at a sane length, may enter the corpus.
+MAX_LINK_LENGTH = 2048
+
+
+def is_safe_link(link: str) -> bool:
+    if not isinstance(link, str) or len(link) > MAX_LINK_LENGTH:
+        return False
+    try:
+        parsed = urlparse(link)
+        return parsed.scheme in ("http", "https") and bool(parsed.hostname)
+    except ValueError:
+        return False
+
+
 def clean_html_summary(html_content: str, max_chars: int = 500) -> str:
     if not html_content:
         return ""
@@ -75,6 +91,10 @@ async def fetch_feed_items(client: httpx.AsyncClient, domain: str, feed_meta: Di
             title = entry.get("title", "").strip()
             link = entry.get("link", "").strip()
             if not title or not link:
+                continue
+            if not is_safe_link(link):
+                # Same handling as a missing link: the article is skipped.
+                logger.warning(f"Feed [{name}] entry skipped: unsafe or oversized link {link[:120]!r}")
                 continue
 
             summary_raw = entry.get("summary", "") or entry.get("description", "")

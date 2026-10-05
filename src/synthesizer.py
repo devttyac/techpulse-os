@@ -413,6 +413,88 @@ def validate_synthesis(parsed: dict, previous_titles: Optional[List[str]] = None
     return True, None
 
 
+# Systematic fabrication of source URLs should fail the synthesis (advancing the
+# model cascade) rather than be silently patched; a couple of stray corrections
+# are tolerated because they are repaired from the corpus.
+MAX_URL_SUBSTITUTIONS = 2
+
+
+def enforce_corpus_urls(parsed: dict, domain_corpus: Dict[str, List[Dict[str, Any]]]) -> tuple[dict, int]:
+    """Rebuild source URLs in model output from the ingested corpus (F-03).
+
+    The prompt asks the model to copy URLs from the supplied articles, but that
+    is a request, not a control. This enforces it:
+      - chapters[i].source_url (domain = DOMAIN_ORDER[i]) not found anywhere in
+        the FULL corpus is replaced, with source_name, by that domain's top
+        article; a domain with no articles gets a blank URL and name.
+      - takeaways[domain].sources[] entries whose url is not in the corpus are
+        dropped (logged, not counted).
+    Returns (payload, substitution_count). Malformed chapters count as
+    substitutions. Never raises: this runs on untrusted model output.
+    """
+    allowed: Dict[str, str] = {}
+    top_by_domain: Dict[str, Dict[str, str]] = {}
+    if isinstance(domain_corpus, dict):
+        for domain, articles in domain_corpus.items():
+            if not isinstance(articles, list):
+                continue
+            for a in articles:
+                if not isinstance(a, dict):
+                    continue
+                url = a.get("url")
+                if not isinstance(url, str) or not url:
+                    continue
+                name = a.get("source_name")
+                name = name if isinstance(name, str) else ""
+                allowed.setdefault(url, name)
+                top_by_domain.setdefault(domain, {"url": url, "source_name": name})
+
+    if not isinstance(parsed, dict):
+        return parsed, 0
+
+    substitutions = 0
+    dropped = 0
+
+    chapters = parsed.get("chapters")
+    if isinstance(chapters, list):
+        for i, chapter in enumerate(chapters):
+            if not isinstance(chapter, dict):
+                substitutions += 1  # uncorrectable; counted so it pushes toward rejection
+                continue
+            url = chapter.get("source_url")
+            if isinstance(url, str) and url in allowed:
+                continue
+            domain = DOMAIN_ORDER[i] if i < len(DOMAIN_ORDER) else None
+            target = top_by_domain.get(domain) if domain else None
+            chapter["source_url"] = target["url"] if target else ""
+            chapter["source_name"] = target["source_name"] if target else ""
+            substitutions += 1
+
+    takeaways = parsed.get("takeaways")
+    if isinstance(takeaways, dict):
+        for takeaway in takeaways.values():
+            if not isinstance(takeaway, dict) or "sources" not in takeaway:
+                continue
+            sources = takeaway["sources"]
+            if not isinstance(sources, list):
+                dropped += 1
+                takeaway["sources"] = []
+                continue
+            kept = [
+                s for s in sources
+                if isinstance(s, dict) and isinstance(s.get("url"), str) and s["url"] in allowed
+            ]
+            dropped += len(sources) - len(kept)
+            takeaway["sources"] = kept
+
+    if substitutions or dropped:
+        logger.warning(
+            f"enforce_corpus_urls: {substitutions} chapter URL substitution(s), "
+            f"{dropped} takeaway source(s) dropped (not in ingested corpus)."
+        )
+    return parsed, substitutions
+
+
 def _build_takeaway_for_domain(domain: str, articles: List[Dict[str, Any]]) -> Dict[str, Any]:
     meta = DOMAIN_META[domain]
 
@@ -694,6 +776,14 @@ async def synthesize_briefing(
             ok, reject_reason = validate_synthesis(parsed, previous_titles)
             if not ok:
                 logger.warning(f"Synthesis with model {m} rejected by validate_synthesis: {reject_reason}. Trying fallback models...")
+                continue
+
+            parsed, url_substitutions = enforce_corpus_urls(parsed, domain_corpus)
+            if url_substitutions > MAX_URL_SUBSTITUTIONS:
+                logger.warning(
+                    f"Synthesis with model {m} rejected: {url_substitutions} chapter URL(s) not in the ingested "
+                    f"corpus (limit {MAX_URL_SUBSTITUTIONS}). Trying fallback models..."
+                )
                 continue
 
             parsed["id"] = f"ep-{episode_num}"
