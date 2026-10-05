@@ -17,14 +17,17 @@ os.environ["STORAGE_DIR"] = _TMP_STORAGE
 os.environ["HOST_URL"] = "https://feed.example.test"
 
 from src import main as app_main  # noqa: E402
-from src.main import _safe_url, podcast_rss  # noqa: E402
+from src.main import _plain_text, _safe_url, podcast_rss  # noqa: E402
 
 CONTENT_NS = "{http://purl.org/rss/1.0/modules/content/}encoded"
 PSC_NS = "{http://podlove.org/simple-chapters}chapter"
 
 HOSTILE_TITLE = '" onmouseover="alert(1)'
 HOSTILE_URL = "javascript:alert(1)"
-HOSTILE_SUMMARY = '<script>alert(1)</script> " onmouseover="alert(1)'
+HOSTILE_SUMMARY = (
+    'Hostile summary words <script>alert(1)</script> '
+    '<a href="x" onmouseover="alert(1)">link text</a>'
+)
 
 
 class _StubRequest:
@@ -101,16 +104,7 @@ def _build_feed():
 def test_feed_contains_no_javascript_scheme_or_raw_handler():
     xml_text = _build_feed()
     assert "javascript:" not in xml_text.lower(), "javascript: URL leaked into feed XML"
-    # <description> is plain XML text carrying the episode summary verbatim; it is a
-    # separate, out-of-scope sink (reported, not fixed here). Exclude it from this
-    # raw-XML check so the assertion covers show notes and chapter attributes.
-    root = ET.fromstring(xml_text)
-    for parent in root.iter():
-        for child in list(parent):
-            if child.tag == "description":
-                parent.remove(child)
-    scoped = ET.tostring(root, encoding="unicode")
-    assert 'onmouseover="' not in scoped, "unescaped onmouseover=\" present in feed XML outside <description>"
+    assert 'onmouseover="' not in xml_text, "unescaped onmouseover=\" present in raw feed XML"
 
 
 def test_feed_show_notes_html_has_no_attribute_breakout():
@@ -144,6 +138,30 @@ def test_feed_show_notes_summary_is_escaped():
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in show_notes, "summary was not entity-escaped"
 
 
+def test_plain_text_strips_markup_and_handles_bad_input():
+    assert _plain_text(None) == ""
+    assert _plain_text(123) == ""
+    assert _plain_text("<b>Hello</b>   world\n now") == "Hello world now"
+    # Entity-encoded markup must not survive as live tags after unescaping.
+    assert "<" not in _plain_text("&lt;script&gt;alert(1)&lt;/script&gt; ok")
+    assert "<" not in _plain_text("&amp;lt;script&amp;gt;x&amp;lt;/script&amp;gt;")
+    assert "<" not in _plain_text("a <script never closed")
+    assert _plain_text("Fish &amp; Chips") == "Fish & Chips"
+
+
+def test_feed_description_is_plain_text_not_merely_escaped():
+    xml_text = _build_feed()
+    root = ET.fromstring(xml_text)
+    item = root.find("channel/item")
+    description = item.find("description").text
+    assert "<" not in description and ">" not in description, f"markup in description: {description!r}"
+    assert "<script" not in description.lower()
+    assert "onmouseover=" not in description
+    assert "&lt;" not in description, "description is escaped rather than stripped"
+    assert "link text" in description, "human-readable text inside stripped tags was lost"
+    assert "Hostile summary words" in description, "human-readable summary text was lost"
+
+
 def main():
     tests = [
         test_safe_url_rejects_javascript_scheme,
@@ -156,6 +174,8 @@ def main():
         test_feed_show_notes_html_has_no_attribute_breakout,
         test_feed_psc_chapter_href_is_blank_for_unsafe_url_and_title_roundtrips,
         test_feed_show_notes_summary_is_escaped,
+        test_plain_text_strips_markup_and_handles_bad_input,
+        test_feed_description_is_plain_text_not_merely_escaped,
     ]
     failures = 0
     try:
