@@ -34,7 +34,7 @@ Every morning, TechPulse OS autonomously scrapes vendor engineering blogs and pr
  │   [ Edge-TTS Engine ]    ──► [ Dual-Host Neural MP3 Audio + Timecoded Chapter Offsets] │
  │                              │                                                         │
  │                              ▼                                                         │
- │   [ FastAPI Backend ]    ──► 1. Responsive PWA Frontend (7 Glassmorphic Themes)        │
+ │   [ FastAPI Backend ]    ──► 1. Responsive SPA Frontend (7 Glassmorphic Themes)        │
  │                              2. Private Podcast RSS 2.0 Feed (/feed.xml)               │
  │                              3. Grounded Socratic AI Chat (Zero Hallucination)         │
  │                              4. Spaced-Repetition Recall Flashcards                    │
@@ -151,7 +151,7 @@ Access the interactive web dashboard at **`http://localhost:8000`** (or your ser
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/` | `GET` | Single-Page Responsive PWA Interface |
+| `/` | `GET` | Single-Page Responsive Web Interface |
 | `/feed.xml` | `GET` | Podcast RSS 2.0 XML with Podlove Chapters |
 | `/api/episodes` | `GET` | List all synthesized daily episodes |
 | `/api/episodes/{id}` | `GET` | Full episode metadata (script, chapters, takeaways) |
