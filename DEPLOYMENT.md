@@ -37,12 +37,24 @@ HOST_URL=http://192.168.1.50:8000
 # or with Tailscale:
 # HOST_URL=http://100.x.y.z:8000
 
+# Shared secret that protects the API (see "API Authentication" below). Leave blank for read-only mode.
+API_SECRET_KEY=
+
 # Daily automated ingestion schedule (Singapore Time UTC+8)
 CRON_SCHEDULE=0 6 * * *
 
 # Port to expose
 PORT=8000
 ```
+
+### API Authentication
+`API_SECRET_KEY` is a shared secret that protects every `/api/*` route. Without it, anyone who can reach the server could change settings, delete episodes, or trigger the pipeline.
+
+- **Generate and set a key:** run `openssl rand -hex 32`, then put the output in `.env` as `API_SECRET_KEY=<value>` and restart with `docker compose up -d --build`.
+- **Leave it blank for read-only mode:** the app still starts and serves `GET` requests, but every other `/api/*` request (settings changes, refresh, chat, export) is rejected with `401`. The startup log prints a `READ-ONLY mode` warning naming the variable.
+- **First use in the PWA:** the app prompts for the key once and stores it in the browser. If the server rejects it, the app clears the stored key and prompts again.
+- **Not covered here:** `/healthz` stays open for the Docker health check. `/feed.xml` and `/audio/*` are not gated by this key, because podcast clients cannot send custom headers.
+- **Never commit the key.** Keep it in `.env`, which is excluded from version control.
 
 ### Step 3: Build and Launch Container
 ```bash

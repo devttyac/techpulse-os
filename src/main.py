@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import hashlib
+import hmac
 import xml.etree.ElementTree as ET
 import email.utils
 from urllib.parse import urlparse
@@ -74,6 +75,10 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if os.getenv("API_SECRET_KEY", "").strip():
+        logger.info("API authentication is enabled: /api/* requires a valid X-API-Key header")
+    else:
+        logger.warning("API is in READ-ONLY mode: API_SECRET_KEY is unset, so all non-GET /api/* requests are rejected")
     cfg = load_config()
     cron_expr = cfg.get("cron_schedule", os.getenv("CRON_SCHEDULE", "0 7 * * *"))
     try:
@@ -125,13 +130,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-async def verify_mutating_auth(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")):
-    """Optional shared secret verification for mutating endpoints if API_SECRET_KEY is configured."""
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+async def require_auth(request: Request, x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")):
+    """Gate for every /api/* route.
+
+    API_SECRET_KEY is read per request. When it is set, the X-API-Key header must
+    match (constant-time compare). When it is unset or blank the server runs in
+    read-only mode: safe methods pass, everything else is rejected. This fails
+    closed without refusing to start, so a rebuild that forgets the variable
+    keeps the site up but cannot be used to change or delete data.
+    """
     secret = os.getenv("API_SECRET_KEY", "").strip()
     if secret:
-        if not x_api_key or x_api_key != secret:
-            raise HTTPException(status_code=401, detail="Unauthorized: Invalid or missing X-API-Key header")
-    return True
+        supplied = (x_api_key or "").encode("utf-8")
+        if not supplied or not hmac.compare_digest(supplied, secret.encode("utf-8")):
+            raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing X-API-Key header")
+        return True
+    if request.method.upper() in SAFE_METHODS:
+        return True
+    raise HTTPException(
+        status_code=401,
+        detail="Unauthorized: server is in read-only mode because API_SECRET_KEY is unset; mutating requests are disabled",
+    )
 
 # Seed episodes for instant out-of-the-box readiness
 SEED_EPISODES = {
@@ -644,7 +665,7 @@ async def health_check():
     }
 
 @app.get("/api/episodes")
-async def get_episodes():
+async def get_episodes(auth: bool = Depends(require_auth)):
     episodes = []
     for f in get_sorted_episode_files():
         with open(os.path.join(EPISODES_DIR, f), "r") as fp:
@@ -652,7 +673,7 @@ async def get_episodes():
     return {"episodes": episodes}
 
 @app.get("/api/episodes/{episode_id}")
-async def get_episode_detail(episode_id: str):
+async def get_episode_detail(episode_id: str, auth: bool = Depends(require_auth)):
     ep_file = os.path.join(EPISODES_DIR, f"{episode_id}.json")
     if not os.path.exists(ep_file):
         seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{episode_id}.json")
@@ -664,7 +685,7 @@ async def get_episode_detail(episode_id: str):
         return json.load(fp)
 
 @app.post("/api/chat")
-async def chat_endpoint(req: ChatRequest):
+async def chat_endpoint(req: ChatRequest, auth: bool = Depends(require_auth)):
     ep_file = os.path.join(EPISODES_DIR, f"{req.episode_id}.json")
     if not os.path.exists(ep_file):
         seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{req.episode_id}.json")
@@ -680,7 +701,7 @@ async def chat_endpoint(req: ChatRequest):
     return result
 
 @app.post("/api/refresh")
-async def manual_refresh(auth: bool = Depends(verify_mutating_auth)):
+async def manual_refresh(auth: bool = Depends(require_auth)):
     global current_pipeline_task
     if pipeline_state.get("running") and current_pipeline_task and not current_pipeline_task.done():
         return {"status": "busy", "message": "Ingestion pipeline is already actively running.", "state": pipeline_state}
@@ -695,7 +716,7 @@ async def manual_refresh(auth: bool = Depends(verify_mutating_auth)):
     return {"status": "ok", "message": "Ingestion and synthesis pipeline triggered in background.", "state": pipeline_state}
 
 @app.post("/api/refresh/cancel")
-async def cancel_refresh(auth: bool = Depends(verify_mutating_auth)):
+async def cancel_refresh(auth: bool = Depends(require_auth)):
     global current_pipeline_task
     if current_pipeline_task and not current_pipeline_task.done():
         current_pipeline_task.cancel()
@@ -709,7 +730,7 @@ async def cancel_refresh(auth: bool = Depends(verify_mutating_auth)):
     return {"status": "cancelled", "message": "Pipeline cancelled successfully.", "state": pipeline_state}
 
 @app.post("/api/refresh/reset")
-async def reset_refresh(auth: bool = Depends(verify_mutating_auth)):
+async def reset_refresh(auth: bool = Depends(require_auth)):
     global current_pipeline_task
     if current_pipeline_task and not current_pipeline_task.done():
         current_pipeline_task.cancel()
@@ -723,11 +744,11 @@ async def reset_refresh(auth: bool = Depends(verify_mutating_auth)):
     return {"status": "reset", "message": "Pipeline state reset to ready.", "state": pipeline_state}
 
 @app.get("/api/refresh/status")
-async def get_refresh_status():
+async def get_refresh_status(auth: bool = Depends(require_auth)):
     return pipeline_state
 
 @app.get("/api/settings")
-async def get_settings():
+async def get_settings(auth: bool = Depends(require_auth)):
     cfg = load_config()
     stats = get_storage_stats()
     return {
@@ -742,7 +763,7 @@ class SettingsUpdate(BaseModel):
     cron_schedule: Optional[str] = None
 
 @app.post("/api/settings")
-async def update_settings(payload: SettingsUpdate, auth: bool = Depends(verify_mutating_auth)):
+async def update_settings(payload: SettingsUpdate, auth: bool = Depends(require_auth)):
     cfg = load_config()
     if payload.max_episodes_retained is not None:
         cfg["max_episodes_retained"] = payload.max_episodes_retained
@@ -764,7 +785,7 @@ async def update_settings(payload: SettingsUpdate, auth: bool = Depends(verify_m
     }
 
 @app.post("/api/settings/cleanup")
-async def trigger_storage_cleanup(auth: bool = Depends(verify_mutating_auth)):
+async def trigger_storage_cleanup(auth: bool = Depends(require_auth)):
     cleanup_res = enforce_retention_policy()
     stats = get_storage_stats()
     return {
@@ -828,7 +849,7 @@ type: literature-note
     return md_content
 
 @app.get("/api/export-markdown/{episode_id}")
-async def export_markdown_file(episode_id: str):
+async def export_markdown_file(episode_id: str, auth: bool = Depends(require_auth)):
     ep_file = os.path.join(EPISODES_DIR, f"{episode_id}.json")
     if not os.path.exists(ep_file):
         seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{episode_id}.json")
@@ -854,7 +875,7 @@ async def export_markdown_file(episode_id: str):
     )
 
 @app.post("/api/export-vault")
-async def export_vault(req: Dict[str, Any]):
+async def export_vault(req: Dict[str, Any], auth: bool = Depends(require_auth)):
     ep_id = req.get("episode_id", "ep-142")
     ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
     if not os.path.exists(ep_file):

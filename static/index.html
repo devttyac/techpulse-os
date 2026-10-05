@@ -1088,6 +1088,56 @@
     // COMPLETE UNIFIED CLIENT RUNTIME
     // ==========================================
 
+    // ==========================================
+    // API AUTHENTICATION (X-API-Key)
+    // ==========================================
+    const API_KEY_STORAGE = 'techpulse_api_key';
+
+    function readStoredApiKey() {
+      try { return localStorage.getItem(API_KEY_STORAGE) || ''; } catch (e) { return ''; }
+    }
+
+    function clearStoredApiKey() {
+      try { localStorage.removeItem(API_KEY_STORAGE); } catch (e) { /* storage unavailable */ }
+    }
+
+    // Returns the stored key, prompting for and storing one if absent.
+    // Returns null if the user dismisses the prompt.
+    function getApiKey() {
+      let key = readStoredApiKey();
+      if (key) return key;
+      const entered = window.prompt('Enter the TechPulse API key (API_SECRET_KEY on the server):');
+      key = entered ? entered.trim() : '';
+      if (!key) return null;
+      try { localStorage.setItem(API_KEY_STORAGE, key); } catch (e) { /* storage unavailable */ }
+      return key;
+    }
+
+    // fetch() wrapper for every /api/* call. Sends X-API-Key when a key is stored.
+    // On a 401 it drops the rejected key, prompts once, and retries a single time;
+    // a second 401 is returned to the caller as-is rather than looping.
+    async function apiFetch(url, options = {}) {
+      const send = (key) => {
+        const headers = new Headers(options.headers || {});
+        if (key) headers.set('X-API-Key', key);
+        return fetch(url, { ...options, headers });
+      };
+
+      const sentKey = readStoredApiKey();
+      const res = await send(sentKey);
+      if (res.status !== 401) return res;
+
+      // Only discard the key we actually sent; a concurrent request may already
+      // have replaced it with a freshly entered one.
+      if (sentKey && readStoredApiKey() === sentKey) clearStoredApiKey();
+      const retryKey = getApiKey();
+      if (!retryKey) return res;
+
+      const retryRes = await send(retryKey);
+      if (retryRes.status === 401 && readStoredApiKey() === retryKey) clearStoredApiKey();
+      return retryRes;
+    }
+
     function escapeHtml(str) {
       if (!str) return '';
       return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -2868,7 +2918,7 @@
 
     async function loadSettings() {
       try {
-        const res = await fetch('/api/settings');
+        const res = await apiFetch('/api/settings');
         if (res.ok) {
           const data = await res.json();
           const cfg = data.config || {};
@@ -2911,7 +2961,7 @@
           cron_schedule: document.getElementById('setting-cron').value.trim()
         };
 
-        const res = await fetch('/api/settings', {
+        const res = await apiFetch('/api/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -2938,7 +2988,7 @@
       const msg = document.getElementById('settings-status-msg');
       try {
         if (btn) btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Purging...';
-        const res = await fetch('/api/settings/cleanup', { method: 'POST' });
+        const res = await apiFetch('/api/settings/cleanup', { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
           const purged = data.cleanup?.purged_episodes || 0;
@@ -2961,7 +3011,7 @@
       try {
         if (btn) btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Generating Markdown...</span>`;
         
-        const res = await fetch('/api/export-vault', {
+        const res = await apiFetch('/api/export-vault', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ episode_id: currentEpisodeId })
@@ -3018,7 +3068,7 @@
         if (cancelBtn) cancelBtn.classList.remove('hidden');
         btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Scanning Feeds (15%)...</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
         
-        await fetch('/api/refresh', { method: 'POST' });
+        await apiFetch('/api/refresh', { method: 'POST' });
 
         if (refreshPollTimer) clearInterval(refreshPollTimer);
         if (refreshSafetyTimer) clearTimeout(refreshSafetyTimer);
@@ -3030,7 +3080,7 @@
         
         const checkStatus = async () => {
           try {
-            const statusRes = await fetch('/api/refresh/status');
+            const statusRes = await apiFetch('/api/refresh/status');
             if (statusRes.ok) {
               const state = await statusRes.json();
               if (state.running) {
@@ -3082,7 +3132,7 @@
       const cancelBtn = document.getElementById('cancel-run-btn');
       if (cancelBtn) cancelBtn.innerHTML = 'Stopping...';
       try {
-        await fetch('/api/refresh/cancel', { method: 'POST' });
+        await apiFetch('/api/refresh/cancel', { method: 'POST' });
         if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
         if (refreshSafetyTimer) { clearTimeout(refreshSafetyTimer); refreshSafetyTimer = null; }
         if (btn) {
@@ -3105,7 +3155,7 @@
       const statusMsg = document.getElementById('settings-status-msg');
       if (resetBtn) resetBtn.innerText = 'Resetting...';
       try {
-        await fetch('/api/refresh/reset', { method: 'POST' });
+        await apiFetch('/api/refresh/reset', { method: 'POST' });
         if (statusMsg) {
           statusMsg.innerText = '✓ Ingestion Lock Reset!';
           setTimeout(() => { statusMsg.innerText = ''; }, 3000);
@@ -3129,7 +3179,7 @@
     // ==========================================
     async function loadEpisodesFromBackend() {
       try {
-        const res = await fetch('/api/episodes');
+        const res = await apiFetch('/api/episodes');
         if (res.ok) {
           const data = await res.json();
           if (data.episodes && data.episodes.length > 0) {
@@ -3153,7 +3203,7 @@
 
     async function callBackendChat(query) {
       try {
-        const res = await fetch('/api/chat', {
+        const res = await apiFetch('/api/chat', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ query: query, episode_id: currentEpisodeId })
@@ -3230,7 +3280,7 @@
       loadEpisodesFromBackend();
 
       // Check initial pipeline state
-      fetch('/api/refresh/status').then(r => r.json()).then(state => {
+      apiFetch('/api/refresh/status').then(r => r.json()).then(state => {
         if (state && state.running) {
           const btn = document.getElementById('manual-run-btn');
           const cancelBtn = document.getElementById('cancel-run-btn');
