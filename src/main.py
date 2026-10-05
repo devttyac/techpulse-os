@@ -955,7 +955,7 @@ async def podcast_rss(request: Request):
         ET.SubElement(item, "description").text = ep.get("summary")
         
         # HTML Show notes with direct article links
-        show_notes_html = f"<p>{ep.get('summary')}</p><h3>Podcast Chapters & Source Links:</h3><ul>"
+        show_notes_html = f"<p>{html.escape(str(ep.get('summary', '')), quote=True)}</p><h3>Podcast Chapters & Source Links:</h3><ul>"
         for c in ep.get("chapters", []):
             c_time = html.escape(str(c.get("time", "")), quote=True)
             c_title = html.escape(str(c.get("title", "")), quote=True)
