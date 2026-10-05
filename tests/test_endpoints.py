@@ -93,13 +93,13 @@ async def run_asgi_tests():
         assert 'enclosure' in r_feed.text
         print(f"✓ /feed.xml returned valid RSS 2.0 Podcast XML with RFC 822 pubDate ({len(r_feed.text)} bytes)")
 
-        # 8. Test Static PWA Root
+        # 8. Test Static SPA Root
         r_root = await client.get("/")
-        assert r_root.status_code == 200, f"Static PWA failed: {r_root.status_code}"
+        assert r_root.status_code == 200, f"Static SPA failed: {r_root.status_code}"
         assert "TechPulse" in r_root.text
         assert "Podcast RSS Feed" in r_root.text
         assert "podcast-rss-modal" in r_root.text
-        print(f"✓ GET / returned PWA HTML with podcast modal and audio binds ({len(r_root.text)} bytes)")
+        print(f"✓ GET / returned SPA HTML with podcast modal and audio binds ({len(r_root.text)} bytes)")
 
     print("\n=======================================================")
     print("ALL ASGI FASTAPI & PODCAST RSS ENDPOINTS VERIFIED 100%")
