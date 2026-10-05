@@ -39,6 +39,10 @@ jobs:
         run: |
           python tests/test_auth.py
 
+      - name: Run URL Provenance Unit Tests
+        run: |
+          python tests/test_url_provenance.py
+
       - name: Run ASGI Endpoint Test Suite
         run: |
           python tests/test_endpoints.py
