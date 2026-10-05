@@ -2319,11 +2319,15 @@
       container.innerHTML = chapters.map(c => {
         const sourceName = c.source_name || c.sourceName || 'TechPulse';
         const sourceUrl = c.source_url || c.sourceUrl || '#';
-        const seconds = c.seconds !== undefined ? c.seconds : 0;
+        // jumpTo() args land in a JS-in-HTML context where escapeHtml() is ineffective
+        // (the parser decodes entities before the JS runs). Make them provably inert instead.
+        const rawSeconds = Number(c.seconds !== undefined ? c.seconds : 0);
+        const seconds = Number.isFinite(rawSeconds) ? rawSeconds : 0;
+        const jumpTime = /^\d{1,2}:\d{2}(:\d{2})?$/.test(String(c.time)) ? String(c.time) : '00:00';
         return `
         <div class="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 transition">
           <div class="flex items-center gap-2">
-            <button onclick="jumpTo(${seconds}, '${c.time}')" class="px-2 py-0.5 rounded bg-black/70 font-mono text-cyan-400 font-bold hover:bg-cyan-500/20 border border-white/10 text-[11px] transition flex-shrink-0">${escapeHtml(c.time)}</button>
+            <button onclick="jumpTo(${seconds}, '${jumpTime}')" class="px-2 py-0.5 rounded bg-black/70 font-mono text-cyan-400 font-bold hover:bg-cyan-500/20 border border-white/10 text-[11px] transition flex-shrink-0">${escapeHtml(c.time)}</button>
             <span class="text-slate-200 font-medium text-xs leading-snug">${escapeHtml(c.title)}</span>
           </div>
           <div class="flex items-center justify-between sm:justify-end gap-2 pl-7 sm:pl-0">
