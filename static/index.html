@@ -1113,9 +1113,42 @@
       return key;
     }
 
+    // Dismissible error banner, created lazily. Message is set via textContent
+    // because it can originate from a server response.
+    let apiErrorTimer = null;
+    function showApiError(message) {
+      let el = document.getElementById('api-error-banner');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'api-error-banner';
+        el.setAttribute('role', 'alert');
+        el.className = 'fixed bottom-4 left-4 right-4 sm:left-auto sm:max-w-md z-[100] flex items-start gap-3 p-3 rounded-xl bg-slate-900/95 backdrop-blur-sm border border-rose-500/40 text-rose-300 text-xs font-medium shadow-lg';
+        el.innerHTML = '<span class="flex-1 break-words"></span><button type="button" aria-label="Dismiss" class="text-rose-300 hover:text-white font-bold px-1">&times;</button>';
+        el.lastChild.addEventListener('click', () => el.classList.add('hidden'));
+        document.body.appendChild(el);
+      }
+      el.firstChild.textContent = String(message);
+      el.classList.remove('hidden');
+      clearTimeout(apiErrorTimer);
+      apiErrorTimer = setTimeout(() => el.classList.add('hidden'), 8000);
+    }
+
+    // Reports a terminal failed response. Reads a clone so the caller can still
+    // consume the body, and never throws so it cannot mask the original failure.
+    async function reportApiFailure(res) {
+      let message = `Request failed (HTTP ${res.status}).`;
+      try {
+        const body = await res.clone().json();
+        if (body && typeof body.detail === 'string' && body.detail) message = body.detail;
+      } catch (e) { /* body absent or not JSON: keep the generic message */ }
+      try { showApiError(message); } catch (e) { console.error(message); }
+    }
+
     // fetch() wrapper for every /api/* call. Sends X-API-Key when a key is stored.
     // On a 401 it drops the rejected key, prompts once, and retries a single time;
-    // a second 401 is returned to the caller as-is rather than looping.
+    // a second 401 is returned to the caller as-is rather than looping. A final
+    // non-OK response (after any retry) is surfaced via showApiError; a 401 that
+    // the retry resolves shows nothing.
     async function apiFetch(url, options = {}) {
       const send = (key) => {
         const headers = new Headers(options.headers || {});
@@ -1124,18 +1157,19 @@
       };
 
       const sentKey = readStoredApiKey();
-      const res = await send(sentKey);
-      if (res.status !== 401) return res;
-
-      // Only discard the key we actually sent; a concurrent request may already
-      // have replaced it with a freshly entered one.
-      if (sentKey && readStoredApiKey() === sentKey) clearStoredApiKey();
-      const retryKey = getApiKey();
-      if (!retryKey) return res;
-
-      const retryRes = await send(retryKey);
-      if (retryRes.status === 401 && readStoredApiKey() === retryKey) clearStoredApiKey();
-      return retryRes;
+      let res = await send(sentKey);
+      if (res.status === 401) {
+        // Only discard the key we actually sent; a concurrent request may already
+        // have replaced it with a freshly entered one.
+        if (sentKey && readStoredApiKey() === sentKey) clearStoredApiKey();
+        const retryKey = getApiKey();
+        if (retryKey) {
+          res = await send(retryKey);
+          if (res.status === 401 && readStoredApiKey() === retryKey) clearStoredApiKey();
+        }
+      }
+      if (!res.ok) await reportApiFailure(res);
+      return res;
     }
 
     function escapeHtml(str) {
@@ -3068,7 +3102,8 @@
         if (cancelBtn) cancelBtn.classList.remove('hidden');
         btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Scanning Feeds (15%)...</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
         
-        await apiFetch('/api/refresh', { method: 'POST' });
+        const refreshRes = await apiFetch('/api/refresh', { method: 'POST' });
+        if (!refreshRes.ok) { resetButton(); return; }
 
         if (refreshPollTimer) clearInterval(refreshPollTimer);
         if (refreshSafetyTimer) clearTimeout(refreshSafetyTimer);
@@ -3132,7 +3167,11 @@
       const cancelBtn = document.getElementById('cancel-run-btn');
       if (cancelBtn) cancelBtn.innerHTML = 'Stopping...';
       try {
-        await apiFetch('/api/refresh/cancel', { method: 'POST' });
+        const cancelRes = await apiFetch('/api/refresh/cancel', { method: 'POST' });
+        if (!cancelRes.ok) {
+          if (cancelBtn) cancelBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg> <span>Stop</span>';
+          return;
+        }
         if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
         if (refreshSafetyTimer) { clearTimeout(refreshSafetyTimer); refreshSafetyTimer = null; }
         if (btn) {
@@ -3155,7 +3194,8 @@
       const statusMsg = document.getElementById('settings-status-msg');
       if (resetBtn) resetBtn.innerText = 'Resetting...';
       try {
-        await apiFetch('/api/refresh/reset', { method: 'POST' });
+        const resetRes = await apiFetch('/api/refresh/reset', { method: 'POST' });
+        if (!resetRes.ok) return;
         if (statusMsg) {
           statusMsg.innerText = '✓ Ingestion Lock Reset!';
           setTimeout(() => { statusMsg.innerText = ''; }, 3000);
