@@ -11,6 +11,7 @@ services:
     environment:
       - TZ=Asia/Singapore
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - API_SECRET_KEY=${API_SECRET_KEY:-}
       - HOST_URL=${HOST_URL:-http://localhost:8000}
       - CRON_SCHEDULE=${CRON_SCHEDULE:-0 6 * * *}
       - STORAGE_DIR=/app/data
