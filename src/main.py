@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import logging
 import os
@@ -6,6 +7,7 @@ import shutil
 import hashlib
 import xml.etree.ElementTree as ET
 import email.utils
+from urllib.parse import urlparse
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
@@ -419,6 +421,25 @@ def cleanup_duplicate_episodes():
                     seen_signatures[sig_sum] = fn
         except Exception as e:
             logger.error(f"Error checking episode {fn} for duplicates: {e}")
+
+def _safe_url(value: Any) -> str:
+    """Return value only if it is an absolute http(s) URL; otherwise an empty string.
+
+    Blocks javascript:, data:, file: and other schemes from reaching href attributes.
+    Callers must still html.escape() the result when interpolating into HTML.
+    """
+    if not isinstance(value, str):
+        return ""
+    candidate = value.strip()
+    if not candidate:
+        return ""
+    try:
+        parsed = urlparse(candidate)
+    except ValueError:
+        return ""
+    if parsed.scheme.lower() in ("http", "https") and parsed.netloc:
+        return candidate
+    return ""
 
 def get_sorted_episode_files() -> List[str]:
     cleanup_duplicate_episodes()
@@ -936,7 +957,11 @@ async def podcast_rss(request: Request):
         # HTML Show notes with direct article links
         show_notes_html = f"<p>{ep.get('summary')}</p><h3>Podcast Chapters & Source Links:</h3><ul>"
         for c in ep.get("chapters", []):
-            show_notes_html += f"<li><strong>{c.get('time')}</strong>: <a href='{c.get('source_url')}'>{c.get('title')} ({c.get('source_name')})</a></li>"
+            c_time = html.escape(str(c.get("time", "")), quote=True)
+            c_title = html.escape(str(c.get("title", "")), quote=True)
+            c_source = html.escape(str(c.get("source_name", "")), quote=True)
+            c_href = html.escape(_safe_url(c.get("source_url")), quote=True)
+            show_notes_html += f"<li><strong>{c_time}</strong>: <a href=\"{c_href}\">{c_title} ({c_source})</a></li>"
         show_notes_html += "</ul>"
         
         content_encoded = ET.SubElement(item, "content:encoded")
@@ -966,7 +991,7 @@ async def podcast_rss(request: Request):
             ET.SubElement(psc, "psc:chapter", {
                 "start": c.get("time", "00:00"),
                 "title": c.get("title", ""),
-                "href": c.get("source_url", "")
+                "href": _safe_url(c.get("source_url"))
             })
 
     xml_str = ET.tostring(rss, encoding="utf-8", method="xml")
