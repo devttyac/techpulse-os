@@ -1,11 +1,13 @@
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 
 from pydantic import BaseModel
+from src.provenance import error_category, model_identifier
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("techpulse.synthesizer")
@@ -697,11 +699,17 @@ async def synthesize_briefing(
     domain_corpus: Dict[str, List[Dict[str, Any]]],
     episode_num: int = 142,
     previous_titles: Optional[List[str]] = None,
+    *, diagnostics=None,
 ) -> Dict[str, Any]:
+    stats = diagnostics if diagnostics is not None else {}
+    stats.update(path=None, model=None, schema_variant=None, fallback_reason=None,
+                 attempts=[], url_substitutions=0, prompt_version="corpus-instructions-v1",
+                 schema_version=1, validator_version=1)
     api_key = os.getenv("GEMINI_API_KEY")
     full_articles = extract_full_articles_corpus(domain_corpus)
 
     if not api_key:
+        stats.update(path="deterministic_fallback", fallback_reason="no_api_key")
         logger.info("GEMINI_API_KEY not configured. Using deterministic synthesis pipeline.")
         return generate_deterministic_fallback(domain_corpus, episode_num)
 
@@ -726,26 +734,42 @@ async def synthesize_briefing(
     global _USE_DICT_SCHEMA
 
     for m in models_to_try:
+        attempt = None
         try:
             from google import genai
             client = genai.Client(api_key=api_key)
+
+            def generate(variant):
+                nonlocal attempt
+                attempt = {"model": model_identifier(m), "schema_variant": variant,
+                           "outcome": "running", "error_category": None, "url_substitutions": 0}
+                stats["attempts"].append(attempt)
+                started = time.monotonic()
+                try:
+                    response = client.models.generate_content(
+                        model=m, contents=prompt,
+                        config={"response_mime_type": "application/json", "response_schema":
+                                BRIEFING_JSON_SCHEMA if variant == "json_schema_dict" else Briefing})
+                    attempt["outcome"] = "response_returned"
+                    return response
+                except Exception as exc:
+                    category = error_category(exc)
+                    attempt["error_category"] = category
+                    attempt["outcome"] = "schema_rejected" if _is_schema_rejection(exc) else {
+                        "timeout": "transport_error", "transport": "transport_error",
+                        "auth": "auth_error", "quota": "quota_error"}.get(category, "provider_error")
+                    raise
+                finally:
+                    attempt["duration_ms"] = round((time.monotonic() - started) * 1000, 3)
 
             if _USE_DICT_SCHEMA:
                 # A prior model in this run (or a prior run) already confirmed a
                 # genuine schema rejection -- go straight to the dict schema
                 # instead of re-probing the Pydantic variant on every model.
-                response = client.models.generate_content(
-                    model=m,
-                    contents=prompt,
-                    config={'response_mime_type': 'application/json', 'response_schema': BRIEFING_JSON_SCHEMA}
-                )
+                response = generate("json_schema_dict")
             else:
                 try:
-                    response = client.models.generate_content(
-                        model=m,
-                        contents=prompt,
-                        config={'response_mime_type': 'application/json', 'response_schema': Briefing}
-                    )
+                    response = generate("pydantic")
                 except Exception as schema_err:
                     if not _is_schema_rejection(schema_err):
                         # Transient network/auth/quota-shaped failure, not a schema
@@ -761,27 +785,30 @@ async def synthesize_briefing(
                     # every later model in this cascade (and future runs) goes
                     # straight to the dict schema instead of re-probing.
                     logger.warning(
-                        f"Nested Pydantic response_schema rejected for model {m} ({schema_err}); "
+                        f"Nested Pydantic response_schema rejected for model {model_identifier(m)}; "
                         f"falling back to explicit JSON-schema dict for the remainder of this run."
                     )
                     _USE_DICT_SCHEMA = True
-                    response = client.models.generate_content(
-                        model=m,
-                        contents=prompt,
-                        config={'response_mime_type': 'application/json', 'response_schema': BRIEFING_JSON_SCHEMA}
-                    )
+                    response = generate("json_schema_dict")
 
-            parsed = json.loads(response.text)
+            try:
+                parsed = json.loads(response.text)
+            except (ValueError, TypeError):
+                attempt["outcome"] = "invalid_json"
+                raise
 
             ok, reject_reason = validate_synthesis(parsed, previous_titles)
             if not ok:
-                logger.warning(f"Synthesis with model {m} rejected by validate_synthesis: {reject_reason}. Trying fallback models...")
+                attempt["outcome"] = "validation_rejected"
+                logger.warning("Synthesis rejected by structural validator; trying fallback models")
                 continue
 
             parsed, url_substitutions = enforce_corpus_urls(parsed, domain_corpus)
+            attempt["url_substitutions"] = url_substitutions
             if url_substitutions > MAX_URL_SUBSTITUTIONS:
+                attempt["outcome"] = "url_provenance_rejected"
                 logger.warning(
-                    f"Synthesis with model {m} rejected: {url_substitutions} chapter URL(s) not in the ingested "
+                    f"Synthesis with model {model_identifier(m)} rejected: {url_substitutions} chapter URL(s) not in the ingested "
                     f"corpus (limit {MAX_URL_SUBSTITUTIONS}). Trying fallback models..."
                 )
                 continue
@@ -793,10 +820,20 @@ async def synthesize_briefing(
             parsed["duration"] = parsed.get("duration", "05:20")
             parsed["total_seconds"] = parsed.get("total_seconds", 320)
             parsed["full_articles"] = full_articles
-            logger.info(f"Synthesis succeeded with model: {m}")
+            attempt["outcome"] = "accepted"
+            stats.update(path="llm", model=model_identifier(m), schema_variant=attempt["schema_variant"],
+                         url_substitutions=url_substitutions)
+            logger.info("Synthesis succeeded with model: %s", model_identifier(m))
             return parsed
         except Exception as e:
-            logger.warning(f"Synthesis with model {m} failed: {e}. Trying fallback models...")
+            # A client construction/import failure precedes a provider call and
+            # must not be mislabeled as an attempted generation request.
+            if attempt is None:
+                stats.setdefault("client_errors", []).append({"model": model_identifier(m), "error_category": error_category(e)})
+            elif attempt["outcome"] == "response_returned":
+                attempt.update(outcome="postprocessing_failure", error_category=error_category(e))
+            logger.warning("Synthesis model failed (category=%s); trying fallback models", error_category(e))
 
     logger.error("All candidate models failed for synthesis. Falling back to deterministic pipeline.")
+    stats.update(path="deterministic_fallback", fallback_reason="attempts_exhausted")
     return generate_deterministic_fallback(domain_corpus, episode_num)

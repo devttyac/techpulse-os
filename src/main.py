@@ -26,6 +26,10 @@ from src.ingestion import ingest_all_domains
 from src.synthesizer import synthesize_briefing, local_now
 from src.tts_engine import generate_episode_podcast_audio, generate_all_domain_audios
 from src.grounded_chat import process_grounded_chat
+from src.provenance import (RunRecord, append_record, attach_episode_record,
+                            selection_record, error_category, action_record)
+import time
+from functools import wraps
 
 load_dotenv()
 
@@ -508,8 +512,68 @@ pipeline_state = {
 
 current_pipeline_task: Optional[asyncio.Task] = None
 
-async def run_daily_pipeline():
+def _audit_action(action, outcome, *, run_id=None, changed_fields=()):
+    try:
+        append_record(STORAGE_DIR, "audit.jsonl", action_record(action, outcome, run_id=run_id, changed_fields=changed_fields))
+        pipeline_state["action_audit_status"] = "recorded"
+        pipeline_state["action_audit_error"] = None
+    except Exception:
+        pipeline_state["action_audit_status"] = "write_failed"
+        pipeline_state["action_audit_error"] = "audit_write_failed"
+        logger.error("Privileged-action audit write failed")
+
+
+def _audit_handler_failures(action):
+    def decorate(handler):
+        @wraps(handler)
+        async def wrapped(*args, **kwargs):
+            try:
+                return await handler(*args, **kwargs)
+            except Exception:
+                _audit_action(action, "handler_failed")
+                raise
+        return wrapped
+    return decorate
+
+
+def _finalize_pipeline_run(run, status, category=None, episode_path=None, episode=None):
+    # The coroutine and its pre-entry cancellation callback share this guard.
+    if run.append_attempted:
+        return
+    run.finish(status, category)
+    metadata_failed = False
+    if episode_path is not None and episode is not None:
+        try:
+            attach_episode_record(episode_path, episode, run.data)
+        except Exception:
+            metadata_failed = True
+            run.data["status"] = "failed"
+            run.data["error_category"] = "episode_metadata_write_failed"
+            logger.error("Episode provenance write failed")
+    run.append_attempted = True
+    try:
+        append_record(STORAGE_DIR, "runs.jsonl", run.data)
+        pipeline_state["provenance_status"] = "write_failed" if metadata_failed else "recorded"
+        pipeline_state["provenance_error"] = "episode_metadata_write_failed" if metadata_failed else None
+    except Exception:
+        pipeline_state["provenance_status"] = "write_failed"
+        pipeline_state["provenance_error"] = "audit_write_failed"
+        logger.error("Pipeline-run audit write failed")
+
+
+async def _observed_stage(run, name, operation, returned_status="completed"):
+    with run.stage(name, returned_status):
+        return await operation
+
+
+async def run_daily_pipeline(*, run_record=None):
     global current_pipeline_task
+    run = run_record if run_record is not None else RunRecord()
+    terminal_status, terminal_error = "failed", None
+    episode_path, saved_episode = None, None
+    pipeline_state["run_id"] = run.data["run_id"]
+    pipeline_state["provenance_status"] = "pending"
+    pipeline_state["provenance_error"] = None
     logger.info("Executing scheduled TechPulse daily ingestion and synthesis pipeline...")
     pipeline_state["running"] = True
     pipeline_state["stage"] = "checking"
@@ -519,7 +583,13 @@ async def run_daily_pipeline():
 
     try:
         # Step 1: Ingestion with 30s hard timeout
-        corpus = await asyncio.wait_for(ingest_all_domains(), timeout=30.0)
+        corpus = await _observed_stage(run, "ingestion", asyncio.wait_for(
+            ingest_all_domains(diagnostics=run.data["ingestion"]), timeout=30.0))
+        # Keep counts truthful even when an existing caller supplies a custom
+        # ingestion function which does not populate optional feed diagnostics.
+        run.data["ingestion"]["per_domain"] = {d: len(items) for d, items in corpus.items()}
+        dedup_started = time.monotonic()
+        run.data["stages"]["dedup"]["status"] = "running"
         all_corpus_urls = sorted([item["url"] for items in corpus.values() for item in items if item.get("url")])
         current_corpus_hash = hashlib.sha256("".join(all_corpus_urls).encode("utf-8")).hexdigest()
         
@@ -570,7 +640,12 @@ async def run_daily_pipeline():
                 pipeline_state["last_episode_id"] = latest_ep["id"]
                 pipeline_state["last_run"] = datetime.now(timezone.utc).isoformat()
                 pipeline_state["running"] = False
+                run.data["episode_id"] = latest_ep["id"]
+                run.data["stages"]["dedup"].update(status="completed", duration_ms=round((time.monotonic()-dedup_started)*1000, 3))
+                terminal_status = "skipped"
                 return
+
+        run.data["stages"]["dedup"].update(status="completed", duration_ms=round((time.monotonic()-dedup_started)*1000, 3))
 
         # Calculate next episode number
         existing = [f for f in os.listdir(EPISODES_DIR) if f.startswith("ep-") and f.endswith(".json")]
@@ -583,9 +658,12 @@ async def run_daily_pipeline():
         # Step 2: Synthesis with 120s hard timeout (schema-constrained output is
         # 3-5x larger than before -- 8 full takeaways vs 1 -- and this single
         # budget covers the entire 4-model cascade)
-        briefing_data = await asyncio.wait_for(
-            synthesize_briefing(corpus, next_num, previous_titles=previous_titles), timeout=120.0
-        )
+        briefing_data = await _observed_stage(run, "synthesis", asyncio.wait_for(
+            synthesize_briefing(corpus, next_num, previous_titles=previous_titles,
+                               diagnostics=run.data["synthesis"]), timeout=120.0))
+        run.data["episode_id"] = briefing_data["id"]
+        run.data["selection"] = selection_record(corpus, briefing_data, run.data["synthesis"]["path"],
+                                                provider_attempted=bool(run.data["synthesis"]["attempts"]))
         briefing_data["corpus_hash"] = current_corpus_hash
         briefing_data["ingested_urls"] = all_corpus_urls
         
@@ -594,19 +672,27 @@ async def run_daily_pipeline():
         pipeline_state["message"] = "Synthesizing Neural Edge-TTS podcast dialogue (GuyNeural & AriaNeural)..."
 
         # Step 3: Audio TTS with 60s hard timeout
-        final_mp3, dyn_chapters, duration_str, total_secs = await asyncio.wait_for(generate_episode_podcast_audio(briefing_data, AUDIO_DIR), timeout=60.0)
+        final_mp3, dyn_chapters, duration_str, total_secs = await _observed_stage(run, "podcast_audio",
+            asyncio.wait_for(generate_episode_podcast_audio(briefing_data, AUDIO_DIR), timeout=60.0), "call_returned")
+        run.data["stages"]["podcast_audio"].update(output_file_present=os.path.isfile(final_mp3),
+            returned_chapters=len(dyn_chapters), audio_validated=False)
         briefing_data["duration"] = duration_str
         briefing_data["total_seconds"] = total_secs
         if dyn_chapters:
             briefing_data["chapters"] = dyn_chapters
 
         # Generate standalone per-domain audio files
-        await asyncio.wait_for(generate_all_domain_audios(briefing_data, AUDIO_DIR), timeout=60.0)
+        domain_outputs = await _observed_stage(run, "domain_audio", asyncio.wait_for(
+            generate_all_domain_audios(briefing_data, AUDIO_DIR), timeout=60.0), "call_returned")
+        run.data["stages"]["domain_audio"].update(returned_outputs=len(domain_outputs),
+            expected_domains=len(briefing_data.get("takeaways", {})), audio_validated=False)
         
         # Save episode JSON
         ep_path = os.path.join(EPISODES_DIR, f"{briefing_data['id']}.json")
-        with open(ep_path, "w") as f:
-            json.dump(briefing_data, f, indent=2)
+        with run.stage("episode_write"):
+            with open(ep_path, "w") as f:
+                json.dump(briefing_data, f, indent=2)
+        episode_path, saved_episode = ep_path, briefing_data
             
         pipeline_state["stage"] = "complete"
         pipeline_state["progress"] = 100
@@ -616,11 +702,15 @@ async def run_daily_pipeline():
         pipeline_state["running"] = False
 
         # Enforce retention policy automatically
-        cfg = load_config()
-        enforce_retention_policy(cfg.get("max_episodes_retained", 14))
+        with run.stage("retention", "call_returned"):
+            cfg = load_config()
+            cleanup = enforce_retention_policy(cfg.get("max_episodes_retained", 14))
+            run.data["stages"]["retention"]["reported_deleted"] = cleanup.get("purged_episodes", 0)
+        terminal_status = "completed"
 
         logger.info(f"Successfully generated Episode #{next_num}: {briefing_data['title']} ({duration_str})")
     except asyncio.CancelledError:
+        terminal_status, terminal_error = "cancelled", "cancelled"
         logger.info("Pipeline task cancelled by user.")
         pipeline_state["running"] = False
         pipeline_state["stage"] = "idle"
@@ -629,19 +719,27 @@ async def run_daily_pipeline():
         pipeline_state["error"] = None
         raise
     except asyncio.TimeoutError:
+        terminal_error = "timeout"
         pipeline_state["running"] = False
         pipeline_state["stage"] = "error"
         pipeline_state["error"] = "Operation timed out."
         pipeline_state["message"] = "Pipeline execution timed out. Aborted."
         logger.error("Pipeline timed out.")
     except Exception as e:
+        terminal_error = error_category(e)
         pipeline_state["running"] = False
         pipeline_state["stage"] = "error"
         pipeline_state["error"] = str(e)
         pipeline_state["message"] = f"Pipeline failed: {e}"
-        logger.error(f"Error executing daily pipeline: {e}")
+        logger.error("Daily pipeline failed (category=%s)", terminal_error)
     finally:
         pipeline_state["running"] = False
+        for stage in run.data["stages"].values():
+            if stage["status"] == "running":
+                stage.update(status=terminal_status, error_category=terminal_error)
+                if "dedup_started" in locals():
+                    stage["duration_ms"] = round((time.monotonic()-dedup_started)*1000, 3)
+        _finalize_pipeline_run(run, terminal_status, terminal_error, episode_path, saved_episode)
 
 class ChatRequest(BaseModel):
     query: str
@@ -701,9 +799,11 @@ async def chat_endpoint(req: ChatRequest, auth: bool = Depends(require_auth)):
     return result
 
 @app.post("/api/refresh")
+@_audit_handler_failures("refresh")
 async def manual_refresh(auth: bool = Depends(require_auth)):
     global current_pipeline_task
     if pipeline_state.get("running") and current_pipeline_task and not current_pipeline_task.done():
+        _audit_action("refresh", "busy")
         return {"status": "busy", "message": "Ingestion pipeline is already actively running.", "state": pipeline_state}
     
     pipeline_state["running"] = True
@@ -712,13 +812,24 @@ async def manual_refresh(auth: bool = Depends(require_auth)):
     pipeline_state["message"] = "Scanning RSS feeds for newly published technical whitepapers..."
     pipeline_state["error"] = None
 
-    current_pipeline_task = asyncio.create_task(run_daily_pipeline())
+    run = RunRecord("manual")
+    pipeline_state.update(run_id=run.data["run_id"], provenance_status="pending", provenance_error=None)
+    current_pipeline_task = asyncio.create_task(run_daily_pipeline(run_record=run))
+    current_pipeline_task.pipeline_run_record = run
+    def record_pre_entry_cancellation(task):
+        if task.cancelled():
+            _finalize_pipeline_run(run, "cancelled", "cancelled")
+    current_pipeline_task.add_done_callback(record_pre_entry_cancellation)
+    _audit_action("refresh", "request_accepted", run_id=run.data["run_id"])
     return {"status": "ok", "message": "Ingestion and synthesis pipeline triggered in background.", "state": pipeline_state}
 
 @app.post("/api/refresh/cancel")
+@_audit_handler_failures("refresh_cancel")
 async def cancel_refresh(auth: bool = Depends(require_auth)):
     global current_pipeline_task
-    if current_pipeline_task and not current_pipeline_task.done():
+    active = bool(current_pipeline_task and not current_pipeline_task.done())
+    run = getattr(current_pipeline_task, "pipeline_run_record", None)
+    if active:
         current_pipeline_task.cancel()
         current_pipeline_task = None
     pipeline_state["running"] = False
@@ -727,12 +838,17 @@ async def cancel_refresh(auth: bool = Depends(require_auth)):
     pipeline_state["message"] = "Pipeline stopped by user."
     pipeline_state["error"] = None
     logger.info("Pipeline explicitly cancelled via /api/refresh/cancel")
+    _audit_action("refresh_cancel", "request_accepted" if active else "no_active_task",
+                  run_id=run.data["run_id"] if run else None)
     return {"status": "cancelled", "message": "Pipeline cancelled successfully.", "state": pipeline_state}
 
 @app.post("/api/refresh/reset")
+@_audit_handler_failures("refresh_reset")
 async def reset_refresh(auth: bool = Depends(require_auth)):
     global current_pipeline_task
-    if current_pipeline_task and not current_pipeline_task.done():
+    active = bool(current_pipeline_task and not current_pipeline_task.done())
+    run = getattr(current_pipeline_task, "pipeline_run_record", None)
+    if active:
         current_pipeline_task.cancel()
         current_pipeline_task = None
     pipeline_state["running"] = False
@@ -741,6 +857,7 @@ async def reset_refresh(auth: bool = Depends(require_auth)):
     pipeline_state["message"] = "Ready"
     pipeline_state["error"] = None
     logger.info("Pipeline state explicitly reset via /api/refresh/reset")
+    _audit_action("refresh_reset", "request_accepted", run_id=run.data["run_id"] if run else None)
     return {"status": "reset", "message": "Pipeline state reset to ready.", "state": pipeline_state}
 
 @app.get("/api/refresh/status")
@@ -763,6 +880,7 @@ class SettingsUpdate(BaseModel):
     cron_schedule: Optional[str] = None
 
 @app.post("/api/settings")
+@_audit_handler_failures("settings_update")
 async def update_settings(payload: SettingsUpdate, auth: bool = Depends(require_auth)):
     cfg = load_config()
     if payload.max_episodes_retained is not None:
@@ -777,6 +895,7 @@ async def update_settings(payload: SettingsUpdate, auth: bool = Depends(require_
     save_config(cfg)
     cleanup_res = enforce_retention_policy()
     stats = get_storage_stats()
+    _audit_action("settings_update", "handler_returned", changed_fields=payload.model_fields_set)
     return {
         "status": "success",
         "config": cfg,
@@ -785,9 +904,11 @@ async def update_settings(payload: SettingsUpdate, auth: bool = Depends(require_
     }
 
 @app.post("/api/settings/cleanup")
+@_audit_handler_failures("settings_cleanup")
 async def trigger_storage_cleanup(auth: bool = Depends(require_auth)):
     cleanup_res = enforce_retention_policy()
     stats = get_storage_stats()
+    _audit_action("settings_cleanup", "handler_returned")
     return {
         "status": "success",
         "cleanup": cleanup_res,

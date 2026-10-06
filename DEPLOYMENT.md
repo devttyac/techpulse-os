@@ -131,3 +131,61 @@ services:
 - The container runs in an isolated bridge network with zero public ingress ports required.
 - All secrets are injected strictly via container environment variables.
 - Persistent volumes (`techpulse_data`) retain all generated briefings and audio across container restarts.
+
+## 7. Generation Provenance and Durable Audit Records
+
+New episodes include an additive `pipeline_run` object (schema version 1).
+It records the generation path, accepted model/schema, individual provider-call
+outcomes, feed counts and identities, consumed article identities, stage timings,
+and terminal outcome. Existing episodes are not migrated. Their generation
+provenance remains unavailable; the interface does not infer it from their titles.
+
+Two append-only files live in `STORAGE_DIR` (normally `/app/data`):
+
+- `runs.jsonl`: one terminal record per scheduled or accepted manual run,
+  including unchanged-corpus skips, failures and cancellation before execution.
+- `audit.jsonl`: accepted/busy refreshes, cancel/reset requests, settings and
+  cleanup handler outcomes. Events contain changed-setting names, never values
+  or the API key. Authentication failures occurring before a handler are not
+  included in this stream.
+
+Episode retention does not delete these files. Back up the entire persistent data
+directory, including both logs. History grows with usage: monitor available disk
+space and archive copies explicitly; this release does not rotate or delete it.
+Appends are serialized within the existing single-worker process, flushed to
+disk, and bounded to 256 KiB per record. No new database or service is required.
+These guarantees do not extend to multiple worker processes.
+
+Article URLs in the records omit userinfo, query strings and fragments; a SHA-256
+identity preserves comparisons with the original URL. Provider request URLs,
+raw exception messages, prompts, article text and configured API keys are not
+stored in these audit records. Existing logging in other subsystems is outside
+this change's scope. Timings use a monotonic clock; timestamps remain UTC.
+Final metadata attachment and audit flush overhead are excluded from stage times.
+
+Selection records describe current positional behavior: fallback uses
+`position_0`; model generation receives an unranked feed-order prefix of three
+articles per domain, while stored context takes four. Attempted prompt inputs
+remain recorded if the model cascade ends in fallback. Chapter citations are
+recorded separately and do not imply editorial ranking or verified grounding.
+
+Audio stages use `call_returned`, not an assurance of valid or complete audio.
+The existing audio helpers can swallow segment/domain failures; recorded output
+presence/counts are observations, not audio validation. Likewise settings events
+use `handler_returned`: the existing save helper can swallow write errors.
+Cancel events distinguish `request_accepted` from `no_active_task`; they do not
+claim that an untracked scheduled task was stopped.
+
+Record-write failures remain visible in `/api/refresh/status` and `/healthz`:
+`provenance_status`/`provenance_error` describe the run record, while
+`action_audit_status`/`action_audit_error` describe the most recent action audit.
+Successful run finalization does not clear an action-audit failure. Metadata and
+history writes are separate operations, not a cross-file transaction. Disk
+exhaustion, a failed append, abrupt process termination or power loss can leave
+incomplete history or an episode without metadata. A truncated terminal JSONL
+line after abrupt termination must be handled as incomplete by readers.
+
+The interface distinguishes model generation, deterministic fallback and unknown
+legacy provenance. The current fallback still uses fixed main narration and
+flashcards; domain takeaways use feed summaries. Provenance exposes this existing
+behavior and does not change curation, providers, chat grounding or publication.
