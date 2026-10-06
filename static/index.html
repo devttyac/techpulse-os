@@ -384,6 +384,10 @@
                 Executive Synthesis: Multi-Agent Swarm Governance, Microsoft Fabric OneLake & Zero-Trust Workload Identity
               </h2>
               <p id="ep-hosts" class="text-[11px] sm:text-xs text-slate-400 mt-1">Host A (Cloud Architect) & Host B (Governance Lead)</p>
+              <div id="ep-generation-status" role="status" aria-live="polite" class="rounded-xl bg-black/30 border border-white/10 px-3 py-2.5 mt-3 text-slate-300">
+                <p id="ep-generation-label" class="text-[11px] sm:text-xs font-semibold">Generation provenance unavailable</p>
+                <p id="ep-generation-detail" class="text-[10px] sm:text-[11px] text-slate-300 mt-1">This episode has no supported generation record.</p>
+              </div>
             </div>
 
             <!-- Player Controls Box (Touch friendly) -->
@@ -2339,6 +2343,36 @@
       }
     }
 
+    function renderGenerationProvenance(ep) {
+      const status = document.getElementById('ep-generation-status');
+      const label = document.getElementById('ep-generation-label');
+      const detail = document.getElementById('ep-generation-detail');
+      if (!status || !label || !detail) return;
+
+      let labelText = 'Generation provenance unavailable';
+      let detailText = 'This episode has no supported generation record.';
+      let modeClasses = 'border-white/10 text-slate-300';
+      const run = ep.pipeline_run;
+      const synthesis = run && typeof run === 'object' && !Array.isArray(run) && run.schema_version === 1
+        ? run.synthesis : null;
+      if (synthesis && typeof synthesis === 'object' && !Array.isArray(synthesis)) {
+        if (synthesis.path === 'llm' && typeof synthesis.model === 'string' && synthesis.model.trim()) {
+          labelText = 'Model-generated (LLM)';
+          detailText = 'Synthesis model: ' + synthesis.model;
+          modeClasses = 'border-cyan-500/30 text-cyan-300';
+        } else if (synthesis.path === 'deterministic_fallback' && synthesis.model === null) {
+          labelText = 'Deterministic fallback';
+          detailText = 'Main narration and flashcards use fixed templates; domain takeaways use feed summaries.';
+          modeClasses = 'border-amber-500/30 text-amber-300';
+        }
+      }
+      // Generation mode is provenance, not a claim of verified factual grounding.
+      // Render recorded values as text and always replace the previous episode's state.
+      label.textContent = labelText;
+      detail.textContent = detailText;
+      status.className = 'rounded-xl bg-black/30 border px-3 py-2.5 mt-3 ' + modeClasses;
+    }
+
     function changeEpisode(epId) {
       console.log('Switching active episode to:', epId);
       currentEpisodeId = epId;
@@ -2347,6 +2381,8 @@
         console.error('Episode not found:', epId);
         return;
       }
+
+      renderGenerationProvenance(ep);
 
       const select = document.getElementById('episode-select');
       if (select && select.value !== epId) {

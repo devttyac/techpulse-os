@@ -25,7 +25,7 @@ jobs:
 
       - name: Syntax & PyCompile Check
         run: |
-          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py
+          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py
 
       - name: Run Synthesizer Unit Tests
         run: |
@@ -46,3 +46,20 @@ jobs:
       - name: Run ASGI Endpoint Test Suite
         run: |
           python tests/test_endpoints.py
+
+      - name: Run Provenance Collector Tests
+        run: python tests/test_run_provenance.py
+
+      - name: Run Pipeline Audit Tests
+        run: python tests/test_pipeline_audit.py
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Run Frontend Provenance Tests
+        run: node --test tests/test_frontend_provenance.mjs
+
+      - name: Build Docker Image
+        run: docker build --tag techpulse-ci:${{ github.sha }} .
