@@ -78,3 +78,19 @@ jobs:
 
       - name: Build Docker Image
         run: docker build --tag techpulse-ci:${{ github.sha }} .
+
+  prompt-injection:
+    name: Prompt Injection Boundaries
+    permissions:
+      contents: read
+    uses: devttyac/pi-smoke-test/.github/workflows/pi-smoke.yml@7243443870e608169751a76067d55878c6536477
+    with:
+      runner-path: tests/test_prompt_injection.py
+      dependency-file: requirements.txt
+      coverage-policy: >-
+        {"version": 1,
+         "attack_ids": ["ADV-01", "ADV-02", "ADV-03", "ADV-04", "ADV-05", "ADV-06", "ADV-07", "ADV-08", "ADV-09", "ADV-10", "ADV-13"],
+         "surfaces": ["selector", "selected-chat", "browser", "markdown", "rss"],
+         "tool_na": {"ADV-11": "selector/chat expose no executable tools", "ADV-12": "selector/chat expose no executable tools", "ADV-14": "selector/chat expose no executable tools"},
+         "benign_ids": ["APP-BEN-01", "APP-BEN-02", "APP-BEN-03", "APP-BEN-04"],
+         "control_ids": ["APP-CTRL-01"]}

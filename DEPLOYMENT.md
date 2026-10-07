@@ -408,3 +408,83 @@ TLDR/editorial synthesis, full-article acquisition, broader RAG, source-health
 redesign, history/player fixes and live injection verification remain future work.
 Local Python 3.14/Node 26 results do not substitute for CI Python 3.11/Node 24,
 Docker build results or Aaron's live acceptance.
+
+
+## 10. Revision — Draft Pinned PI CI Integration (2026-10-07)
+
+This revision updates the PI publication and future-integration description in
+Section 9. The shared MIT package is published at
+[devttyac/pi-smoke-test](https://github.com/devttyac/pi-smoke-test). This application
+integration is an unmerged draft that exposes known failures in CI. **Merge,
+mandatory PI protection and application activation remain HOLD.**
+
+The added caller job uses exactly three inputs: `runner-path` names
+`tests/test_prompt_injection.py`, `dependency-file` names `requirements.txt`, and
+`coverage-policy` supplies independent coverage JSON. The existing `test` job is
+preserved. Workflow and package identities are separately pinned:
+
+| Identity | Reviewed value |
+| --- | --- |
+| Reusable workflow commit | `7243443870e608169751a76067d55878c6536477` |
+| Executable package commit | `baea6e6b1def2db4f1cd569bf7fed7262471c125` |
+| Canonical tool SHA-256 | `29d44dfc107c496a6c8b792314d03ea8b201d844bbba50f6a42ee66df7f8b3f5` |
+
+The workflow checks out the exact PR head, validates caller-local runner and
+dependency paths, and imports the checker from its separate pinned package
+checkout. Python 3.11 and Node 24 use pinned setup Actions. Permissions are
+`contents: read`; checkout credentials are not persisted and secrets are not
+inherited. The workflow fills expected revision from the caller's actual Git HEAD
+and expected harness checksum from its trusted constant. Caller identity claims
+and malformed policy JSON are rejected. Each invocation owns a fresh temporary
+report destination. Runner errors remain errors even when a report appears valid.
+
+Coverage requires all fourteen unique inventory IDs. ADV-01 through ADV-10 and
+ADV-13 must each exercise `selector`, `selected-chat`, `browser`, `markdown` and
+`rss`, giving 55 unique attack/surface rows. ADV-11, ADV-12 and ADV-14 are N/A only
+with the exact reason `selector/chat expose no executable tools`. Four separate
+benign controls cover a useful security-news summary, quoted-attack explanation,
+excerpt comparison and normal citation; APP-CTRL-01 checks insufficient-evidence
+handling. Policy identities come from reviewed caller configuration, never from
+the report's claimed counts or selected cases.
+
+The runner invokes actual application boundaries with synthetic source evidence
+and fake provider responses. It checks selector rejection and useful exact
+narration, selected-manifest chat output, the actual browser SPA script through
+Node VM fixtures, Markdown grammar/content and RSS XML/content. It guards
+unexpected network/provider effects, disables dotenv, clears model credentials
+and keeps storage temporary. Quoted attack text and normal security reporting
+must remain useful; a refusal or empty response does not count as successful
+defence. No live model calls, key files, native Gemini exercise or production
+data are used. These offline checks establish bounded application behavior and
+do not establish live-provider resistance or close security findings F-04/F-06.
+
+The reviewed application baseline contains 55 completed attack rows: 44
+`DEFENDED` and all eleven `selected-chat` rows `VULNERABLE`, with zero execution
+errors, four useful benign rows and one useful insufficiency control. Both runner
+and independent checker therefore return **1**, rather than an execution-error 2
+or a passing 0. Current selected-manifest chat returns a fake provider's hostile
+answer without the required output rejection. Existing structural request
+boundaries and excerpt selection do not correct that output behavior. The draft
+CI job must expose the failure; do not weaken coverage, skip chat assertions,
+mark the job optional through `continue-on-error`, or reinterpret it as green.
+
+Before further delivery:
+
+1. Main reviews the exact CI/doc diff, opens an unmerged draft PR, and records the
+   hosted run URL and observed PI check name at the actual final head. A check name
+   is not inferred from this document or substituted with an older green run.
+2. Keep Task 4 completion and Task 5 activation on HOLD. Do not merge this draft,
+   activate mandatory PI protection against the known failure, or use an
+   administrator bypass. Production chat remediation requires separately approved
+   source-file scope; this CI-only change does not author that fix.
+3. After approved remediation makes the actual runner/checker pass with complete,
+   useful coverage, perform the full existing CI suite and Docker build at the
+   final head. Then verify hosted failure canaries and required-check merge blocking
+   before claiming an active verified control. Hosted status and protection
+   evidence remain pending for this draft.
+
+This change does not deploy or rebuild Dockge. Earlier deployment instructions
+remain operational guidance for separately approved application releases. A
+passing package self-test verifies packaging/checker contracts; it does not
+substitute for a passing application PI report, exact-head hosted verification,
+branch protection evidence or Aaron's live acceptance.
