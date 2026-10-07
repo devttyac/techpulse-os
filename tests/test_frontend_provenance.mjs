@@ -164,3 +164,17 @@ test('RSS-based model synthesis discloses received summaries and unacquired arti
   assert.match(runtime.text('ep-generation-detail'), /article bodies were not acquired/i);
   assert.match(runtime.text('ep-generation-detail'), /recorded-model/);
 });
+
+
+test('new selection provenance labels and RSS limitations replace legacy classifications', async t => {
+  for (const [path,label] of [['model_assisted_selection','Model-assisted evidence selection'],['deterministic_selection','Deterministic evidence selection'],['mixed_selection','Mixed evidence selection']]) await t.test(path, async () => {
+    const ep=episode('ep-999',{schema_version:1,synthesis:{contract_version:1,path,model:null,stories:[{story_id:'one',path:'model_assisted_selection',model:'recorded-model',attempts:1,evidence_basis:'rss_excerpts'},{story_id:'two',path:'deterministic_selection',model:null,attempts:0,fallback_reason:'provider_timeout',evidence_basis:'headline_only'}]}});
+    ep.story_manifest={schema_version:1,stories:[{story_id:'one',domain:'ai',source_title:'First',source_name:'Publisher',source_url:'https://example.test/one'},{story_id:'two',domain:'ai',source_title:'Second',source_name:'Publisher',source_url:'https://example.test/two'}]}; ep.chapters=[];ep.flashcards=[];ep.takeaways={};
+    const r=createRuntime([ep,episode('ep-998')]);await r.load();assert.equal(r.text('ep-generation-label'),label);assert.match(r.text('ep-generation-detail'),/received RSS excerpts/i);assert.match(r.text('ep-generation-detail'),/headline-only/i);assert.match(r.text('ep-generation-detail'),/article bodies were not acquired/i); assert.doesNotMatch(r.text('ep-generation-detail'),/fixed templates/);
+    r.select('ep-998');assert.match(r.text('ep-generation-label'),/provenance unavailable/i);assert.doesNotMatch(r.text('ep-generation-detail'),/headline-only|recorded-model/);
+  });
+});
+test('unsupported new provenance cannot reclassify a malformed display contract as legacy LLM', async () => {
+  const ep=episode('ep-999',{schema_version:1,synthesis:{contract_version:1,path:'llm',model:'claimed-model'}});ep.story_manifest=null;
+  const r=createRuntime([ep]);await r.load();assert.match(r.text('ep-generation-label'),/provenance unavailable/i);assert.doesNotMatch(r.text('ep-generation-detail'),/claimed-model/);
+});

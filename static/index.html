@@ -1194,7 +1194,7 @@
     function safeUrl(u) {
       if (!u) return '#';
       try {
-        const parsed = new URL(String(u), window.location.origin);
+        const parsed = new URL(String(u));
         if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return parsed.href;
       } catch (e) {
         // fall through to the inert default
@@ -1219,6 +1219,11 @@
     let currentEpisodeId = 'ep-142';
     function renderFlashcard() {
       const card = flashcards[currentCardIndex] || flashcards[0];
+      const cardElement = document.getElementById('flashcard-inner');
+      if (cardElement) {
+        if (card && card.story_id) cardElement.setAttribute('data-story-id', card.story_id);
+        else cardElement.removeAttribute('data-story-id');
+      }
       for (const id of ['fc-prev', 'fc-next', 'fc-hard', 'fc-good', 'fc-easy']) {
         const control = document.getElementById(id);
         if (control) control.disabled = !card || ((id === 'fc-prev' || id === 'fc-next') && flashcards.length < 2);
@@ -2235,6 +2240,85 @@
 
     const DOMAIN_IDS = ['ai', 'cloud', 'data', 'sec', 'devops', 'arch', 'finops', 'gov'];
 
+    // Display validation is deliberately narrower than the producer contract.
+    // Missing legacy contracts and malformed new contracts must stay distinct.
+    const storyDisplayCache = new WeakMap();
+    function readStoryDisplay(ep) {
+      if (storyDisplayCache.has(ep)) return storyDisplayCache.get(ep);
+      const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+      const object = value => value && typeof value === 'object' && !Array.isArray(value);
+      const nonempty = value => typeof value === 'string' && value.trim().length > 0;
+      const manifest = ep.story_manifest;
+      const synthesis = object(ep.pipeline_run) && object(ep.pipeline_run.synthesis) ? ep.pipeline_run.synthesis : null;
+      const marked = own(ep, 'story_manifest') || own(ep, 'episode_fingerprint') || (synthesis && own(synthesis, 'contract_version'));
+      let result = { state: marked ? 'invalid' : 'absent', stories: [], byId: new Map() };
+      if (marked && object(manifest) && manifest.schema_version === 1 && Array.isArray(manifest.stories)) {
+        const byId = new Map(), stories = [];
+        let valid = true;
+        for (const source of manifest.stories) {
+          if (!object(source) || !nonempty(source.story_id) || byId.has(source.story_id) || !DOMAIN_IDS.includes(source.domain) ||
+              !nonempty(source.source_title) || !nonempty(source.source_name) || !nonempty(source.source_url) || safeUrl(source.source_url) === '#') { valid = false; break; }
+          const summary = [];
+          if (own(source, 'units') || own(source, 'selected_unit_ids')) {
+            if (!Array.isArray(source.units) || !Array.isArray(source.selected_unit_ids)) { valid = false; break; }
+            const units = new Map();
+            for (const unit of source.units) {
+              if (!object(unit) || !nonempty(unit.unit_id) || units.has(unit.unit_id) || !['title', 'summary'].includes(unit.field) || !nonempty(unit.text)) { valid = false; break; }
+              units.set(unit.unit_id, unit);
+            }
+            const selected = new Set();
+            for (const id of source.selected_unit_ids) {
+              if (!units.has(id) || selected.has(id)) { valid = false; break; }
+              selected.add(id);
+            }
+            for (const unit of units.values()) if (selected.has(unit.unit_id) && unit.field === 'summary') summary.push(unit.text);
+          }
+          if (!valid) break;
+          const story = { story_id: source.story_id, domain: source.domain, source_title: source.source_title,
+            source_name: source.source_name, source_url: safeUrl(source.source_url), summary };
+          stories.push(story); byId.set(story.story_id, story);
+        }
+        // ID-less items are withheld; explicit foreign IDs/domain joins invalidate
+        // the new display/media contract instead of invoking the legacy reader.
+        const joins = [...(Array.isArray(ep.chapters) ? ep.chapters : []), ...(Array.isArray(ep.flashcards) ? ep.flashcards : [])];
+        for (const domain of DOMAIN_IDS) {
+          const data = object(ep.takeaways) ? ep.takeaways[domain] : null;
+          for (const source of data && Array.isArray(data.sources) ? data.sources : []) {
+            if (object(source) && own(source, 'story_id')) {
+              joins.push(source, { story_id: source.story_id, domain });
+            }
+          }
+        }
+        for (const item of joins) if (object(item) && own(item, 'story_id')) {
+          const story = byId.get(item.story_id);
+          if (!story || (own(item, 'domain') && item.domain !== story.domain)) valid = false;
+        }
+        if (valid) result = { state: 'valid', stories, byId };
+      }
+      storyDisplayCache.set(ep, result);
+      return result;
+    }
+
+    function domainTakeaway(ep, domain) {
+      const display = readStoryDisplay(ep);
+      if (display.state === 'absent') return (ep.takeaways || {})[domain];
+      const stories = display.stories.filter(story => story.domain === domain);
+      return { title: stories.map(story => story.source_title).join(' · '), bullets: stories.flatMap(story => story.summary), stories };
+    }
+
+    function episodeCards(ep) {
+      const display = readStoryDisplay(ep), cards = Array.isArray(ep.flashcards) ? ep.flashcards : [];
+      if (display.state === 'invalid') return [];
+      if (display.state === 'absent') return cards.filter(card => card && (!ep.content_availability || (DOMAIN_IDS.includes(card.domain) && hasDomainContent(ep, card.domain))));
+      return cards.flatMap(card => {
+        const story = card && display.byId.get(card.story_id);
+        if (!story || typeof card.question !== 'string' || typeof card.answer !== 'string') return [];
+        return [{ domain: story.domain, story_id: story.story_id, question: card.question, answer: card.answer,
+          cite: story.source_title + ' · ' + story.source_name + ' · ' + story.source_url,
+          color_class: (DOMAIN_STYLES[story.domain] || DOMAIN_STYLES.ai).badgeBg }];
+      });
+    }
+
     function coverageState(ep, domain) {
       const coverage = ep.content_availability;
       const value = coverage && coverage.schema_version === 1 && coverage.domains ? coverage.domains[domain] : null;
@@ -2242,6 +2326,8 @@
     }
 
     function hasDomainContent(ep, domain) {
+      const display = readStoryDisplay(ep);
+      if (display.state !== 'absent') return display.state === 'valid' && display.stories.some(story => story.domain === domain);
       const state = coverageState(ep, domain);
       if (state) return state.status === 'available';
       // Legacy coverage is unknown. Preserve recorded content without inferring
@@ -2252,7 +2338,9 @@
     }
 
     function hasTakeawayPassages(ep, domain) {
-      const state = coverageState(ep, domain), data = (ep.takeaways || {})[domain];
+      const display = readStoryDisplay(ep);
+      if (display.state !== 'absent') return display.state === 'valid' && display.stories.some(story => story.domain === domain && story.summary.length);
+      const state = coverageState(ep, domain), data = domainTakeaway(ep, domain);
       return (!state || state.status === 'available') && !!data && Array.isArray(data.bullets) && data.bullets.some(b => typeof b === 'string' && b.trim());
     }
 
@@ -2264,28 +2352,58 @@
     }
 
     function episodeAudioUrl(ep) {
+      const display = readStoryDisplay(ep);
+      if (display.state === 'invalid' || (display.state === 'valid' && !display.stories.length)) return '';
       const status = ep.audio_availability && ep.audio_availability.podcast;
-      if (status && status.status !== 'available') return '';
+      if ((display.state === 'valid' && (!status || status.status !== 'available')) || (status && status.status !== 'available')) return '';
       if (ep.content_availability && !DOMAIN_IDS.some(d => hasDomainContent(ep, d))) return '';
       return mediaUrl(ep.audio_url);
     }
 
     function domainAudioUrl(ep, domain) {
+      const display = readStoryDisplay(ep);
       if (!hasDomainContent(ep, domain)) return '';
       const status = ep.audio_availability && ep.audio_availability.domains && ep.audio_availability.domains[domain];
-      if (status && status.status !== 'available') return '';
+      if ((display.state === 'valid' && (!status || status.status !== 'available')) || (status && status.status !== 'available')) return '';
       return mediaUrl(ep.domain_audio && ep.domain_audio[domain]);
+    }
+
+    function renderStoryDomain(container, ep, domain, display) {
+      const stories = display.stories.filter(story => story.domain === domain);
+      if (!stories.length) {
+        const state = coverageState(ep, domain);
+        const explanation = display.state === 'invalid' ? 'Article evidence unavailable: invalid story display contract.'
+          : state && state.status === 'source_unavailable' ? 'Checked sources unavailable; coverage could not be established.'
+          : state && state.status === 'no_received_candidates' ? 'No articles available from checked sources'
+          : 'No selected article evidence available for this domain.';
+        container.innerHTML = `<div class="p-5 rounded-2xl theme-card-bg border"><h4 class="text-sm font-semibold text-slate-200">${domain.toUpperCase()} coverage</h4><p class="text-xs text-slate-400">${escapeHtml(explanation)}</p></div>`;
+        return;
+      }
+      const style = DOMAIN_STYLES[domain] || DOMAIN_STYLES.ai;
+      container.innerHTML = `<div class="p-4 sm:p-5 rounded-2xl theme-card-bg border space-y-4 shadow-lg">
+        <div class="flex items-center justify-between gap-2"><span class="px-2.5 py-1 rounded-md text-[11px] font-mono ${style.badgeBg}">${domain.toUpperCase()}</span>
+        ${domainAudioUrl(ep, domain) ? `<button onclick="playArticleAudio('${domain}')" class="px-2.5 py-1 rounded-lg text-cyan-300 text-[11px]">🎧 Listen to Domain Summary</button>` : '<span class="text-[10px] text-slate-400">Domain audio unavailable</span>'}</div>
+        ${stories.map(story => `<article data-story-id="${escapeHtml(story.story_id)}" class="space-y-2">
+          <h4 class="text-sm font-bold text-white">${escapeHtml(story.source_title)}</h4>
+          ${story.summary.length ? `<ul class="text-xs text-slate-300 space-y-2">${story.summary.map(text => `<li>${escapeHtml(text)}</li>`).join('')}</ul><p class="text-[10px] text-slate-400">Received RSS excerpts; article bodies were not acquired.</p>` : '<p class="text-xs text-slate-400">Headline-only evidence; no accepted summary excerpt. Article bodies were not acquired.</p>'}
+          <a href="${escapeHtml(story.source_url)}" target="_blank" rel="noopener noreferrer" class="text-xs text-cyan-400">${escapeHtml(story.source_name)} · Read source</a>
+        </article>`).join('')}</div>`;
     }
 
     function updateAllDomainContent(ep) {
       const allDomains = ['ai', 'cloud', 'data', 'sec', 'devops', 'arch', 'finops', 'gov'];
       const takeaways = ep.takeaways || {};
+      const display = readStoryDisplay(ep);
 
       allDomains.forEach(dom => {
         const container = document.getElementById('content-' + dom);
         if (!container) return;
 
         const data = takeaways[dom];
+        if (display.state !== 'absent') {
+          renderStoryDomain(container, ep, dom, display);
+          return;
+        }
         const style = DOMAIN_STYLES[dom] || DOMAIN_STYLES.ai;
 
         if (hasDomainContent(ep, dom) && data) {
@@ -2384,7 +2502,7 @@
 
       const chipsContainer = document.getElementById('chat-starter-chips');
       if (chipsContainer) {
-        const starters = DOMAIN_IDS.filter(d => hasDomainContent(ep, d)).slice(0, 3).map(domain => ({ label: (ep.takeaways[domain].title || domain.toUpperCase()), prompt: 'Summarize the received article evidence for ' + domain + '.' }));
+        const starters = DOMAIN_IDS.filter(d => hasDomainContent(ep, d)).slice(0, 3).map(domain => ({ label: (domainTakeaway(ep, domain).title || domain.toUpperCase()), prompt: 'Summarize the received article evidence for ' + domain + '.' }));
         chipsContainer.innerHTML = starters.map((s, idx) => `
           <button data-idx="${idx}" class="chat-starter-btn px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 border border-white/10 text-[10px] sm:text-[11px] text-cyan-300 whitespace-nowrap transition flex-shrink-0">${escapeHtml(s.label)}</button>
         `).join('');
@@ -2424,7 +2542,15 @@
       const run = ep.pipeline_run;
       const synthesis = run && typeof run === 'object' && !Array.isArray(run) && run.schema_version === 1
         ? run.synthesis : null;
-      if (synthesis && typeof synthesis === 'object' && !Array.isArray(synthesis)) {
+      const display = readStoryDisplay(ep);
+      if (display.state === 'valid' && synthesis && synthesis.contract_version === 1) {
+        const labels = { model_assisted_selection: 'Model-assisted evidence selection', deterministic_selection: 'Deterministic evidence selection', mixed_selection: 'Mixed evidence selection' };
+        if (Object.prototype.hasOwnProperty.call(labels, synthesis.path)) {
+          labelText = labels[synthesis.path];
+          detailText = 'Uses received RSS excerpts; article bodies were not acquired. Headline-only stories have no accepted summary excerpt. Publisher claims are not independently verified.';
+          modeClasses = synthesis.path === 'deterministic_selection' ? 'border-amber-500/30 text-amber-300' : 'border-cyan-500/30 text-cyan-300';
+        }
+      } else if (display.state === 'absent' && synthesis && typeof synthesis === 'object' && !Array.isArray(synthesis)) {
         if (synthesis.path === 'llm' && typeof synthesis.model === 'string' && synthesis.model.trim()) {
           labelText = 'Model-generated (LLM)';
           detailText = 'Synthesis model: ' + synthesis.model + (ep.content_basis === 'rss_summaries' ? ' · Uses received RSS summaries; article bodies were not acquired.' : ' · Article content basis not recorded.');
@@ -2453,6 +2579,7 @@
       }
 
       currentEpisodeId = epId;
+      readStoryDisplay(ep);
       renderGenerationProvenance(ep);
 
       const select = document.getElementById('episode-select');
@@ -2483,7 +2610,7 @@
       renderChapters(ep);
       updateAllDomainContent(ep);
 
-      flashcards = (Array.isArray(ep.flashcards) ? ep.flashcards : []).filter(card => !ep.content_availability || (DOMAIN_IDS.includes(card.domain) && hasDomainContent(ep, card.domain)));
+      flashcards = episodeCards(ep);
       currentCardIndex = 0;
       renderFlashcard();
       updateMasteryUI();
@@ -2494,19 +2621,28 @@
     function renderChapters(ep) {
       const container = document.getElementById('chapters-list');
       if (!container) return;
-      const chapters = (ep.chapters || []).filter(c => !ep.content_availability || (DOMAIN_IDS.includes(c.domain) && hasDomainContent(ep, c.domain)));
+      const display = readStoryDisplay(ep);
+      if (display.state === 'invalid') { container.textContent = 'Chapter evidence unavailable: invalid story display contract.'; return; }
+      const chapters = (Array.isArray(ep.chapters) ? ep.chapters : []).filter(c => c && (display.state === 'valid' ? display.byId.has(c.story_id) : !ep.content_availability || (DOMAIN_IDS.includes(c.domain) && hasDomainContent(ep, c.domain)))).map(c => {
+        const story = display.byId.get(c.story_id);
+        return story ? { ...c, title: story.source_title, source_name: story.source_name, source_url: story.source_url } : c;
+      });
       container.innerHTML = chapters.map(c => {
         const sourceName = c.source_name || c.sourceName || 'TechPulse';
         const sourceUrl = c.source_url || c.sourceUrl || '#';
-        // jumpTo() args land in a JS-in-HTML context where escapeHtml() is ineffective
-        // (the parser decodes entities before the JS runs). Make them provably inert instead.
-        const rawSeconds = Number(c.seconds !== undefined ? c.seconds : 0);
-        const seconds = Number.isFinite(rawSeconds) ? rawSeconds : 0;
-        const jumpTime = /^\d{1,2}:\d{2}(:\d{2})?$/.test(String(c.time)) ? String(c.time) : '00:00';
+        // Only application-normalized numbers/time labels enter event code.
+        let seconds = null;
+        if (Object.prototype.hasOwnProperty.call(c, 'seconds')) {
+          if (typeof c.seconds === 'number' && Number.isFinite(c.seconds) && c.seconds >= 0) seconds = c.seconds;
+        } else if (typeof c.time === 'string' && /^(?:\d{1,2}:)?\d{1,2}:[0-5]\d$/.test(c.time)) {
+          const parts = c.time.split(':').map(Number);
+          if (parts.length === 2 || parts[1] < 60) seconds = parts.reduce((total, part) => total * 60 + part, 0);
+        }
+        const jumpTime = seconds === null ? 'Unavailable' : String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(Math.floor(seconds % 60)).padStart(2, '0');
         return `
-        <div class="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 transition">
+        <div ${display.state === 'valid' ? `data-story-id="${escapeHtml(c.story_id)}"` : ''} class="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 transition">
           <div class="flex items-center gap-2">
-            <button ${episodeAudioUrl(ep) ? `onclick="jumpTo(${seconds}, '${jumpTime}')"` : 'disabled aria-disabled="true"'} class="px-2 py-0.5 rounded bg-black/70 font-mono text-cyan-400 font-bold hover:bg-cyan-500/20 border border-white/10 text-[11px] transition flex-shrink-0">${escapeHtml(c.time)}</button>
+            <button ${seconds !== null && episodeAudioUrl(ep) ? `onclick="jumpTo(${seconds}, '${jumpTime}')"` : 'disabled aria-disabled="true"'} class="px-2 py-0.5 rounded bg-black/70 font-mono text-cyan-400 font-bold hover:bg-cyan-500/20 border border-white/10 text-[11px] transition flex-shrink-0">${escapeHtml(jumpTime)}</button>
             <span class="text-slate-200 font-medium text-xs leading-snug">${escapeHtml(c.title)}</span>
           </div>
           <div class="flex items-center justify-between sm:justify-end gap-2 pl-7 sm:pl-0">
@@ -2641,7 +2777,7 @@
       }
       const available = DOMAIN_IDS.filter(domain => hasDomainContent(ep, domain));
       const summaryDomains = available.filter(domain => hasTakeawayPassages(ep, domain));
-      const cards = (Array.isArray(ep.flashcards) ? ep.flashcards : []).filter(card => card && typeof card.question === 'string' && card.question.trim() && typeof card.answer === 'string' && card.answer.trim() &&
+      const cards = episodeCards(ep).filter(card => card && typeof card.question === 'string' && card.question.trim() && typeof card.answer === 'string' && card.answer.trim() &&
         (!ep.content_availability || (DOMAIN_IDS.includes(card.domain) && hasDomainContent(ep, card.domain))) && (!requestedDomain || card.domain === requestedDomain));
       if (!available.length && !cards.length) {
         addBotMessage('No article evidence available for this episode. Questions and interview prompts require supported articles.');
@@ -2662,7 +2798,7 @@
       const passages = [];
       for (const domain of summaryDomains) {
         if (requestedDomain && domain !== requestedDomain) continue;
-        const data = ep.takeaways[domain];
+        const data = domainTakeaway(ep, domain);
         for (const text of data.bullets) {
           if (typeof text !== 'string' || !text.trim()) continue;
           if (overview || (requestedDomain && queryWords.every(word => aliases[domain].includes(word))) || queryWords.some(word => text.toLowerCase().includes(word))) passages.push({ domain, title: data.title, text });
@@ -2824,7 +2960,7 @@
       if (!audio || !url) { showAudioStatus('Domain audio unavailable for this episode.', true); return; }
       const selected = currentEpisodeId;
       audio.pause(); audio.src = url; audio.load();
-      showAudioStatus('Playing domain summary: ' + (domainTitle || (ep.takeaways[domain] || {}).title || domain));
+      showAudioStatus('Playing domain summary: ' + (domainTitle || (domainTakeaway(ep, domain) || {}).title || domain));
       Promise.resolve(audio.play()).catch(() => {
         if (selected === currentEpisodeId && audio.src.endsWith(url)) showAudioStatus('Domain audio unavailable for this episode.', true);
       });
