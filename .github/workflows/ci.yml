@@ -9,6 +9,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      GEMINI_API_KEY: ''
+      API_SECRET_KEY: ''
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -25,7 +29,10 @@ jobs:
 
       - name: Syntax & PyCompile Check
         run: |
-          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py
+          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py src/story_manifest.py
+
+      - name: Run Story Alignment Tests
+        run: python tests/test_story_alignment.py
 
       - name: Run Synthesizer Unit Tests
         run: |
