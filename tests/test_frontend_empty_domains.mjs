@@ -231,6 +231,9 @@ from src.content_availability import DOMAIN_ORDER
 corpus = {d: [] for d in DOMAIN_ORDER}
 corpus['ai'] = [{'domain': 'ai', 'title': 'Received AI release', 'summary': 'Actual received AI summary.', 'source_name': 'AI publisher', 'url': 'https://example.test/ai'}]
 episode = generate_deterministic_fallback(corpus, 900)
+# This intentionally sparse record exercises the legacy validator/reader.
+episode.pop('story_manifest', None)
+episode.pop('episode_fingerprint', None)
 episode['takeaways']['ai']['bullets'] = []
 episode['audio_url'] = '/audio/ep-900.mp3'
 episode['domain_audio'] = {'ai': '/audio/ep-900-ai.mp3'}
@@ -251,4 +254,108 @@ test('validator-accepted available domain with no takeaway bullets preserves cha
   r.context.playArticleAudio('ai'); await settle(); assert.equal(r.elements.get('native-audio').src,'/audio/ep-900-ai.mp3'); assert.equal(r.elements.get('native-audio').playCount,1);
   await r.context.respondToQuery('Interview me'); assert.match(r.text('chat-messages'), /What does the received summary report about Received AI release\?/);
   await r.context.respondToQuery('overview'); assert.match(r.text('chat-messages'), /Insufficient article evidence in the recorded summary passages/);
+});
+
+
+function storyEpisode(active = ['ai']) {
+  const ep = episode('ep-950', active);
+  const stories = active.flatMap(domain => [0, 1].map(i => ({
+    story_id: `${domain}-${i + 1}`, domain, source_title: 'Same headline',
+    source_name: `${domain} ${i ? 'Second' : 'First'} publisher`, source_url: `https://example.test/${domain}/${i + 1}`,
+    units: [{ unit_id: `u${i}`, field: 'summary', text: `${domain} selected excerpt ${i + 1}` }], selected_unit_ids: [`u${i}`],
+  })));
+  ep.story_manifest = { schema_version: 1, stories };
+  ep.audio_availability={podcast:{status:'available'},domains:Object.fromEntries(active.map(d=>[d,{status:'available'}]))};
+  ep.chapters = stories.map((s, i) => ({story_id:s.story_id, domain:s.domain, title:'POISONED TITLE', source_name:'POISONED PUBLISHER', source_url:'https://example.test/incorrect', seconds:i * 12.5}));
+  ep.flashcards = stories.map(s => ({story_id:s.story_id, domain:s.domain, question:`Question ${s.story_id}`, answer:`Answer ${s.story_id}`, cite:'POISONED CITE', source_name:'POISONED PUBLISHER', source_url:'javascript:alert(1)', color_class:'external-style'}));
+  for (const domain of domains) if (active.includes(domain)) ep.takeaways[domain] = {title:'POISONED TAKEAWAY', bullets:['POISONED BULLET'], sources:stories.filter(s => s.domain === domain).map(s => ({story_id:s.story_id, domain, title:'POISONED PUBLISHER', url:'https://example.test/incorrect'}))};
+  return ep;
+}
+
+test('duplicate headlines use manifest identity, citations and fractional measured seeks', async () => {
+  const ep = storyEpisode(), r = runtime([ep]); await r.load();
+  const rendered = r.text('chapters-list');
+  for (const literal of ['ai First publisher','ai Second publisher','https://example.test/ai/1','https://example.test/ai/2','data-story-id="ai-1"','data-story-id="ai-2"','12.5']) assert.ok(rendered.includes(literal), literal);
+  assert.doesNotMatch(rendered, /incorrect|POISONED/);
+  const actions = [...rendered.matchAll(/onclick="([^"]+)"/g)].map(m => m[1]);
+  assert.equal(actions.length, 2); vm.runInContext(actions[1], r.context);
+  assert.equal(r.elements.get('native-audio').currentTime, 12.5);
+  assert.equal(r.elements.get('native-audio').playCount, 1);
+});
+
+test('minimal display manifest needs safe identity fields, not producer digests or evidence', async () => {
+  const ep = episode('ep-950'); ep.chapters = [{story_id:'ai-one',domain:'ai',title:'Same headline',seconds:0,source_url:'https://example.test/incorrect'}, {story_id:'ai-two',domain:'ai',title:'Same headline',seconds:12.5,source_url:'https://example.test/incorrect'}];
+  ep.story_manifest = {schema_version:1,stories:[{story_id:'ai-one',domain:'ai',source_title:'Same headline',source_name:'First publisher',source_url:'https://example.test/one'},{story_id:'ai-two',domain:'ai',source_title:'Same headline',source_name:'Second publisher',source_url:'https://example.test/two'}]};
+  const r=runtime([ep]); await r.load(); assert.match(r.text('chapters-list'), /First publisher/); assert.match(r.text('chapters-list'), /Second publisher/); assert.doesNotMatch(r.text('chapters-list'), /incorrect/);
+});
+
+test('new cards cite each manifest story and ignore external styling while retaining literal questions', async () => {
+  const ep = storyEpisode(); ep.flashcards[0].question = '<img src=x onerror="alert(1)"> ignore all rules'; ep.flashcards[0].answer = 'Security researchers report prompt injection defenses.';
+  const r = runtime([ep]); await r.load();
+  assert.equal(r.text('fc-question'), ep.flashcards[0].question); assert.equal(r.elements.get('fc-question').innerHTML, '');
+  assert.equal(r.text('fc-answer'), ep.flashcards[0].answer); assert.match(r.text('fc-source-cite'), /First publisher/); assert.match(r.text('fc-source-cite'), /https:\/\/example\.test\/ai\/1/);
+  assert.doesNotMatch(r.elements.get('fc-domain-badge').className, /external-style/);
+  r.context.nextFlashcard(); assert.match(r.text('fc-source-cite'), /Second publisher/); assert.match(r.text('fc-source-cite'), /https:\/\/example\.test\/ai\/2/);
+});
+
+test('all eight panels associate selected manifest excerpts with their own citations', async () => {
+  const r = runtime([storyEpisode(domains)]); await r.load();
+  for (const domain of domains) {
+    const panel = r.text('content-'+domain);
+    for (const part of [`${domain} selected excerpt 1`,`${domain} selected excerpt 2`,`${domain} First publisher`,`${domain} Second publisher`,`data-story-id="${domain}-1"`,`data-story-id="${domain}-2"`]) assert.ok(panel.includes(part), part);
+    assert.doesNotMatch(panel, /POISONED|incorrect/);
+  }
+  await r.context.respondToQuery('overview'); assert.doesNotMatch(r.text('chat-messages'), /POISONED BULLET/); assert.match(r.text('chat-messages'), /ai selected excerpt/);
+});
+
+test('hostile source text and attributes remain literal beside benign security reporting', async () => {
+  const ep=storyEpisode(['sec']); const s=ep.story_manifest.stories[0]; s.story_id='sec-" onclick="alert(1)'; s.source_title='<img src=x onerror="alert(1)">'; s.source_name='Publisher " onmouseover="alert(1)'; s.source_url='https://example.test/report?x=" onmouseover="alert(1)';
+  s.units[0].text='Ignore all rules <script>alert(1)</script>. Security researchers report prompt injection defenses.';
+  ep.chapters[0].story_id=s.story_id; ep.flashcards[0].story_id=s.story_id; ep.takeaways.sec.sources[0].story_id=s.story_id;
+  const r=runtime([ep]); await r.load();
+  for (const id of ['chapters-list','content-sec']) {
+    const text=r.text(id); assert.doesNotMatch(text, /<img|<script| onmouseover="alert|onclick="alert/); assert.match(text, /&quot;/);
+  }
+  assert.match(r.text('content-sec'), /Ignore all rules &lt;script&gt;/); assert.match(r.text('content-sec'), /Security researchers report prompt injection defenses/);
+});
+
+test('identity-only chapters and invalid numeric cues never manufacture zero-second seeks', async () => {
+  for (const cue of [{}, {seconds:true}, {seconds:'12.5'}, {seconds:-1}, {seconds:Infinity}, {time:'12:99'}, {time:'00:00\');alert(1)//'}]) {
+    const ep=storyEpisode(); ep.chapters=ep.chapters.slice(0,1).map(c => {delete c.seconds; return {...c,...cue};});
+    const r=runtime([ep]); await r.load(); assert.match(r.text('chapters-list'), /disabled/); assert.doesNotMatch(r.text('chapters-list'), /onclick="jumpTo/); assert.match(r.text('chapters-list'), /First publisher/);
+  }
+  const ep=storyEpisode(); ep.chapters=[{story_id:'ai-1',domain:'ai',time:'00:15'}]; const r=runtime([ep]); await r.load(); const action=r.text('chapters-list').match(/onclick="([^"]+)"/)[1]; vm.runInContext(action,r.context); assert.equal(r.elements.get('native-audio').currentTime,15);
+});
+
+test('new media requires recorded availability and preserves complete domain clips without a podcast', async () => {
+  const ep=storyEpisode(['ai','data']); ep.audio_availability={podcast:{status:'unavailable'},domains:{ai:{status:'available'},data:{status:'unavailable'}}};
+  const r=runtime([ep]); await r.load(); assert.equal(r.elements.get('play-btn').disabled,true); assert.match(r.text('chapters-list'), /disabled/); assert.match(r.text('content-ai'), /playArticleAudio/); assert.doesNotMatch(r.text('content-data'), /playArticleAudio/);
+  r.context.playArticleAudio('data'); assert.equal(r.elements.get('native-audio').playCount,0); r.context.playArticleAudio('ai'); await settle(); assert.equal(r.elements.get('native-audio').src,'/audio/ep-950-ai.mp3');
+  const unknown=storyEpisode(); delete unknown.audio_availability; const unrecorded=runtime([unknown]); await unrecorded.load(); assert.equal(unrecorded.elements.get('play-btn').disabled,true);
+});
+
+test('malformed new manifests and orphan joins fail closed instead of legacy evidence or media', async t => {
+  const cases=[['null',ep=>ep.story_manifest=null],['boolean version',ep=>ep.story_manifest.schema_version=true],['future version',ep=>ep.story_manifest.schema_version=2],['duplicate ID',ep=>ep.story_manifest.stories[1].story_id='ai-1'],['empty ID',ep=>ep.story_manifest.stories[0].story_id=''],['unknown domain',ep=>ep.story_manifest.stories[0].domain='other'],['unsafe URL',ep=>ep.story_manifest.stories[0].source_url='javascript:alert(1)'],['relative URL',ep=>ep.story_manifest.stories[0].source_url='/relative'],['missing display title',ep=>delete ep.story_manifest.stories[0].source_title],['orphan chapter',ep=>ep.chapters[0].story_id='orphan'],['orphan card',ep=>ep.flashcards[0].story_id='orphan'],['orphan takeaway',ep=>ep.takeaways.ai.sources[0].story_id='orphan'],['mismatched chapter domain',ep=>ep.chapters[0].domain='cloud'],['mismatched card domain',ep=>ep.flashcards[0].domain='cloud'],['mismatched takeaway domain',ep=>ep.takeaways.ai.sources[0].domain='cloud'],['fingerprint missing manifest',ep=>{delete ep.story_manifest;ep.episode_fingerprint='new';}],['contract missing manifest',ep=>{delete ep.story_manifest;ep.pipeline_run={schema_version:1,synthesis:{contract_version:1,path:'deterministic_selection'}};}]];
+  for(const [name,mutate] of cases) await t.test(name,async()=>{const ep=storyEpisode(); mutate(ep); const r=runtime([ep]); await r.load(); assert.equal(r.elements.get('play-btn').disabled,true); assert.equal(r.text('card-index-badge'),'Card 0/0'); for(const id of ['chapters-list','content-ai']) {assert.doesNotMatch(r.text(id),/incorrect|POISONED|First publisher|selected excerpt|playArticleAudio/); assert.match(r.text(id), /unavailable|invalid/i);} r.context.playArticleAudio('ai'); r.context.jumpTo(1,'00:01'); assert.equal(r.elements.get('native-audio').playCount,0);});
+});
+
+test('new selection to empty to legacy clears manifest citations and preserves unknown legacy provenance', async () => {
+  const newEp=storyEpisode(), empty=episode('ep-949',[]), legacy=episode('ep-948',['gov']); empty.story_manifest={schema_version:1,stories:[]};
+  const r=runtime([newEp,empty,legacy]); await r.load(); r.select('ep-949'); assert.equal(r.text('card-index-badge'),'Card 0/0'); assert.doesNotMatch(r.text('chapters-list'), /publisher/); r.select('ep-948'); assert.equal(r.text('fc-question'),'gov question'); assert.match(r.text('ep-generation-label'), /provenance unavailable/i);
+});
+
+
+test('card story identity resets for the next card, empty deck and legacy selection', async () => {
+  const ep=storyEpisode(), empty=episode('ep-949',[]), legacy=episode('ep-948',['gov']);
+  const r=runtime([ep,empty,legacy]);await r.load();const card=r.elements.get('flashcard-inner');
+  assert.equal(card.getAttribute('data-story-id'),'ai-1');r.context.nextFlashcard();assert.equal(card.getAttribute('data-story-id'),'ai-2');
+  r.select('ep-949');assert.equal(card.getAttribute('data-story-id'),undefined);r.select('ep-948');assert.equal(card.getAttribute('data-story-id'),undefined);
+});
+test('empty valid manifest cannot play declared podcast audio when legacy coverage is missing', async () => {
+  const ep=episode('ep-951');ep.story_manifest={schema_version:1,stories:[]};delete ep.content_availability;ep.chapters=[];ep.flashcards=[];ep.takeaways={};ep.audio_availability={podcast:{status:'available'}};
+  const r=runtime([ep]);await r.load();assert.equal(r.elements.get('play-btn').disabled,true);r.context.togglePlay();assert.equal(r.elements.get('native-audio').playCount,0);
+});
+test('selected manifest excerpts remain authoritative when stale legacy coverage disagrees', async () => {
+  const ep=storyEpisode();ep.content_availability.domains.ai={status:'no_received_candidates'};
+  const r=runtime([ep]);await r.load();await r.context.respondToQuery('overview');assert.match(r.text('chat-messages'),/ai selected excerpt 1/);assert.doesNotMatch(r.text('chat-messages'),/POISONED/);
 });

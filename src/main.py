@@ -7,9 +7,11 @@ import re
 import shutil
 import hashlib
 import hmac
+import math
+import copy
 import xml.etree.ElementTree as ET
 import email.utils
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
@@ -26,7 +28,10 @@ from src.ingestion import ingest_all_domains, DOMAIN_FEEDS
 from src.content_availability import (DOMAIN_ORDER, SOURCE_FAILURES, build_content_availability,
     empty_source_health, build_source_health, load_source_health, save_source_health, sanitize_source_health)
 from src.synthesizer import synthesize_briefing, local_now
-from src.tts_engine import generate_episode_podcast_audio, generate_all_domain_audios
+from src.tts_engine import (generate_episode_podcast_audio, generate_all_domain_audios,
+                            generate_story_audio_bundle, VOICE_MAP, format_seconds_to_time)
+from src.story_manifest import (freeze_story_manifest, manifest_from_dict, manifest_to_dict,
+    episode_fingerprint, audio_recipe_fingerprint, validate_story_episode)
 from src.grounded_chat import process_grounded_chat
 from src.provenance import (RunRecord, append_record, attach_episode_record,
                             selection_record, error_category, action_record)
@@ -427,6 +432,12 @@ def cleanup_duplicate_episodes():
         try:
             with open(fp, "r") as f:
                 data = json.load(f)
+            synthesis = data.get('pipeline_run', {}).get('synthesis', {}) if isinstance(data.get('pipeline_run'), dict) else {}
+            if ('story_manifest' in data or 'episode_fingerprint' in data
+                    or isinstance(synthesis, dict) and 'contract_version' in synthesis):
+                # New aggregate headings do not identify immutable evidence.
+                # Presence is enough: malformed records must not be deleted either.
+                continue
             title = data.get("title", "").strip().lower()
             summary = data.get("summary", "").strip().lower()
             sig_title = f"title::{title}"
@@ -467,8 +478,14 @@ def _safe_url(value: Any) -> str:
         parsed = urlparse(candidate)
     except ValueError:
         return ""
-    if parsed.scheme.lower() in ("http", "https") and parsed.netloc:
-        return candidate
+    try:
+        if (parsed.scheme.lower() in ('http', 'https') and parsed.hostname
+                and parsed.username is None and parsed.password is None
+                and not any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in candidate)
+                and '\\' not in candidate and (parsed.port is None or 0 < parsed.port <= 65535)):
+            return candidate
+    except ValueError:
+        return ''
     return ""
 
 _HTML_TAG_RE = re.compile(r"<[^>]*>")
@@ -644,51 +661,32 @@ async def run_daily_pipeline(*, run_record=None):
                         "No articles available from checked sources. Previous episodes remain available in history.",
                 error=terminal_error, last_run=datetime.now(timezone.utc).isoformat())
             return
+        manifest = freeze_story_manifest(corpus, availability)
+        current_fingerprint = episode_fingerprint(manifest)
         dedup_started = time.monotonic()
-        run.data["stages"]["dedup"]["status"] = "running"
-        all_corpus_urls = sorted([item["url"] for items in corpus.values() for item in items if item.get("url")])
-        current_corpus_hash = hashlib.sha256("".join(all_corpus_urls).encode("utf-8")).hexdigest()
-        
-        # Check if corpus has new articles compared to existing episodes
+        run.data['stages']['dedup']['status'] = 'running'
+        all_corpus_urls = sorted(item['url'] for items in corpus.values() for item in items if item.get('url'))
+        current_corpus_hash = hashlib.sha256(''.join(all_corpus_urls).encode('utf-8')).hexdigest()
         previous_titles: Optional[List[str]] = None
         sorted_files = get_sorted_episode_files()
         if sorted_files:
-            latest_file = sorted_files[0]
-            with open(os.path.join(EPISODES_DIR, latest_file), "r") as f:
+            with open(os.path.join(EPISODES_DIR, sorted_files[0])) as f:
                 latest_ep = json.load(f)
-
-            # Feed the prior episode's chapter titles to validate_synthesis's
-            # anti-repeat rule so it actually fires in production. Only trust
-            # a well-formed prior list. Sparse episodes have fewer chapters;
-            # malformed prior metadata must not cause spurious rejection.
-            prior_chapter_titles = [c.get("title") for c in latest_ep.get("chapters", [])]
-            if 1 <= len(prior_chapter_titles) <= 8 and all(isinstance(t, str) and t.strip() for t in prior_chapter_titles):
+            prior_chapter_titles = [c.get('title') for c in latest_ep.get('chapters', []) if isinstance(c, dict)]
+            if prior_chapter_titles and all(isinstance(t, str) and t.strip() for t in prior_chapter_titles):
                 previous_titles = prior_chapter_titles
-
-            latest_hash = latest_ep.get("corpus_hash")
-            latest_ingested = set(latest_ep.get("ingested_urls", []))
-            
-            # Check 1: Exact corpus hash match
-            is_same_corpus = bool(latest_hash and latest_hash == current_corpus_hash)
-            # Check 2: Sub-set of ingested URLs match (no new URLs)
-            if not is_same_corpus and latest_ingested:
-                is_same_corpus = set(all_corpus_urls).issubset(latest_ingested)
-            # Check 3: If latest_ep has no hash yet, check if latest episode was created today (same date)
-            if not is_same_corpus and not latest_hash and not latest_ingested:
-                # Must use the same local-time basis as the "date" field stamped by
-                # synthesizer.py (Asia/Singapore), not UTC — otherwise this dedup
-                # check silently breaks once "date" moves off UTC (see task 7).
-                today_str = local_now().strftime("%b %d, %Y")
-                if latest_ep.get("date") == today_str:
-                    latest_ep["corpus_hash"] = current_corpus_hash
-                    latest_ep["ingested_urls"] = all_corpus_urls
-                    with open(os.path.join(EPISODES_DIR, latest_file), "w") as f:
-                        json.dump(latest_ep, f, indent=2)
-                    is_same_corpus = True
-
+            is_same_corpus = False
+            if 'story_manifest' in latest_ep:
+                try:
+                    previous_manifest = manifest_from_dict(latest_ep['story_manifest'])
+                    previous_fingerprint = episode_fingerprint(previous_manifest)
+                    is_same_corpus = (latest_ep.get('episode_fingerprint') == previous_fingerprint
+                                      and previous_fingerprint == current_fingerprint)
+                except (ValueError, TypeError, KeyError):
+                    pass
             if is_same_corpus:
                 latest_num = latest_ep.get("episode_number", latest_ep.get("id", "142").replace("ep-", ""))
-                logger.info(f"Ingested corpus hash matches latest Episode #{latest_num}. Skipping duplicate synthesis.")
+                logger.info(f"Selected evidence fingerprint matches latest Episode #{latest_num}. Skipping duplicate synthesis.")
                 pipeline_state["stage"] = "up_to_date"
                 pipeline_state["progress"] = 100
                 pipeline_state["message"] = "Checked RSS candidates match the previous briefing. History remains available."
@@ -710,23 +708,32 @@ async def run_daily_pipeline(*, run_record=None):
         pipeline_state["progress"] = 50
         pipeline_state["message"] = f"Available articles found. Synthesizing briefing for Episode #{next_num}..."
 
-        # Step 2: Synthesis with 120s hard timeout (schema-constrained output is
-        # 3-5x larger than before -- 8 full takeaways vs 1 -- and this single
-        # budget covers the entire 4-model cascade)
+        # One outer synthesis budget includes story selection and provider cleanup.
         briefing_data = await _observed_stage(run, "synthesis", asyncio.wait_for(
             synthesize_briefing(corpus, next_num, previous_titles=previous_titles,
-                               diagnostics=run.data["synthesis"]), timeout=120.0))
+                               diagnostics=run.data["synthesis"], manifest=manifest), timeout=120.0))
         if briefing_data is None:
             terminal_status = "no_content"
             pipeline_state.update(stage="no_content", progress=100,
                 message="No articles available from checked sources. Previous episodes remain available in history.",
                 last_run=datetime.now(timezone.utc).isoformat())
             return
-        briefing_data["content_availability"] = availability
-        for domain, state in availability["domains"].items():
-            takeaway = briefing_data.get("takeaways", {}).get(domain)
-            if isinstance(takeaway, dict):
-                takeaway.update(domain=domain, status=state["status"], reason=state["reason"])
+        valid, reason = validate_story_episode(briefing_data)
+        if not valid:
+            raise ValueError(reason)
+        accepted = copy.deepcopy(briefing_data['story_manifest'])
+        for story in accepted['stories']:
+            story['selected_unit_ids'] = []
+        if (accepted != manifest_to_dict(manifest)
+                or briefing_data.get('episode_fingerprint') != current_fingerprint):
+            raise ValueError('Synthesis changed frozen story identity')
+        # Synthesis timing is not measured media evidence. Only identities enter
+        # the bundle; its validated numeric cues may supply timing afterward.
+        identity_keys = ('story_id', 'domain', 'title', 'source_name', 'source_url')
+        briefing_data['chapters'] = [{key: chapter[key] for key in identity_keys}
+                                    for chapter in briefing_data['chapters']]
+        # Received counts and source-health decisions belong to ingestion.
+        briefing_data['content_availability'] = availability
         run.data["episode_id"] = briefing_data["id"]
         run.data["selection"] = selection_record(corpus, briefing_data, run.data["synthesis"]["path"],
                                                 provider_attempted=bool(run.data["synthesis"]["attempts"]))
@@ -737,52 +744,80 @@ async def run_daily_pipeline(*, run_record=None):
         pipeline_state["progress"] = 75
         pipeline_state["message"] = "Synthesizing Neural Edge-TTS podcast dialogue (GuyNeural & AriaNeural)..."
 
-        # Step 3: Audio TTS with 60s hard timeout
+        # Both provenance stages describe one bounded bundle; its internal
+        # 60-second deadline includes cleanup and every domain output.
+        bundle = None
         try:
-            final_mp3, dyn_chapters, duration_str, total_secs = await _observed_stage(run, "podcast_audio",
-                asyncio.wait_for(generate_episode_podcast_audio(briefing_data, AUDIO_DIR), timeout=60.0), "call_returned")
+            with run.stage('podcast_audio', 'call_returned'), run.stage('domain_audio', 'call_returned'):
+                bundle = await generate_story_audio_bundle(briefing_data, AUDIO_DIR)
         except Exception as exc:
-            # Audio failure does not discard the already-generated text briefing.
-            # CancelledError inherits BaseException and continues to propagate.
-            logger.warning("Podcast audio unavailable (category=%s)", error_category(exc))
-            final_mp3, dyn_chapters, duration_str, total_secs = None, [], "00:00", 0
-        run.data["stages"]["podcast_audio"].update(output_file_present=_usable_audio(final_mp3),
-            returned_chapters=len(dyn_chapters), audio_validated=False)
-        podcast_present = (_usable_audio(final_mp3) and os.path.abspath(final_mp3) ==
-                           os.path.abspath(os.path.join(AUDIO_DIR, f"{briefing_data['id']}.mp3")))
-        briefing_data["audio_url"] = f"/audio/{briefing_data['id']}.mp3" if podcast_present else ""
-        audio_availability = briefing_data.setdefault("audio_availability", {})
-        audio_availability["podcast"] = {"status": "available" if podcast_present else "unavailable",
-                                          "reason": "Audio generated." if podcast_present else "Audio generation failed."}
-        if not podcast_present:
-            duration_str, total_secs = "00:00", 0
-        briefing_data["duration"] = duration_str
-        briefing_data["total_seconds"] = total_secs
-        if dyn_chapters:
-            briefing_data["chapters"] = dyn_chapters
-
-        # Generate standalone per-domain audio files
-        try:
-            domain_outputs = await _observed_stage(run, "domain_audio", asyncio.wait_for(
-                generate_all_domain_audios(briefing_data, AUDIO_DIR), timeout=60.0), "call_returned")
-        except Exception as exc:
-            logger.warning("Domain audio unavailable (category=%s)", error_category(exc))
-            domain_outputs = {}
-        run.data["stages"]["domain_audio"].update(returned_outputs=len(domain_outputs),
-            expected_domains=len(briefing_data.get("takeaways", {})), audio_validated=False)
-        
-        domain_outputs = domain_outputs if isinstance(domain_outputs, dict) else {}
-        briefing_data["domain_audio"] = {domain: f"/audio/{briefing_data['id']}-{domain}.mp3"
+            logger.warning('Story audio unavailable (category=%s)', error_category(exc))
+        for name in ('podcast_audio', 'domain_audio'):
+            run.data['stages'][name]['operation'] = 'story_audio_bundle'
+        recipe = audio_recipe_fingerprint(manifest_from_dict(briefing_data['story_manifest']), VOICE_MAP)
+        briefing_data['audio_recipe_fingerprint'] = recipe
+        expected_podcast = os.path.abspath(os.path.join(AUDIO_DIR, briefing_data['id'] + '.mp3'))
+        podcast_present = False
+        measured_chapters = []
+        domain_outputs = {}
+        audio_availability = {'podcast': {'status': 'unavailable', 'reason': 'Audio generation failed.'},
+            'domains': {d: {'status': 'unavailable', 'reason': availability['domains'][d]['reason']
+                if availability['domains'][d]['status'] != 'available' else 'Audio generation failed.'}
+                for d in DOMAIN_ORDER}}
+        if bundle is not None and bundle.recipe_fingerprint == recipe:
+            audio_availability = copy.deepcopy(bundle.availability)
+            domain_outputs = bundle.domain_paths if isinstance(bundle.domain_paths, dict) else {}
+            total = bundle.total_seconds
+            cues = bundle.chapters
+            ids = [c['story_id'] for c in briefing_data['chapters']]
+            usable_cues = (isinstance(cues, list) and len(cues) == len(ids)
+                and all(isinstance(c, dict) for c in cues)
+                and [c.get('story_id') for c in cues] == ids
+                and all(type(c.get('seconds')) in (int, float) and math.isfinite(c['seconds'])
+                        and 0 <= c['seconds'] < total and isinstance(c.get('time'), str)
+                        # Canonical minutes/seconds must agree with the measured
+                        # numeric cue, including fractional-second truncation.
+                        and c['time'] == format_seconds_to_time(int(c['seconds'])) for c in cues)
+                and cues[0]['seconds'] == 0
+                and all(a['seconds'] < b['seconds'] for a, b in zip(cues, cues[1:]))) if type(total) in (int, float) and math.isfinite(total) and total > 0 else False
+            podcast_present = (audio_availability.get('podcast', {}).get('status') == 'available'
+                and _usable_audio(bundle.podcast_path)
+                and os.path.abspath(bundle.podcast_path) == expected_podcast and usable_cues)
+            if podcast_present:
+                # Keep source identity from the validated text, joining only measured timing.
+                measured_chapters = [{**chapter, 'seconds': cue['seconds'], 'time': cue['time']}
+                                     for chapter, cue in zip(briefing_data['chapters'], cues)]
+        briefing_data['audio_url'] = '/audio/' + briefing_data['id'] + '.mp3' if podcast_present else ''
+        briefing_data['duration'] = bundle.duration if podcast_present else '00:00'
+        briefing_data['total_seconds'] = bundle.total_seconds if podcast_present else 0
+        if measured_chapters:
+            briefing_data['chapters'] = measured_chapters
+        # Text-only chapters retain their identity without fabricated timing.
+        briefing_data['domain_audio'] = {domain: '/audio/' + briefing_data['id'] + '-' + domain + '.mp3'
             for domain, path in domain_outputs.items() if domain in DOMAIN_ORDER
-            and availability["domains"][domain]["status"] == "available" and _usable_audio(path)
-            and os.path.abspath(path) == os.path.abspath(os.path.join(AUDIO_DIR, f"{briefing_data['id']}-{domain}.mp3"))}
-        domain_availability = {}
+            and availability['domains'][domain]['status'] == 'available'
+            and audio_availability.get('domains', {}).get(domain, {}).get('status') == 'available'
+            and _usable_audio(path) and os.path.abspath(path) == os.path.abspath(
+                os.path.join(AUDIO_DIR, briefing_data['id'] + '-' + domain + '.mp3'))}
+        audio_availability.setdefault('podcast', {})['status'] = 'available' if podcast_present else 'unavailable'
+        if not podcast_present:
+            audio_availability['podcast']['reason'] = 'Audio generation failed or returned no playable track.'
+        audio_availability.setdefault('domains', {})
         for domain in DOMAIN_ORDER:
-            present = domain in briefing_data["domain_audio"]
-            state = availability["domains"][domain]
-            domain_availability[domain] = {"status": "available" if present else "unavailable",
-                "reason": "Audio generated." if present else state["reason"] if state["status"] != "available" else "Audio generation failed."}
-        audio_availability["domains"] = domain_availability
+            state = audio_availability['domains'].setdefault(domain, {'reason': 'Audio generation failed.'})
+            present = domain in briefing_data['domain_audio']
+            state['status'] = 'available' if present else 'unavailable'
+            if not present:
+                state['reason'] = availability['domains'][domain]['reason'] if availability['domains'][domain]['status'] != 'available' else 'Audio generation failed or returned no playable track.'
+        briefing_data['audio_availability'] = audio_availability
+        duration_str = briefing_data['duration']
+        run.data['stages']['podcast_audio'].update(output_file_present=bool(bundle and _usable_audio(bundle.podcast_path)),
+            returned_chapters=len(bundle.chapters) if bundle and isinstance(bundle.chapters, list) else 0,
+            published_chapters=len(measured_chapters), audio_validated=podcast_present)
+        run.data['stages']['domain_audio'].update(
+            returned_outputs=len(bundle.domain_paths) if bundle and isinstance(bundle.domain_paths, dict) else 0,
+            published_outputs=len(briefing_data['domain_audio']),
+            expected_domains=len({s.domain for s in manifest.stories}), audio_validated=bool(briefing_data['domain_audio']))
 
         # Save episode JSON
         ep_path = os.path.join(EPISODES_DIR, f"{briefing_data['id']}.json")
@@ -1012,57 +1047,59 @@ async def trigger_storage_cleanup(auth: bool = Depends(require_auth)):
         "storage": stats
     }
 
+def _export_url(value):
+    return quote(_safe_url(value), safe=':/?&=;%+@!$,*~-.#')
+
+
+def _markdown_text(value):
+    literal = html.escape(str(value if value is not None else ''), quote=True)
+    literal = ' '.join(literal.splitlines())
+    return re.sub(r'([\\`*_{}\[\]()#+|>~$])', r'\\\1', literal)
+
+
+def _podcast_is_available(ep):
+    coverage = ep.get('content_availability')
+    has_coverage = isinstance(coverage, dict) and type(coverage.get('schema_version')) is int and coverage['schema_version'] == 1
+    if 'story_manifest' not in ep and not has_coverage:
+        return True  # Preserve the historical reader.
+    episode_id = ep.get('id')
+    if not isinstance(episode_id, str) or not re.fullmatch(r'ep-[0-9]+', episode_id):
+        return False
+    return (ep.get('audio_availability', {}).get('podcast', {}).get('status') == 'available'
+            and ep.get('audio_url') == f'/audio/{episode_id}.mp3'
+            and _usable_audio(os.path.join(AUDIO_DIR, f'{episode_id}.mp3')))
+
+
 def generate_markdown_content(ep: Dict[str, Any], ep_id: str) -> str:
-    md_content = f"""---
-title: "{ep.get('title')}"
-date: {ep.get('date')}
-duration: "{ep.get('duration')}"
-hosts: "{ep.get('hosts')}"
-tags:
-  - techpulse/daily-briefing
-  - episode/{ep_id}
-  - architecture/enterprise
-  - cloud/resiliency
-  - ai/agent-governance
-status: permanent
-type: literature-note
----
-
-# {ep.get('title')}
-
-**Date**: {ep.get('date')} | **Duration**: {ep.get('duration')} | **Hosts**: {ep.get('hosts')} | **Series**: [[TechPulse Daily Briefings MOC]]
-
----
-
-## Executive Summary
-{ep.get('summary')}
-
----
-
-## Timecoded Chapters & Primary Whitepapers
-"""
-    if ep.get("content_basis") == "rss_summaries":
-        md_content += "\nContent basis: received RSS summaries; full article bodies were not checked.\n\n"
-    for c in ep.get("chapters", []):
-        md_content += f"- **[{c.get('time')}]** {c.get('title')} — [{c.get('source_name')}]({c.get('source_url')})\n"
-
-    md_content += "\n---\n\n## Domain Takeaways\n"
-    for dom, data in ep.get("takeaways", {}).items():
-        md_content += f"\n### {data.get('badge', dom.upper())}: {data.get('title')}\n"
-        availability = ep.get("content_availability", {}).get("domains", {}).get(dom, {})
-        if availability.get("status") in ("no_received_candidates", "source_unavailable"):
-            md_content += f"\n{availability.get('reason', 'No articles available from checked sources.')}\n"
+    text = _markdown_text
+    scalar = lambda value: json.dumps(str(value if value is not None else ''), ensure_ascii=False)
+    md_content = '\n'.join(['---',
+        'title: ' + scalar(ep.get('title')), 'date: ' + scalar(ep.get('date')),
+        'duration: ' + scalar(ep.get('duration')), 'hosts: ' + scalar(ep.get('hosts')),
+        'tags:', '  - techpulse/daily-briefing', '  - ' + scalar('episode/' + str(ep_id)),
+        '  - architecture/enterprise', '  - cloud/resiliency', '  - ai/agent-governance',
+        'status: permanent', 'type: literature-note', '---', '', '# ' + text(ep.get('title')), '',
+        f"**Date**: {text(ep.get('date'))} | **Duration**: {text(ep.get('duration'))} | **Hosts**: {text(ep.get('hosts'))} | **Series**: [[TechPulse Daily Briefings MOC]]",
+        '', '---', '', '## Executive Summary', text(ep.get('summary')), '', '---', '',
+        '## Timecoded Chapters & Primary Whitepapers', ''])
+    if ep.get('content_basis') == 'rss_summaries':
+        md_content += '\nContent basis: received RSS summaries; full article bodies were not checked.\n\n'
+    timed = _podcast_is_available(ep)
+    for chapter in ep.get('chapters', []):
+        cue = f"**[{text(chapter['time'])}]** " if timed and chapter.get('time') is not None else ''
+        md_content += f"- {cue}{text(chapter.get('title'))} — [{text(chapter.get('source_name'))}]({_export_url(chapter.get('source_url'))})\n"
+    md_content += '\n---\n\n## Domain Takeaways\n'
+    for domain, data in ep.get('takeaways', {}).items():
+        md_content += f"\n### {text(data.get('badge', domain.upper()))}: {text(data.get('title'))}\n"
+        availability = ep.get('content_availability', {}).get('domains', {}).get(domain, {})
+        if availability.get('status') in ('no_received_candidates', 'source_unavailable'):
+            md_content += '\n' + text(availability.get('reason', 'No articles available from checked sources.')) + '\n'
             continue
-        for b in data.get("bullets", []):
-            if ":" in b:
-                hdr, body = b.split(":", 1)
-                md_content += f"- **{hdr.strip()}**: {body.strip()}\n"
-            else:
-                md_content += f"- {b}\n"
+        for bullet in data.get('bullets', []):
+            md_content += '- ' + text(bullet) + '\n'
         if data.get('interview_framing'):
-            md_content += f"\n> [!TIP]\n> **Staff Architect Interview & Regulatory Framing:**\n> {data.get('interview_framing')}\n"
-
-    md_content += f"""
+            md_content += '\n> [!TIP]\n> **Staff Architect Interview & Regulatory Framing:**\n> ' + text(data['interview_framing']) + '\n'
+    md_content += """
 ---
 
 ## Related Notes & Vault Navigation
@@ -1138,6 +1175,15 @@ async def serve_audio(filename: str):
         if os.path.isfile(episode_file):
             with open(episode_file) as fp:
                 episode = json.load(fp)
+            if 'story_manifest' in episode:
+                valid, _ = validate_story_episode(episode)
+                declared = episode.get('domain_audio', {}).get(domain) if domain else episode.get('audio_url')
+                state = episode.get('audio_availability', {}).get('domains', {}).get(domain, {}) if domain else episode.get('audio_availability', {}).get('podcast', {})
+                if not (valid and declared == f'/audio/{filename}'
+                        and state.get('status') == 'available' and _usable_audio(file_path)):
+                    raise HTTPException(status_code=404, detail='Audio unavailable for this episode coverage')
+                return FileResponse(file_path, media_type='audio/mpeg',
+                    headers={'Accept-Ranges':'bytes', 'Cache-Control':'no-cache', 'Access-Control-Allow-Origin':'*'})
             coverage = episode.get("content_availability")
             if isinstance(coverage, dict) and coverage.get("schema_version") == 1:
                 audio_status = episode.get("audio_availability", {})
@@ -1244,14 +1290,16 @@ async def podcast_rss(request: Request):
         ET.SubElement(item, "pubDate").text = pub_date_rfc
         ET.SubElement(item, "description").text = _plain_text(ep.get("summary"))
         
+        publish_podcast = _podcast_is_available(ep)
         # HTML Show notes with direct article links
         show_notes_html = f"<p>{html.escape(str(ep.get('summary', '')), quote=True)}</p><h3>Podcast Chapters & Source Links:</h3><ul>"
         for c in ep.get("chapters", []):
-            c_time = html.escape(str(c.get("time", "")), quote=True)
+            c_time = html.escape(str(c.get("time", "")), quote=True) if publish_podcast else ""
             c_title = html.escape(str(c.get("title", "")), quote=True)
             c_source = html.escape(str(c.get("source_name", "")), quote=True)
-            c_href = html.escape(_safe_url(c.get("source_url")), quote=True)
-            show_notes_html += f"<li><strong>{c_time}</strong>: <a href=\"{c_href}\">{c_title} ({c_source})</a></li>"
+            c_href = html.escape(_export_url(c.get("source_url")), quote=True)
+            cue = f"<strong>{c_time}</strong>: " if c_time else ""
+            show_notes_html += f"<li>{cue}<a href=\"{c_href}\">{c_title} ({c_source})</a></li>"
         show_notes_html += "</ul>"
         if ep.get("content_basis") == "rss_summaries":
             show_notes_html += "<p>Content basis: received RSS summaries; full article bodies were not checked.</p>"
@@ -1274,25 +1322,14 @@ async def podcast_rss(request: Request):
             if os.path.exists(seed_audio_path):
                 audio_length = str(os.path.getsize(seed_audio_path))
 
-        coverage = ep.get("content_availability")
-        has_coverage = isinstance(coverage, dict) and coverage.get("schema_version") == 1
-        podcast_available = (ep.get("audio_availability", {}).get("podcast", {}).get("status") == "available"
-                             and ep.get("audio_url") == f"/audio/{ep.get('id')}.mp3")
-        if not has_coverage or (podcast_available and _usable_audio(audio_file_path)):
-            ET.SubElement(item, "enclosure", {
-                "url": audio_url,
-                "length": audio_length,
-                "type": "audio/mpeg"
-            })
-        
-        # Podlove Simple Chapters for mobile lock screens
-        psc = ET.SubElement(item, "psc:chapters", {"version": "1.2"})
-        for c in ep.get("chapters", []):
-            ET.SubElement(psc, "psc:chapter", {
-                "start": c.get("time", "00:00"),
-                "title": c.get("title", ""),
-                "href": _safe_url(c.get("source_url"))
-            })
+        if publish_podcast:
+            ET.SubElement(item, 'enclosure', {'url': _export_url(audio_url),
+                'length': audio_length, 'type': 'audio/mpeg'})
+            psc = ET.SubElement(item, 'psc:chapters', {'version': '1.2'})
+            for c in ep.get('chapters', []):
+                if c.get('time') is not None:
+                    ET.SubElement(psc, 'psc:chapter', {'start': str(c['time']),
+                        'title': str(c.get('title', '')), 'href': _export_url(c.get('source_url'))})
 
     xml_str = ET.tostring(rss, encoding="utf-8", method="xml")
     return Response(content=xml_str, media_type="application/rss+xml")

@@ -2,6 +2,8 @@
 
 This guide provides step-by-step instructions to deploy and run TechPulse OS 24/7 on your home or cloud Docker server.
 
+**Current contract:** Section 9 revises generation, audio, chat and acceptance for new story-manifest episodes. Earlier generation/audio descriptions in Sections 3 and 7 describe legacy behaviour; retained legacy readers continue to use that behaviour. Section 9 governs new episodes.
+
 ---
 
 ## 1. Prerequisites
@@ -235,3 +237,174 @@ After merge, Aaron rebuilds the Dockge-managed service and verifies the live
 interface, refresh status, dated history, empty-domain audio guards and podcast
 feed. Repository CI checks Python, frontend regressions and the Docker build;
 those checks do not themselves deploy the service or verify live publisher access.
+
+
+## 9. Story-aligned Episode Revision
+
+### Received evidence and selection
+
+New episodes freeze the first three received RSS candidates per domain, then remove
+**duplicate exact URLs within that three-item prefix**. A duplicate does not cause
+backfilling from the fourth item. The same URL may appear in different domains.
+Eight stable domains give a maximum of 24 stories. Feed order is positional; this
+release adds no ranking, freshness filter, full-article retrieval or publisher-truth
+verification. RSS headlines and summaries are the evidence, even where older
+field names imply full articles.
+
+Each story has a frozen story ID, source identity, headline, summary, evidence
+digest and source-offset units. Sentence units split at exact spans of at most
+24 words; stored start/end offsets must reproduce the original source slice.
+The selector returns only the story ID and known evidence-unit IDs. It cannot
+supply narration, headlines, citations or a different story. The first title unit
+is mandatory when present; one summary unit is mandatory when usable summary
+units exist. Headline-only stories disclose insufficient summary evidence.
+
+The application renders exact source excerpts with fixed neutral prefixes and
+Host A/Host B labels. Each story has at most two segments and 60 spoken words,
+including prefixes. Chapters, source links, excerpts, recall cards, exports and
+selected chat evidence join through the same story IDs. Manifest validation
+rejects malformed identities, offsets, digests, selections and citation URLs.
+A present malformed manifest never falls through to a legacy reader.
+
+Generation paths are `model_assisted_selection`, `deterministic_selection` or
+`mixed_selection`. These labels describe evidence-ID selection; they do not
+mean that a model freely wrote the narration. No key, invalid output, provider
+failure or unsupported retry control leads to deterministic selection where
+bounded cleanup succeeds. Model-selected excerpts can still omit useful context.
+
+### Budgets, fingerprints and measured audio
+
+Synthesis has one 120-second outer budget: 110 seconds for all provider work and
+retries, followed by up to ten seconds for cancellation, client close and fallback
+assembly. The selector permits at most four concurrent calls, two total wire
+attempts per story and 20 seconds per call, capped by the remaining deadline.
+SDK hidden retries are disabled. Completed story selections survive other story
+timeouts. Cancellation is propagated after bounded cleanup; cleanup failure
+cannot be reported as successful completion. Offline fakes verify these application
+bounds, not real-provider timing under every transport failure.
+
+`episode_fingerprint` covers the contract, ordered frozen stories and their RSS
+evidence plus domain coverage. It ignores provider timestamps and the fourth
+unselected candidate. A changed selected summary changes the fingerprint even
+when its URL stays the same. A legacy latest episode lacks the new contract and
+therefore cannot suppress the first new-contract generation by URL-only dedup.
+Later unchanged selected evidence can produce an `up_to_date` skip.
+
+One audio bundle owns a 60-second budget for rendering, concatenation and cleanup,
+with a two-second cleanup reserve and at most four concurrent segment renders.
+Files start from fresh temporary renders of the validated script. Success requires
+positive measured durations and every required segment; a complete podcast cannot
+contain a partial story or omit a failed domain. A complete domain clip may remain
+available independently when another domain fails. Old files do not substitute for
+failed new renders. Text survives with explicit unavailable audio metadata.
+
+`audio_recipe_fingerprint` binds ordered rendered text, evidence IDs, story IDs
+and voices. Chapters receive numeric fractional-second cues from measured audio.
+Display labels must match those validated numeric cues; they are presentation,
+not the timing authority. Without validated media timing the chapter remains
+untimed text. RSS enclosures require available complete audio. New-contract missing
+or unavailable audio returns 404 instead of on-demand legacy regeneration.
+
+### Compatibility and chat boundary
+
+Existing episode files are not rewritten. The `story_manifest` marker selects the
+strict new reader and protects new episodes from legacy automatic deletion logic;
+legacy history remains readable. Earlier fallback scripts, chapters and missing
+audio behaviour remain legacy behaviour. Historical `audio_url`/player repair,
+history redesign and retention policy changes are outside this revision.
+
+Selected-manifest chat receives only selected source evidence, excluding generated
+cards, unrelated articles and the fourth candidate. Trusted system instructions
+remain separate in all three provider tiers (modern SDK, legacy SDK and REST).
+They explicitly treat RSS commands and role claims as untrusted quoted data while
+allowing benign security discussion. The offline reader returns excerpts or an
+insufficient-evidence response. Live chat still returns free model text without
+a semantic-grounding or citation validator. These controls and structural tests
+do not prove live prompt-injection resistance or close security findings F-04/F-06.
+Retained legacy live chat still concatenates its context; its reader is unchanged.
+
+CI now runs the story alignment suite alongside all nine existing Python runners,
+both Node suites, eight-module compilation and the Docker build. Python checks
+disable dotenv and blank application keys; auth tests own their fixture keys.
+Structural negative cases exercise selector IDs, chat provider request boundaries,
+browser rendering and exports, with benign controls. They do not establish live
+model obedience, speech fidelity, deployment success or a broad security posture.
+
+A future pinned PI-tool integration would need application-specific offline
+assertions that prove the task was completed, plus separately approved native
+Gemini live exercises. The current vault-only tool supports Anthropic and
+OpenAI-compatible endpoints, not native Gemini. Its hardened mock demonstrates
+the harness only: three adapter tool cases were N/A, benign controls were skipped,
+and an empty reply can score RESILIENT while abandoning the task. No tool download,
+new injection runner, smoke job, vendored specification or publication is included
+in this change. Aaron's NotebookLM screenshot and confirmation identify Gemini
+NotebookLM as the seed, rather than an external upstream project. Publication
+packaging and scope remain pending; no distribution licence is established here.
+
+### Post-merge acceptance owned by Aaron
+
+Aaron owns merge and the Dockge rebuild. Record the deployed version and approved
+commit in the operational handoff; repository CI does not deploy. Back up persisted
+episodes, audio, source-health snapshot and both audit logs before the rebuild.
+Use OS/container environment secrets. Do not print raw environment variables,
+provider errors or request URLs with keys when collecting evidence.
+
+Check runtime health with the existing public endpoint:
+
+```sh
+curl --fail --silent http://localhost:8000/healthz | jq '{version, status}'
+docker compose ps
+```
+
+Inspect persisted new-contract structure without printing source text or secrets:
+
+```sh
+docker compose exec -T techpulse-os python - <<'PYCODE'
+import json, os
+from pathlib import Path
+base = Path(os.environ.get('STORAGE_DIR', '/app/data'))
+for path in sorted((base / 'episodes').glob('ep-*.json')):
+    ep = json.loads(path.read_text())
+    if 'story_manifest' not in ep:
+        continue
+    stories = ep['story_manifest']['stories']
+    print(json.dumps({'id': ep.get('id'), 'stories': len(stories),
+        'chapter_ids_match': [s['story_id'] for s in stories] ==
+            [c.get('story_id') for c in ep.get('chapters', [])],
+        'episode_fingerprint_present': bool(ep.get('episode_fingerprint')),
+        'audio_recipe_present': bool(ep.get('audio_recipe_fingerprint')),
+        'podcast_status': ep.get('audio_availability', {}).get('podcast', {}).get('status')}))
+PYCODE
+```
+
+1. Trigger one authenticated refresh through the interface. Confirm a new manifest
+   episode persists when the previous latest episode is legacy. Compare its stored
+   script excerpts, chapter headlines and source links against every selected
+   story, including two different stories within one domain.
+2. Listen to the complete podcast and each available domain clip. Confirm headline,
+   excerpt, speaker order and chapter seek cues match the persisted script. Confirm
+   failed/absent audio is unavailable and excluded from RSS; do not count an old
+   missing audio file as a new-contract acceptance result.
+3. Check story IDs and numeric fractional-second cues in persisted episode JSON
+   and the interface. Export Markdown and inspect RSS for matching source links,
+   formatted chapter labels, untimed text fallback and audio availability.
+4. Ask about a selected story, an off-topic subject and an unavailable domain.
+   Inspect which evidence the selected episode provides. The offline path should
+   return excerpts or insufficiency; assess live chat separately because its free
+   response lacks a semantic/citation validator. Include benign attack-reporting
+   questions and adversarial RSS text in a separately approved live exercise.
+5. Check source health through authenticated refresh status for quiet valid feeds,
+   parse cautions, partial failures, all-empty checks, all-failed checks and timeout
+   recovery. Healthy RSS does not prove recent content or article-body retrieval.
+   A check reporting 18 feeds alive is availability evidence only, not recency,
+   full-body or selected-evidence correctness. Confirm prior dated history remains
+   accessible after no-content and failed runs.
+6. Confirm a repeat of unchanged selected evidence skips generation, a changed
+   selected summary regenerates, and a fourth-candidate-only change does not.
+   Use a bounded approved fixture or controlled source; avoid altering live data
+   merely to force a test case.
+
+TLDR/editorial synthesis, full-article acquisition, broader RAG, source-health
+redesign, history/player fixes and live injection verification remain future work.
+Local Python 3.14/Node 26 results do not substitute for CI Python 3.11/Node 24,
+Docker build results or Aaron's live acceptance.
