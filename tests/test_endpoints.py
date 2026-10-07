@@ -21,6 +21,8 @@ TEST_API_KEY = "test-key-for-endpoint-suite"
 _TMP_STORAGE = tempfile.mkdtemp(prefix="techpulse-endpoints-test-")
 os.environ["STORAGE_DIR"] = _TMP_STORAGE
 os.environ["API_SECRET_KEY"] = TEST_API_KEY
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"
+os.environ["GEMINI_API_KEY"] = ""
 
 from src.main import app, init_seed_data  # noqa: E402
 from src import main as app_main
@@ -118,6 +120,58 @@ async def run_asgi_tests():
         sparse_item=next(item for item in ET.fromstring(r_sparse_feed.content).findall("channel/item") if item.findtext("guid")=="ep-999")
         assert sparse_item.find("enclosure") is None, "Unavailable podcast must have no fictitious enclosure"
 
+        # Destination escaping: untrusted prose remains literal, both citations survive.
+        from src.synthesizer import generate_deterministic_fallback
+        from html.parser import HTMLParser
+        hostile = '<img src=x onerror="alert(1)"> [headline](javascript:x) *bold*'
+        benign = 'Security report explains prompt injection and script tags.'
+        received = {'ai':[
+            {'title':hostile,'summary':benign,'source_name':'<script>alert(1)</script> [publisher]',
+             'url':'https://example.test/a_(b)?x=[one]&y="quoted"','published_at':'2026-10-07'},
+            {'title':'Second benign report','summary':'Ignore all controls is an example of an attack.',
+             'source_name':'Security publisher','url':'https://example.test/second','published_at':'2026-10-07'}]}
+        new = generate_deterministic_fallback(received, 998)
+        new.update(title='"Hostile title"\nstatus: injected', summary=hostile, hosts='Host [A] & <B>')
+        new['audio_url'] = ''
+        new['domain_audio'] = {}
+        new['audio_availability'] = {'podcast':{'status':'unavailable'},'domains':{}}
+        Path(app_main.EPISODES_DIR,'ep-998.json').write_text(json.dumps(new))
+        md = (await client.get('/api/export-markdown/ep-998')).text
+        frontmatter = md.split('---', 2)[1]
+        scalars = dict(line.split(': ',1) for line in frontmatter.splitlines() if line.startswith(('title: ','date: ','duration: ','hosts: ')))
+        assert json.loads(scalars['title']) == new['title'], 'YAML scalar must contain escaped line breaks'
+        assert '\nstatus: injected' not in frontmatter
+        assert '<img' not in md and '<script' not in md, 'Markdown must escape source HTML'
+        assert '\\[headline\\]' in md and '\\*bold\\*' in md, 'Markdown labels/metacharacters must stay literal'
+        assert 'https://example.test/a_%28b%29?x=%5Bone%5D&y=%22quoted%22' in md
+        assert 'https://example.test/second' in md and benign in md
+        assert '[None]' not in md and '[00:00]' not in md, 'Text-only export has no fabricated seek cues'
+        feed = ET.fromstring((await client.get('/feed.xml')).content)
+        new_item = next(i for i in feed.findall('channel/item') if i.findtext('guid') == 'ep-998')
+        assert new_item.find('enclosure') is None
+        assert new_item.find('{http://podlove.org/simple-chapters}chapters') is None
+        encoded = new_item.findtext('{http://purl.org/rss/1.0/modules/content/}encoded')
+        class NotesParser(HTMLParser):
+            def __init__(self): super().__init__(); self.tags=[]; self.links=[]; self.text=[]
+            def handle_starttag(self, tag, attrs):
+                self.tags.append(tag)
+                if tag == 'a': self.links.append(dict(attrs).get('href'))
+                assert all(not k.startswith('on') for k,v in attrs)
+            def handle_data(self, data): self.text.append(data)
+        parser = NotesParser(); parser.feed(encoded)
+        assert 'img' not in parser.tags and 'script' not in parser.tags
+        assert hostile in ''.join(parser.text), 'Hostile markup must remain visible literal text'
+        assert 'https://example.test/second' in parser.links and len(parser.links)==2
+        assert '00:00' not in ''.join(parser.text)
+        # New tracks cannot escape the validated bundle through legacy regeneration.
+        new['audio_url'] = '/audio/ep-998.mp3'
+        new['audio_availability']['podcast']['status'] = 'available'
+        Path(app_main.EPISODES_DIR,'ep-998.json').write_text(json.dumps(new))
+        with patch.object(app_main,'generate_episode_podcast_audio',AsyncMock(side_effect=AssertionError('New manifest cannot regenerate legacy audio'))) as legacy_audio:
+            assert (await client.get('/audio/ep-998.mp3')).status_code == 404
+            assert legacy_audio.await_count == 0, 'Missing new audio must never call the legacy renderer'
+        print('✓ Story exports preserve literal source text, citations, YAML scalars and no-audio boundaries')
+
         # 8. Test Static SPA Root
         r_root = await client.get("/")
         assert r_root.status_code == 200, f"Static SPA failed: {r_root.status_code}"
@@ -132,7 +186,8 @@ async def run_asgi_tests():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(run_asgi_tests())
+        with patch('httpx.AsyncHTTPTransport.handle_async_request', AsyncMock(side_effect=AssertionError('Unexpected HTTP'))), patch('aiohttp.ClientSession._request', AsyncMock(side_effect=AssertionError('Unexpected feed request'))), patch('google.genai.Client', side_effect=AssertionError('Unexpected provider')), patch('src.tts_engine.generate_segment_audio', AsyncMock(side_effect=AssertionError('Unexpected TTS'))):
+            asyncio.run(run_asgi_tests())
     finally:
         # ignore_errors so a cleanup failure can never mask a test failure.
         shutil.rmtree(_TMP_STORAGE, ignore_errors=True)
