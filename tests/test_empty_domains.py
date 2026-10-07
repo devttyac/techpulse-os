@@ -10,6 +10,9 @@ import types
 import unittest
 from unittest.mock import patch
 
+os.environ['PYTHON_DOTENV_DISABLED'] = '1'
+os.environ['GEMINI_API_KEY'] = ''
+os.environ['API_SECRET_KEY'] = ''
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src import synthesizer, grounded_chat, tts_engine
 from src.provenance import selection_record
@@ -46,8 +49,11 @@ class EmptyDomainTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([c['answer'] for c in episode['flashcards']], [f'{d} summary evidence.' for d in active])
             self.assertEqual(episode.get('fallback_content'), 'source_derived')
             self.assertEqual(episode.get('content_basis'), 'rss_summaries')
-            for segment in episode['script_segments']:
-                self.assertIn(f"{segment['domain']} summary evidence.", segment['text'])
+            for domain in active:
+                segments = [seg for seg in episode['script_segments'] if seg['domain'] == domain]
+                self.assertEqual([seg['text'] for seg in segments],
+                                 [f'Source excerpt: "{domain} release"',
+                                  f'Further excerpt: "{domain} summary evidence."'])
             self.assertTrue(synthesizer.validate_synthesis(episode)[0])
 
     async def test_all_empty_creates_no_episode_and_no_provider_attempt(self):
@@ -71,8 +77,8 @@ class EmptyDomainTests(unittest.IsolatedAsyncioTestCase):
         received = corpus(['ai', 'data', 'gov'])
         episode = synthesizer.generate_deterministic_fallback(received, 5)
         record = selection_record(received, episode, 'deterministic_fallback')
-        self.assertIsNone(record['cloud']['chapter_citation'])
-        self.assertEqual(record['data']['chapter_citation']['url'], 'https://example.test/data')
+        self.assertEqual(record['cloud']['stories'], [])
+        self.assertEqual(record['data']['stories'][0]['chapter_citation']['url'], 'https://example.test/data')
         episode['chapters'][1]['source_url'] = 'https://fabricated.test/data'
         repaired, count = synthesizer.enforce_corpus_urls(episode, received)
         self.assertEqual(count, 1)
@@ -90,38 +96,44 @@ class EmptyDomainTests(unittest.IsolatedAsyncioTestCase):
         bad['takeaways']['cloud']['bullets'] = ['invented']
         self.assertFalse(synthesizer.validate_synthesis(bad)[0])
 
-    async def test_provider_with_partial_evidence_accepts_one_card_and_gets_active_prompt(self):
+    async def test_provider_with_partial_evidence_accepts_one_card_and_gets_isolated_prompt(self):
         received = corpus(['gov'])
-        payload = synthesizer.generate_deterministic_fallback(received, 7)
         requests = []
-        class Models:
-            def generate_content(self, **kwargs):
-                requests.append(kwargs)
-                return types.SimpleNamespace(text=json.dumps(payload))
-        google = types.ModuleType('google')
-        google.genai = types.ModuleType('google.genai')
-        google.genai.Client = lambda **kwargs: types.SimpleNamespace(models=Models())
-        with patch.dict(sys.modules, {'google': google, 'google.genai': google.genai}), patch.dict(os.environ, {'GEMINI_API_KEY': 'test-placeholder'}):
+        async def accepted(**kwargs):
+            requests.append(kwargs)
+            incoming = json.loads(kwargs['contents'])
+            return types.SimpleNamespace(text=json.dumps({'story_id': incoming['story_id'],
+                    'unit_ids': ['title-0', 'summary-0']}))
+        async def close():
+            return None
+        client = types.SimpleNamespace(aio=types.SimpleNamespace(
+            models=types.SimpleNamespace(generate_content=accepted), aclose=close), close=lambda: None)
+        with patch('google.genai.Client', return_value=client), patch.dict(os.environ, {'GEMINI_API_KEY': 'test-placeholder'}):
             stats = {}
             result = await synthesizer.synthesize_briefing(received, 7, diagnostics=stats)
-        self.assertEqual(stats['path'], 'llm')
+        self.assertEqual(stats['path'], 'model_assisted_selection')
         self.assertEqual(len(result['flashcards']), 1)
-        self.assertIn('AVAILABLE DOMAIN IDS: gov', requests[0]['contents'])
-        self.assertNotIn('### DOMAIN: AI', requests[0]['contents'])
+        self.assertEqual(result['flashcards'][0]['answer'], 'gov summary evidence.')
+        self.assertEqual(json.loads(requests[0]['contents'])['evidence'],
+                         [{'unit_id': 'title-0', 'text': 'gov release'},
+                          {'unit_id': 'summary-0', 'text': 'gov summary evidence.'}])
+        self.assertNotIn('ai release', requests[0]['contents'])
         self.assertNotIn('fallback_content', result)
 
     async def test_partial_provider_failure_uses_source_derived_fallback(self):
         received = corpus(['data'])
-        class Models:
-            def generate_content(self, **kwargs):
-                raise ConnectionError('offline')
-        google = types.ModuleType('google')
-        google.genai = types.ModuleType('google.genai')
-        google.genai.Client = lambda **kwargs: types.SimpleNamespace(models=Models())
+        async def unavailable(**kwargs):
+            raise ConnectionError('offline')
+        async def close():
+            return None
+        client = types.SimpleNamespace(aio=types.SimpleNamespace(
+            models=types.SimpleNamespace(generate_content=unavailable), aclose=close), close=lambda: None)
         stats = {}
-        with patch.dict(sys.modules, {'google': google, 'google.genai': google.genai}), patch.dict(os.environ, {'GEMINI_API_KEY': 'test-placeholder'}):
+        with patch('google.genai.Client', return_value=client), patch.dict(os.environ, {'GEMINI_API_KEY': 'test-placeholder'}):
             result = await synthesizer.synthesize_briefing(received, 8, diagnostics=stats)
         self.assertEqual(stats['fallback_reason'], 'attempts_exhausted')
+        self.assertEqual(stats['stories'][0]['attempts'], 2)
+        self.assertEqual(result['fallback_content'], 'source_derived')
         self.assertEqual(result['flashcards'][0]['answer'], 'data summary evidence.')
 
     def test_status_only_chat_and_interview_return_insufficient_evidence(self):
@@ -253,21 +265,43 @@ class MalformedResponseTests(unittest.TestCase):
 
 
 class PodcastJoinTests(unittest.IsolatedAsyncioTestCase):
-    async def test_successful_dynamic_chapters_keep_domain_ids_after_json_roundtrip(self):
+    async def test_successful_dynamic_chapters_keep_story_and_domain_ids_after_json_roundtrip(self):
         episode = json.loads(json.dumps(synthesizer.generate_deterministic_fallback(corpus(['ai', 'data']), 18)))
+        durations = {}
+        async def save_audio(text, voice, destination):
+            Path(destination).write_bytes(b'fixture-audio' * 200)
+            durations[str(destination)] = 4.5
+        async def concatenate(paths, destination, deadline):
+            Path(destination).write_bytes(b'assembled-audio' * 200)
+            durations[str(destination)] = sum(durations[str(path)] for path in paths)
+        with tempfile.TemporaryDirectory() as directory, patch.object(tts_engine, 'generate_segment_audio', save_audio), patch.object(tts_engine, 'get_audio_duration_seconds', side_effect=lambda p: durations[str(p)]), patch.object(tts_engine, '_concat_mp3', concatenate):
+            bundle = await tts_engine.generate_story_audio_bundle(episode, directory)
+            chapters = json.loads(json.dumps(bundle.chapters))
+            self.assertEqual(Path(bundle.podcast_path).name, 'ep-18.mp3')
+            self.assertEqual([c['domain'] for c in chapters], ['ai', 'data'])
+            self.assertEqual([c['story_id'] for c in chapters], [c['story_id'] for c in episode['chapters']])
+            self.assertEqual([c['source_url'] for c in chapters], ['https://example.test/ai', 'https://example.test/data'])
+            self.assertEqual([c['seconds'] for c in chapters], [0.0, 9.0])
+            self.assertEqual(bundle.total_seconds, 18)
+            self.assertEqual(bundle.duration, '00:18')
+        self.assertEqual(bundle.availability['podcast']['status'], 'available')
+
+    async def test_legacy_dynamic_chapters_preserve_domain_reader_without_story_contract(self):
+        episode = {'id': 'ep-180', 'chapters': [
+            {'domain': 'ai', 'title': 'AI title', 'source_url': 'https://example.test/ai'},
+            {'domain': 'data', 'title': 'Data title', 'source_url': 'https://example.test/data'}],
+            'script_segments': [{'speaker': 'Host A', 'chapter_title': 'AI title', 'text': 'AI evidence'},
+                                {'speaker': 'Host B', 'chapter_title': 'Data title', 'text': 'Data evidence'}]}
         async def save_audio(text, voice, destination):
             Path(destination).write_bytes(b'fixture-audio' * 200)
         def audio_metadata(path):
             return types.SimpleNamespace(info=types.SimpleNamespace(length=Path(path).stat().st_size / 2600 * 4.5))
         with tempfile.TemporaryDirectory() as directory, patch.object(tts_engine, 'generate_segment_audio', save_audio), patch.object(tts_engine, 'MP3', audio_metadata), patch.object(tts_engine.asyncio, 'create_subprocess_exec', side_effect=OSError('offline boundary')):
             path, chapters, duration, seconds = await tts_engine.generate_episode_podcast_audio(episode, directory)
-            self.assertEqual(Path(path).name, 'ep-18.mp3')
+            self.assertEqual(Path(path).name, 'ep-180.mp3')
             self.assertEqual([c['domain'] for c in chapters], ['ai', 'data'])
-            self.assertEqual([c['source_url'] for c in chapters], ['https://example.test/ai', 'https://example.test/data'])
             self.assertEqual([c['seconds'] for c in chapters], [0, 4])
-            self.assertEqual(seconds, 9)
-            self.assertEqual(duration, '00:09')
-        self.assertEqual(episode['audio_availability']['podcast']['status'], 'available')
+            self.assertEqual((duration, seconds), ('00:09', 9))
 
     async def test_invalid_audio_bytes_are_not_published_as_playable_media(self):
         episode = synthesizer.generate_deterministic_fallback(corpus(['data']), 19)

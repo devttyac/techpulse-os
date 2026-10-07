@@ -804,5 +804,416 @@ class AssemblyTests(OfflineTests):
         self.assertNotIn('token=hidden', json.dumps(records))
 
 
+class AudioTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        import src.tts_engine as tts
+        self.tts = tts
+        self.durations, self.calls, self.concatenations = {}, [], []
+        for target in ('google.genai.Client', 'src.ingestion.ingest_all_domains'):
+            guard = patch(target, side_effect=AssertionError('Unexpected external call'))
+            guard.start()
+            self.addCleanup(guard.stop)
+
+    def make_episode(self, corpus=None):
+        from src.synthesizer import generate_deterministic_fallback
+        return generate_deterministic_fallback(story_corpus() if corpus is None else corpus, 950)
+
+    async def render(self, text, voice, output_path):
+        self.calls.append((text, voice, str(output_path)))
+        Path(output_path).write_bytes(b'fresh-segment' * 400)
+        self.durations[str(output_path)] = 1.25
+
+    async def concat(self, paths, output, deadline):
+        self.concatenations.append(list(paths))
+        Path(output).write_bytes(b'fresh-combined' * 400)
+        self.durations[str(output)] = sum(self.durations[str(p)] for p in paths)
+
+    async def run_bundle(self, ep, out, render=None, concat=None):
+        self.assertTrue(callable(getattr(self.tts, 'generate_story_audio_bundle', None)),
+                        'Fresh measured bundle API is missing')
+        with patch.object(self.tts, 'generate_segment_audio', render or self.render), patch.object(
+                self.tts, '_concat_mp3', concat or self.concat), patch.object(
+                self.tts, 'get_audio_duration_seconds', side_effect=lambda p: self.durations[str(p)]):
+            return await self.tts.generate_story_audio_bundle(ep, out)
+
+    async def test_duplicate_titles_keep_distinct_fractional_cues_and_same_segments(self):
+        import tempfile
+        ep = self.make_episode({'ai': [article('one', 'Same title'), article('two', 'Same title')]})
+        with tempfile.TemporaryDirectory() as out:
+            bundle = await self.run_bundle(ep, out)
+            self.assertEqual(len(self.calls), 4)
+            self.assertEqual([c['seconds'] for c in bundle.chapters], [0.0, 2.5])
+            self.assertEqual([c['time'] for c in bundle.chapters], ['00:00', '00:02'])
+            self.assertNotEqual(bundle.chapters[0]['story_id'], bundle.chapters[1]['story_id'])
+            self.assertEqual(self.concatenations[0], self.concatenations[1])
+            self.assertEqual(bundle.total_seconds, 5)
+            self.assertEqual(bundle.duration, '00:05')
+            self.assertEqual(set(bundle.domain_paths), {'ai'})
+            self.assertEqual(len(bundle.recipe_fingerprint), 64)
+            self.assertEqual(sorted(p.name for p in Path(out).iterdir()), ['ep-950-ai.mp3', 'ep-950.mp3'])
+
+    async def test_failed_segment_blocks_podcast_and_only_its_domain(self):
+        import tempfile
+        ep = self.make_episode({'ai': [article('bad')], 'cloud': [article('good', 'Cloud title')]})
+        async def failing(text, voice, output):
+            if 'Rogue agent' in text:
+                raise ConnectionError('offline')
+            await self.render(text, voice, output)
+        with tempfile.TemporaryDirectory() as out:
+            bundle = await self.run_bundle(ep, out, render=failing)
+            self.assertIsNone(bundle.podcast_path)
+            self.assertEqual(bundle.chapters, [])
+            self.assertEqual((bundle.duration, bundle.total_seconds), ('00:00', 0))
+            self.assertEqual(set(bundle.domain_paths), {'cloud'})
+            self.assertEqual(bundle.availability['domains']['ai']['status'], 'unavailable')
+            self.assertEqual(bundle.availability['domains']['cloud']['status'], 'available')
+            self.assertEqual(len(ep['chapters']), 2)
+
+    async def test_stale_filename_is_replaced_only_by_fresh_valid_audio(self):
+        import tempfile
+        ep = self.make_episode()
+        with tempfile.TemporaryDirectory() as out:
+            stale = Path(out) / 'ep-950.mp3'
+            stale.write_bytes(b'old' * 10000)
+            bundle = await self.run_bundle(ep, out)
+            self.assertEqual(len(self.calls), 4)
+            self.assertTrue(Path(bundle.podcast_path).read_bytes().startswith(b'fresh-combined'))
+
+    async def test_ffmpeg_failure_does_not_publish_binary_fallback(self):
+        import tempfile
+        async def failed(*args):
+            raise RuntimeError('ffmpeg failed')
+        with tempfile.TemporaryDirectory() as out:
+            bundle = await self.run_bundle(self.make_episode(), out, concat=failed)
+            self.assertIsNone(bundle.podcast_path)
+            self.assertEqual(bundle.domain_paths, {})
+            self.assertEqual(list(Path(out).iterdir()), [])
+
+    async def test_invalid_exact_text_never_reaches_tts(self):
+        import tempfile
+        ep = self.make_episode()
+        ep['script_segments'][0]['text'] += ' Foreign facts.'
+        with tempfile.TemporaryDirectory() as out:
+            with self.assertRaises(ValueError):
+                await self.run_bundle(ep, out)
+        self.assertEqual(self.calls, [])
+
+    async def test_render_concurrency_and_manifest_order_survive_completion_order(self):
+        import tempfile
+        active = peak = 0
+        async def delayed(text, voice, output):
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            try:
+                await asyncio.sleep(0.01 if 'First' in text else 0)
+                await self.render(text, voice, output)
+            finally:
+                active -= 1
+        ep = self.make_episode({'ai': [article('first', 'First'), article('second', 'Second')],
+                                'cloud': [article('third', 'Third')]})
+        with tempfile.TemporaryDirectory() as out:
+            bundle = await self.run_bundle(ep, out, render=delayed)
+        self.assertEqual(peak, 4)
+        self.assertEqual(active, 0)
+        self.assertEqual([c['title'] for c in bundle.chapters], ['First', 'Second', 'Third'])
+        self.assertEqual([c['seconds'] for c in bundle.chapters], [0.0, 2.5, 5.0])
+
+    async def test_deadline_cancels_and_awaits_actual_render_tasks(self):
+        import tempfile
+        active = 0
+        async def hanging(*args):
+            nonlocal active
+            active += 1
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                await asyncio.sleep(0.01)
+                raise
+            finally:
+                active -= 1
+        with tempfile.TemporaryDirectory() as out, patch.object(self.tts, 'AUDIO_BUDGET_SECONDS', 0.12, create=True), patch.object(self.tts, 'AUDIO_CLEANUP_RESERVE_SECONDS', 0.05, create=True):
+            before = asyncio.get_running_loop().time()
+            bundle = await self.run_bundle(self.make_episode(), out, render=hanging)
+            self.assertLess(asyncio.get_running_loop().time() - before, 0.2)
+            self.assertEqual(active, 0)
+            self.assertIsNone(bundle.podcast_path)
+            self.assertEqual(list(Path(out).iterdir()), [])
+
+    async def test_caller_cancellation_awaits_render_cleanup(self):
+        self.assertTrue(callable(getattr(self.tts, "generate_story_audio_bundle", None)), "Fresh measured bundle API is missing")
+        import tempfile
+        started = asyncio.Event()
+        active = 0
+        async def hanging(*args):
+            nonlocal active
+            active += 1
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                active -= 1
+        with tempfile.TemporaryDirectory() as out:
+            task = asyncio.create_task(self.run_bundle(self.make_episode(), out, render=hanging))
+            await started.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertEqual(active, 0)
+            self.assertEqual(list(Path(out).iterdir()), [])
+
+    async def test_concat_uses_safe_local_list_and_exec_in_apostrophe_parent(self):
+        import tempfile
+        self.assertTrue(callable(getattr(self.tts, '_concat_mp3', None)), 'Async concat API is missing')
+        with tempfile.TemporaryDirectory(prefix="audio spaces' ") as out:
+            paths = [str(Path(out) / 'segment-000.mp3'), str(Path(out) / 'segment-001.mp3')]
+            for path in paths:
+                Path(path).write_bytes(b'segment')
+            async def spawn(*args, **kwargs):
+                self.assertEqual(args[:7], ('ffmpeg', '-y', '-f', 'concat', '-safe', '1', '-i'))
+                self.assertEqual(kwargs['cwd'], out)
+                self.assertNotIn('/', args[7])
+                self.assertEqual(Path(out, args[7]).read_text(), "file 'segment-000.mp3'\nfile 'segment-001.mp3'\n")
+                self.assertEqual(args[-1], 'assembled.mp3')
+                Path(out, args[-1]).write_bytes(b'assembled')
+                return SimpleNamespace(returncode=0, communicate=self.done, wait=self.done)
+            with patch.object(self.tts.asyncio, 'create_subprocess_exec', spawn):
+                await self.tts._concat_mp3(paths, str(Path(out) / 'assembled.mp3'), asyncio.get_running_loop().time() + 60)
+            self.assertEqual(sorted(p.name for p in Path(out).iterdir()), ['assembled.mp3', 'segment-000.mp3', 'segment-001.mp3'])
+
+    async def done(self):
+        return b'', b''
+
+    async def test_concat_cancellation_kills_and_waits_child_process(self):
+        import tempfile
+        self.assertTrue(callable(getattr(self.tts, '_concat_mp3', None)), 'Async concat API is missing')
+        started, waited = asyncio.Event(), asyncio.Event()
+        class Process:
+            returncode = None
+            killed = False
+            async def communicate(self):
+                started.set()
+                await asyncio.Future()
+            def kill(self):
+                self.killed = True
+                self.returncode = -9
+            async def wait(self):
+                waited.set()
+                return self.returncode
+        process = Process()
+        async def spawn(*args, **kwargs):
+            return process
+        with tempfile.TemporaryDirectory() as out, patch.object(self.tts.asyncio, 'create_subprocess_exec', spawn):
+            segment = Path(out) / 'segment-000.mp3'
+            segment.write_bytes(b'segment')
+            task = asyncio.create_task(self.tts._concat_mp3([str(segment)], str(Path(out) / 'podcast.mp3'), asyncio.get_running_loop().time() + 60))
+            await started.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertTrue(process.killed)
+            self.assertTrue(waited.is_set())
+            self.assertEqual([p.name for p in Path(out).iterdir()], ['segment-000.mp3'])
+
+
+    async def test_repeated_cancellation_during_spawn_still_kills_eventual_child(self):
+        import tempfile
+        started = asyncio.Event()
+        class Process:
+            returncode = None
+            killed = False
+            waited = False
+            def kill(self):
+                self.killed = True
+                self.returncode = -9
+            async def wait(self):
+                self.waited = True
+                return -9
+            async def communicate(self):
+                await asyncio.Future()
+        process = Process()
+        async def spawn(*args, **kwargs):
+            started.set()
+            await asyncio.sleep(0.04)
+            return process
+        with tempfile.TemporaryDirectory() as out, patch.object(self.tts.asyncio, 'create_subprocess_exec', spawn):
+            segment = Path(out) / 'segment-000.mp3'
+            segment.write_bytes(b'segment')
+            task = asyncio.create_task(self.tts._concat_mp3([str(segment)], str(Path(out) / 'podcast.mp3'), asyncio.get_running_loop().time() + 60))
+            await started.wait()
+            task.cancel()
+            await asyncio.sleep(0.01)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertTrue(process.killed)
+            self.assertTrue(process.waited)
+
+    async def test_invalid_assembled_duration_cannot_stamp_stale_audio_available(self):
+        import tempfile
+        async def invalid(paths, output, deadline):
+            Path(output).write_bytes(b'invalid assembled audio')
+            self.durations[str(output)] = 0.0
+        with tempfile.TemporaryDirectory() as out:
+            stale = Path(out) / 'ep-950.mp3'
+            stale.write_bytes(b'old-track')
+            bundle = await self.run_bundle(self.make_episode(), out, concat=invalid)
+            self.assertIsNone(bundle.podcast_path)
+            self.assertEqual(bundle.domain_paths, {})
+            self.assertEqual(bundle.chapters, [])
+            self.assertEqual(bundle.availability['podcast']['status'], 'unavailable')
+            self.assertEqual(stale.read_bytes(), b'old-track')
+
+    async def test_concat_nonzero_exit_raises_without_stream_fallback(self):
+        import tempfile
+        async def spawn(*args, **kwargs):
+            return SimpleNamespace(returncode=1, communicate=self.done, wait=self.done)
+        with tempfile.TemporaryDirectory() as out, patch.object(self.tts.asyncio, 'create_subprocess_exec', spawn):
+            segment = Path(out) / 'segment-000.mp3'
+            segment.write_bytes(b'segment')
+            with self.assertRaises(RuntimeError):
+                await self.tts._concat_mp3([str(segment)], str(Path(out) / 'podcast.mp3'), asyncio.get_running_loop().time() + 60)
+            self.assertEqual([p.name for p in Path(out).iterdir()], ['segment-000.mp3'])
+
+
+    async def test_cleanup_exhaustion_is_failure_not_successful_bundle(self):
+        import tempfile
+        running = []
+        async def stubborn(*args):
+            running.append(asyncio.current_task())
+            finish = asyncio.get_running_loop().time() + 0.14
+            while asyncio.get_running_loop().time() < finish:
+                try:
+                    await asyncio.sleep(0.01)
+                except asyncio.CancelledError:
+                    pass
+        with tempfile.TemporaryDirectory() as out, patch.object(self.tts, 'AUDIO_BUDGET_SECONDS', 0.10), patch.object(self.tts, 'AUDIO_CLEANUP_RESERVE_SECONDS', 0.05):
+            before = asyncio.get_running_loop().time()
+            with self.assertRaises(RuntimeError):
+                await self.run_bundle(self.make_episode(), out, render=stubborn)
+            self.assertLess(asyncio.get_running_loop().time() - before, 0.2)
+            self.assertEqual(list(Path(out).iterdir()), [])
+            await asyncio.gather(*running, return_exceptions=True)
+
+
+    async def test_render_cancellation_gets_reserved_time_to_finish_cleanup(self):
+        import tempfile
+        cleaned = []
+        async def hanging(*args):
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                await asyncio.sleep(0.03)
+                cleaned.append(True)
+                raise
+        with tempfile.TemporaryDirectory() as out, patch.object(self.tts, 'AUDIO_BUDGET_SECONDS', 0.15), patch.object(self.tts, 'AUDIO_CLEANUP_RESERVE_SECONDS', 0.08):
+            bundle = await self.run_bundle(self.make_episode(), out, render=hanging)
+            self.assertIsNone(bundle.podcast_path)
+            self.assertEqual(len(cleaned), 4)
+            self.assertEqual(list(Path(out).iterdir()), [])
+
+
+    async def test_concat_cancellation_survives_cleanup_deadline_exhaustion(self):
+        import tempfile
+        started = asyncio.Event()
+        wait_tasks = []
+        class Process:
+            returncode = None
+            killed = False
+            async def communicate(self):
+                started.set()
+                await asyncio.sleep(0.12)
+            def kill(self):
+                self.killed = True
+                self.returncode = -9
+            async def wait(self):
+                wait_tasks.append(asyncio.current_task())
+                await asyncio.sleep(0.12)
+                return -9
+        process = Process()
+        async def spawn(*args, **kwargs):
+            return process
+        with tempfile.TemporaryDirectory() as out, patch.object(self.tts.asyncio, 'create_subprocess_exec', spawn), patch.object(self.tts, 'AUDIO_CLEANUP_RESERVE_SECONDS', 0.04):
+            segment = Path(out) / 'segment-000.mp3'
+            segment.write_bytes(b'segment')
+            before = asyncio.get_running_loop().time()
+            task = asyncio.create_task(self.tts._concat_mp3([str(segment)], str(Path(out) / 'podcast.mp3'), before + 0.08))
+            await started.wait()
+            task.cancel()
+            try:
+                outcome = None
+                try:
+                    await task
+                except BaseException as failure:
+                    outcome = failure
+                self.assertIsInstance(outcome, asyncio.CancelledError)
+                self.assertEqual(type(outcome.__cause__).__name__, '_AudioCleanupError')
+                self.assertTrue(process.killed)
+                self.assertTrue(wait_tasks)
+                self.assertLess(asyncio.get_running_loop().time() - before, 0.18)
+                self.assertEqual([p.name for p in Path(out).iterdir()], ['segment-000.mp3'])
+            finally:
+                await asyncio.gather(*wait_tasks, return_exceptions=True)
+
+    async def test_bundle_cancellation_survives_render_cleanup_exhaustion(self):
+        import tempfile
+        started = asyncio.Event()
+        running = []
+        async def stubborn(*args):
+            running.append(asyncio.current_task())
+            started.set()
+            finish = asyncio.get_running_loop().time() + 0.12
+            while asyncio.get_running_loop().time() < finish:
+                try:
+                    await asyncio.sleep(0.01)
+                except asyncio.CancelledError:
+                    pass
+        with tempfile.TemporaryDirectory() as out, patch.object(self.tts, 'AUDIO_BUDGET_SECONDS', 0.08), patch.object(self.tts, 'AUDIO_CLEANUP_RESERVE_SECONDS', 0.04):
+            before = asyncio.get_running_loop().time()
+            task = asyncio.create_task(self.run_bundle(self.make_episode(), out, render=stubborn))
+            await started.wait()
+            task.cancel()
+            try:
+                outcome = None
+                try:
+                    await task
+                except BaseException as failure:
+                    outcome = failure
+                self.assertIsInstance(outcome, asyncio.CancelledError)
+                self.assertEqual(type(outcome.__cause__).__name__, '_AudioCleanupError')
+                self.assertLess(asyncio.get_running_loop().time() - before, 0.18)
+                self.assertEqual(list(Path(out).iterdir()), [])
+            finally:
+                await asyncio.gather(*running, return_exceptions=True)
+
+    async def test_cancellation_first_received_during_cleanup_keeps_cancellation_outcome(self):
+        import tempfile
+        cleaning = asyncio.Event()
+        running = []
+        async def stubborn(*args):
+            running.append(asyncio.current_task())
+            finish = asyncio.get_running_loop().time() + 0.12
+            while asyncio.get_running_loop().time() < finish:
+                try:
+                    await asyncio.sleep(0.01)
+                except asyncio.CancelledError:
+                    cleaning.set()
+        with tempfile.TemporaryDirectory() as out, patch.object(self.tts, 'AUDIO_BUDGET_SECONDS', 0.08), patch.object(self.tts, 'AUDIO_CLEANUP_RESERVE_SECONDS', 0.04):
+            task = asyncio.create_task(self.run_bundle(self.make_episode(), out, render=stubborn))
+            await cleaning.wait()
+            task.cancel()
+            try:
+                outcome = None
+                try:
+                    await task
+                except BaseException as failure:
+                    outcome = failure
+                self.assertIsInstance(outcome, asyncio.CancelledError)
+                self.assertEqual(type(outcome.__cause__).__name__, '_AudioCleanupError')
+                self.assertEqual(list(Path(out).iterdir()), [])
+            finally:
+                await asyncio.gather(*running, return_exceptions=True)
+
+
 if __name__ == '__main__':
     unittest.main()
