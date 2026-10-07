@@ -72,6 +72,25 @@ def article_identity(url):
 
 
 def selection_record(corpus, episode, path, *, provider_attempted=False):
+    if isinstance(episode, dict) and 'story_manifest' in episode:
+        from src.story_manifest import manifest_from_dict, validate_story_episode
+        if not validate_story_episode(episode)[0]:
+            raise ValueError('Invalid source-bound episode provenance')
+        manifest = manifest_from_dict(episode['story_manifest'])
+        return {domain: {
+            'candidate_count': len(corpus.get(domain, [])),
+            'reason': 'no_candidates' if not any(s.domain == domain for s in manifest.stories)
+                      else 'received_prefix_exact_url_dedup',
+            'stories': [
+                {'story_id': s.story_id, 'article_id': s.article_id,
+                 'evidence_digest': s.evidence_digest,
+                 'selected_unit_ids': list(s.selected_unit_ids),
+                 'evidence_basis': 'rss_excerpts' if any(
+                     u.field == 'summary' and u.unit_id in s.selected_unit_ids for u in s.units) else 'headline_only',
+                 'chapter_citation': article_identity(s.source_url),
+                 'context_article': article_identity(s.source_url)}
+                for s in manifest.stories if s.domain == domain],
+        } for domain in DOMAIN_ORDER}
     result = {}
     chapters = episode.get("chapters", []) if episode else []
     for i, domain in enumerate(DOMAIN_ORDER):

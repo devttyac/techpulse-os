@@ -2,17 +2,18 @@
 
 Run: python tests/test_url_provenance.py  (non-zero exit on any failure)
 
-Covers two layers:
-  - src.ingestion.fetch_feed_items rejects unsafe/oversized feed links.
-  - src.synthesizer.enforce_corpus_urls rebuilds chapter/takeaway URLs from
-    the ingested corpus, and synthesize_briefing rejects a synthesis that
-    needs more than MAX_URL_SUBSTITUTIONS corrections.
+Covers unsafe feed-link rejection, retained legacy URL repair, and new
+source-owned story citations that cannot be replaced by provider prose.
 """
 import asyncio
 import copy
 import os
 import sys
 import types
+
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["API_SECRET_KEY"] = ""
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if APP_DIR not in sys.path:
@@ -215,83 +216,44 @@ class _FakeResponse:
         self.text = text
 
 
-def _install_fake_genai(payload_json: str):
-    """Inject a fake `google.genai` so synthesize_briefing runs offline.
-    Returns (calls_list, restore_fn)."""
-    calls = []
-
-    class _Models:
-        def generate_content(self, model, contents, config):
-            calls.append(model)
-            return _FakeResponse(payload_json)
-
-    class _Client:
-        def __init__(self, api_key=None):
-            self.models = _Models()
-
-    genai = types.ModuleType("google.genai")
-    genai.Client = _Client
-    google = types.ModuleType("google")
-    google.genai = genai
-    saved = {k: sys.modules.get(k) for k in ("google", "google.genai")}
-    saved_env = {k: os.environ.get(k) for k in ("GEMINI_API_KEY", "GEMINI_MODEL")}
-    sys.modules["google"] = google
-    sys.modules["google.genai"] = genai
-    os.environ["GEMINI_API_KEY"] = "test-placeholder-not-a-real-key"
-    os.environ["GEMINI_MODEL"] = "test-model"
-
-    def restore():
-        for k, v in saved.items():
-            if v is None:
-                sys.modules.pop(k, None)
-            else:
-                sys.modules[k] = v
-        for k, v in saved_env.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-
-    return calls, restore
-
-
-def _run_synthesis(payload, corpus):
+def _run_synthesis(responder, corpus):
     import json
-    calls, restore = _install_fake_genai(json.dumps(payload))
-    try:
+    from unittest.mock import patch
+    calls = []
+    class Models:
+        async def generate_content(self, **kwargs):
+            calls.append(kwargs)
+            return _FakeResponse(json.dumps(responder(json.loads(kwargs['contents']))))
+    class Aio:
+        models = Models()
+        async def aclose(self):
+            pass
+    client = types.SimpleNamespace(aio=Aio())
+    with patch('google.genai.Client', return_value=client), patch.dict(
+            os.environ, {'GEMINI_API_KEY': 'fixture-only', 'GEMINI_MODEL': 'test-model'}):
         result = asyncio.run(synthesizer.synthesize_briefing(corpus, episode_num=7))
-    finally:
-        restore()
     return result, calls
 
 
-def test_cascade_accepts_payload_at_threshold_and_corrects_it():
-    corpus = make_corpus()
-    payload = make_payload(corpus)
-    for i in range(synthesizer.MAX_URL_SUBSTITUTIONS):
-        payload["chapters"][i]["source_url"] = EVIL_URL
-    result, calls = _run_synthesis(payload, corpus)
-    assert len(calls) == 1, f"expected first model accepted, got calls={calls}"
-    allowed = {a["url"] for arts in corpus.values() for a in arts}
-    for c in result["chapters"]:
-        assert c["source_url"] in allowed, c
+def test_new_selection_cannot_supply_foreign_citation_or_legacy_prose():
+    corpus = make_corpus(per_domain=1)
+    legacy = make_payload(corpus)
+    result, calls = _run_synthesis(lambda incoming: legacy, corpus)
+    assert len(calls) == 16, 'Eight stories each exhaust their two-attempt budget'
+    assert result['fallback_content'] == 'source_derived'
+    assert [c['source_url'] for c in result['chapters']] == [corpus[d][0]['url'] for d in DOMAIN_ORDER]
+    assert synthesizer.validate_synthesis(result)[0]
 
 
-def test_cascade_rejects_payload_over_threshold_and_advances_models():
-    corpus = make_corpus()
-    payload = make_payload(corpus)
-    for i in range(synthesizer.MAX_URL_SUBSTITUTIONS + 1):
-        payload["chapters"][i]["source_url"] = EVIL_URL
-    result, calls = _run_synthesis(payload, corpus)
-    assert len(calls) > 1, f"expected cascade to advance past first model, calls={calls}"
-    # Ends in the deterministic fallback, whose URLs come from the corpus.
-    allowed = {a["url"] for arts in corpus.values() for a in arts}
-    for c in result["chapters"]:
-        assert c["source_url"] in allowed, c
-
-
-def test_threshold_constant_is_two():
-    assert synthesizer.MAX_URL_SUBSTITUTIONS == 2
+def test_new_selection_uses_source_owned_citations_without_url_repairs():
+    corpus = make_corpus(per_domain=3)
+    result, calls = _run_synthesis(lambda incoming: {
+        'story_id': incoming['story_id'], 'unit_ids': ['title-0', 'summary-0']}, corpus)
+    assert len(calls) == 24
+    assert len(result['chapters']) == 24
+    assert 'fallback_content' not in result
+    assert [c['source_url'] for c in result['chapters']] == [a['url'] for d in DOMAIN_ORDER for a in corpus[d]]
+    assert synthesizer.validate_synthesis(result)[0]
 
 
 # --- ingestion --------------------------------------------------------------
@@ -389,7 +351,9 @@ def test_ingestion_logs_rejection_with_truncated_value():
 
 def test_explicit_domain_sources_cannot_cross_middle_gap():
     corpus = make_corpus(empty_domains=('cloud',))
-    payload = synthesizer.generate_deterministic_fallback(corpus, 11)
+    payload = make_payload(corpus)
+    payload['chapters'] = [{**c, 'domain': d} for c, d in zip(payload['chapters'], DOMAIN_ORDER) if d != 'cloud']
+    payload['content_availability'] = {'schema_version': 1}
     payload['chapters'][1]['source_url'] = corpus['ai'][0]['url']
     payload['takeaways']['data']['sources'] = [{'title': 'AI item', 'url': corpus['ai'][0]['url']}]
     result, count = enforce_corpus_urls(payload, corpus)

@@ -3,6 +3,10 @@ import os
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["API_SECRET_KEY"] = ""
+
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
@@ -248,8 +252,25 @@ def test_local_now_uses_singapore_timezone_not_utc():
     print("✓ local_now() produces the Asia/Singapore date, proven to differ from UTC date across the 23:00-23:59 UTC boundary")
 
 
+def test_supplied_manifest_overrides_mutated_corpus_during_synthesis():
+    import asyncio
+    from src.story_manifest import freeze_story_manifest
+    from src.content_availability import build_content_availability
+    from src.synthesizer import synthesize_briefing
+    corpus = {'ai': [{'title': 'Frozen title', 'summary': 'Frozen summary.', 'source_name': 'Frozen source',
+                      'url': 'https://example.test/frozen'}]}
+    manifest = freeze_story_manifest(corpus, build_content_availability(corpus))
+    corpus['ai'][0]['summary'] = 'Mutated evidence must not appear.'
+    result = asyncio.run(synthesize_briefing(corpus, manifest=manifest))
+    assert result['flashcards'][0]['answer'] == 'Frozen summary.'
+    assert result['chapters'][0]['title'] == 'Frozen title'
+    assert 'Mutated evidence' not in str(result)
+    assert validate_synthesis(result)[0]
+
+
 def main():
     tests = [
+        test_supplied_manifest_overrides_mutated_corpus_during_synthesis,
         test_validate_synthesis_accepts_valid_input,
         test_validate_synthesis_rejects_wrong_chapter_count,
         test_validate_synthesis_rejects_specimen_leak,

@@ -10,6 +10,10 @@ import types
 import unittest
 from unittest.mock import patch
 
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["API_SECRET_KEY"] = ""
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src import ingestion, synthesizer
 
@@ -56,56 +60,70 @@ class RunProvenanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(empty["outcome"], "success")
 
     async def synthesize(self, responses, stats):
-        corpus, payload = fixture()
+        corpus = {'ai': [{'title': 'Fixture story', 'summary': 'Fixture summary.',
+                          'source_name': 'Fixture', 'url': 'https://example.test/story'}]}
+        from src.story_manifest import freeze_story_manifest
+        from src.content_availability import build_content_availability
+        manifest = freeze_story_manifest(corpus, build_content_availability(corpus))
+        payload = {'story_id': manifest.stories[0].story_id, 'unit_ids': ['title-0', 'summary-0']}
         queue = list(responses(payload))
         class Models:
-            def generate_content(self, **kwargs):
+            async def generate_content(self, **kwargs):
                 result = queue.pop(0)
                 if isinstance(result, BaseException):
                     raise result
                 return types.SimpleNamespace(text=json.dumps(result) if isinstance(result, dict) else result)
-        google = types.ModuleType("google")
-        google.genai = types.ModuleType("google.genai")
-        google.genai.Client = lambda **kwargs: types.SimpleNamespace(models=Models())
-        kwargs = {"diagnostics": stats} if "diagnostics" in inspect.signature(synthesizer.synthesize_briefing).parameters else {}
-        with patch.dict(sys.modules, {"google": google, "google.genai": google.genai}), patch.dict(os.environ, {"GEMINI_API_KEY": "fixture-placeholder", "GEMINI_MODEL": "test-model"}), patch.object(synthesizer, "_USE_DICT_SCHEMA", False):
-            return await synthesizer.synthesize_briefing(corpus, 10, **kwargs)
+        class Aio:
+            models = Models()
+            async def aclose(self):
+                pass
+        with patch('google.genai.Client', return_value=types.SimpleNamespace(aio=Aio())), patch.dict(
+                os.environ, {'GEMINI_API_KEY': 'fixture-placeholder', 'GEMINI_MODEL': 'test-model'}):
+            return await synthesizer.synthesize_briefing(corpus, 10, diagnostics=stats)
 
-    async def test_schema_probe_and_success_are_separate_provider_attempts(self):
+    async def test_schema_failure_and_success_share_two_attempt_budget(self):
         stats = {}
-        await self.synthesize(lambda payload: [ValueError("response_schema unsupported"), payload], stats)
-        self.assertEqual(stats.get("path"), "llm")
-        self.assertEqual(stats["model"], "test-model")
-        self.assertEqual(stats["schema_variant"], "json_schema_dict")
-        self.assertEqual([a["outcome"] for a in stats["attempts"]], ["schema_rejected", "accepted"])
+        result = await self.synthesize(lambda payload: [ValueError('response_schema unsupported'), payload], stats)
+        self.assertEqual(stats['path'], 'model_assisted_selection')
+        self.assertEqual(stats['model'], 'gemini-3.6-flash')
+        self.assertEqual(stats['schema_variant'], 'evidence_ids_json')
+        self.assertEqual([a['outcome'] for a in stats['attempts']], ['schema_rejected', 'accepted'])
+        self.assertEqual(stats['stories'][0]['attempts'], 2)
+        self.assertTrue(synthesizer.validate_synthesis(result)[0])
 
     async def test_transport_invalid_json_and_validation_are_distinct(self):
         stats = {}
-        def responses(payload):
-            bad = copy.deepcopy(payload)
-            bad["chapters"] = bad["chapters"][:7]
-            return [TimeoutError("SECRET_SENTINEL https://provider.test/?key=SECRET_SENTINEL"), "not-json", bad, payload]
-        await self.synthesize(responses, stats)
-        self.assertEqual([a["outcome"] for a in stats.get("attempts", [])], ["transport_error", "invalid_json", "validation_rejected", "accepted"])
-        self.assertNotIn("SECRET_SENTINEL", json.dumps(stats))
-        self.assertNotIn("provider.test", json.dumps(stats))
+        await self.synthesize(lambda payload: [TimeoutError('SECRET_SENTINEL https://provider.test/?key=SECRET_SENTINEL'), 'not-json'], stats)
+        self.assertEqual([a['outcome'] for a in stats['attempts']], ['transport_error', 'invalid_json'])
+        other = {}
+        await self.synthesize(lambda payload: [{**payload, 'unit_ids': ['foreign']}, payload], other)
+        self.assertEqual([a['outcome'] for a in other['attempts']], ['validation_rejected', 'accepted'])
+        self.assertNotIn('SECRET_SENTINEL', json.dumps(stats))
+        self.assertNotIn('provider.test', json.dumps(stats))
 
-    async def test_url_rejection_is_not_provider_transport_failure(self):
+    async def test_url_prose_rejected_as_selection_validation_without_repair(self):
         stats = {}
-        def responses(payload):
-            bad = copy.deepcopy(payload)
-            for chapter in bad["chapters"][:3]:
-                chapter["source_url"] = "https://fabricated.test/x"
-            return [bad, payload]
-        await self.synthesize(responses, stats)
-        self.assertEqual([a["outcome"] for a in stats.get("attempts", [])], ["url_provenance_rejected", "accepted"])
-        self.assertEqual(stats["attempts"][0]["url_substitutions"], 3)
+        result = await self.synthesize(lambda payload: [{**payload, 'source_url': 'https://fabricated.test/x'}, payload], stats)
+        self.assertEqual([a['outcome'] for a in stats['attempts']], ['validation_rejected', 'accepted'])
+        self.assertEqual(stats['url_substitutions'], 0)
+        self.assertEqual(result['chapters'][0]['source_url'], 'https://example.test/story')
+        self.assertNotIn('fabricated.test', json.dumps(stats))
 
     async def test_nonobject_json_is_classified_as_validation_rejection(self):
         stats = {}
-        await self.synthesize(lambda payload: ["[]", payload], stats)
-        self.assertEqual(stats["attempts"][0]["outcome"], "validation_rejected")
-        self.assertEqual(stats["attempts"][1]["outcome"], "accepted")
+        await self.synthesize(lambda payload: ['[]', payload], stats)
+        self.assertEqual([a['outcome'] for a in stats['attempts']], ['validation_rejected', 'accepted'])
+
+    def test_additive_diagnostics_preserve_run_schema_and_legacy_selection(self):
+        from src.provenance import RunRecord, selection_record
+        record = RunRecord().data
+        self.assertEqual(record['schema_version'], 1)
+        self.assertIn('attempts', record['synthesis'])
+        corpus = {'ai': [{'url': 'https://example.test/legacy?token=hidden'}]}
+        legacy = {'chapters': [{'domain': 'ai', 'source_url': corpus['ai'][0]['url']}]}
+        selected = selection_record(corpus, legacy, 'llm')
+        self.assertEqual(selected['ai']['chapter_citation']['url'], 'https://example.test/legacy')
+        self.assertNotIn('stories', selected['ai'])
 
     def test_known_environment_secrets_never_enter_model_or_article_identifiers(self):
         from src.provenance import model_identifier, article_identity
@@ -143,8 +161,8 @@ class RunProvenanceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_auth_and_quota_errors_remain_distinct_in_attempt_history(self):
         stats = {}
-        await self.synthesize(lambda payload: [ValueError("401 Unauthorized"), ValueError("429 quota exceeded"), payload], stats)
-        self.assertEqual([a["outcome"] for a in stats["attempts"]], ["auth_error", "quota_error", "accepted"])
+        await self.synthesize(lambda payload: [ValueError("401 Unauthorized"), ValueError("429 quota exceeded")], stats)
+        self.assertEqual([a["outcome"] for a in stats["attempts"]], ["auth_error", "quota_error"])
 
     async def test_no_key_and_exhaustion_have_different_fallback_reasons(self):
         corpus, _ = fixture()
@@ -154,7 +172,7 @@ class RunProvenanceTests(unittest.IsolatedAsyncioTestCase):
             await synthesizer.synthesize_briefing(corpus, 10, **kwargs)
         self.assertEqual(stats.get("fallback_reason"), "no_api_key")
         exhausted = {}
-        await self.synthesize(lambda payload: [ConnectionError("secret")]*4, exhausted)
+        await self.synthesize(lambda payload: [ConnectionError("secret")]*2, exhausted)
         self.assertEqual(exhausted["fallback_reason"], "attempts_exhausted")
         self.assertIsNone(exhausted["model"])
 
