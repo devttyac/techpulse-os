@@ -4,6 +4,10 @@ import sys
 import os
 import shutil
 import tempfile
+import json
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if APP_DIR not in sys.path:
@@ -19,6 +23,8 @@ os.environ["STORAGE_DIR"] = _TMP_STORAGE
 os.environ["API_SECRET_KEY"] = TEST_API_KEY
 
 from src.main import app, init_seed_data  # noqa: E402
+from src import main as app_main
+from src.content_availability import build_content_availability
 
 async def run_asgi_tests():
     # httpx.ASGITransport does not run FastAPI's lifespan hook, so replicate the
@@ -92,6 +98,25 @@ async def run_asgi_tests():
         assert '<pubDate>' in r_feed.text
         assert 'enclosure' in r_feed.text
         print(f"✓ /feed.xml returned valid RSS 2.0 Podcast XML with RFC 822 pubDate ({len(r_feed.text)} bytes)")
+
+        # New sparse episodes expose gaps and never serve stale empty-domain clips.
+        availability=build_content_availability({"ai":[{"title":"Fixture"}]})
+        sparse={"id":"ep-999","episode_number":999,"date":"Jan 01, 2020","title":"Sparse fixture","summary":"RSS summary fixture", "chapters":[{"domain":"ai","time":"00:00","seconds":0,"title":"AI fixture","source_name":"Fixture","source_url":"https://example.test/one"}],
+                "content_basis":"rss_summaries","content_availability":availability,
+                "audio_url":"", "domain_audio":{}, "audio_availability":{"podcast":{"status":"unavailable","reason":"Audio generation failed."},"domains":{"cloud":{"status":"unavailable","reason":"No articles available from checked sources."}}},
+                "takeaways":{d:{"title":d,"bullets":[],"status":v["status"],"reason":v["reason"]} for d,v in availability["domains"].items()}}
+        Path(app_main.EPISODES_DIR,"ep-999.json").write_text(json.dumps(sparse))
+        Path(app_main.AUDIO_DIR,"ep-999-cloud.mp3").write_bytes(b"stale"*300)
+        Path(app_main.AUDIO_DIR,"ep-999.mp3").write_bytes(b"stale"*300)
+        r_sparse=await client.get("/api/export-markdown/ep-999")
+        assert "No articles available from checked sources." in r_sparse.text
+        assert "RSS summaries" in r_sparse.text
+        with patch.object(app_main,"generate_episode_podcast_audio",AsyncMock(side_effect=AssertionError("Unavailable audio must not trigger TTS"))):
+            assert (await client.get("/audio/ep-999-cloud.mp3")).status_code==404
+            assert (await client.get("/audio/ep-999.mp3")).status_code==404
+        r_sparse_feed=await client.get("/feed.xml")
+        sparse_item=next(item for item in ET.fromstring(r_sparse_feed.content).findall("channel/item") if item.findtext("guid")=="ep-999")
+        assert sparse_item.find("enclosure") is None, "Unavailable podcast must have no fictitious enclosure"
 
         # 8. Test Static SPA Root
         r_root = await client.get("/")

@@ -387,6 +387,25 @@ def test_ingestion_logs_rejection_with_truncated_value():
     assert all(len(m) < 400 for m in msgs), "offending value not truncated in log"
 
 
+def test_explicit_domain_sources_cannot_cross_middle_gap():
+    corpus = make_corpus(empty_domains=('cloud',))
+    payload = synthesizer.generate_deterministic_fallback(corpus, 11)
+    payload['chapters'][1]['source_url'] = corpus['ai'][0]['url']
+    payload['takeaways']['data']['sources'] = [{'title': 'AI item', 'url': corpus['ai'][0]['url']}]
+    result, count = enforce_corpus_urls(payload, corpus)
+    assert count == 1
+    assert result['chapters'][1]['domain'] == 'data'
+    assert result['chapters'][1]['source_url'] == corpus['data'][0]['url']
+    assert result['takeaways']['data']['sources'] == []
+
+
+def test_malformed_domain_id_does_not_raise_url_repair():
+    payload = {'chapters': [{'domain': {'invalid': True}, 'source_url': EVIL_URL}], 'takeaways': {}}
+    result, count = enforce_corpus_urls(payload, make_corpus())
+    assert count == 1
+    assert result['chapters'][0]['source_url'] == ''
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failures = 0

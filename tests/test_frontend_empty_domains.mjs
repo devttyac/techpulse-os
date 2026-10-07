@@ -1,0 +1,254 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import test from 'node:test';
+import vm from 'node:vm';
+
+const html = readFileSync(new URL('../static/index.html', import.meta.url), 'utf8');
+const source = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).find(s => s.includes('function changeEpisode('));
+const domains = ['ai', 'cloud', 'data', 'sec', 'devops', 'arch', 'finops', 'gov'];
+function episode(id, active = ['ai']) {
+  return { id, episode_number: Number(id.slice(3)), date: '2026-10-07', title: 'Received stories', summary: 'Source summaries', duration: '01:00', audio_url: active.length ? `/audio/${id}.mp3` : null,
+    content_availability: { schema_version: 1, domains: Object.fromEntries(domains.map(d => [d, { status: active.includes(d) ? 'available' : 'no_received_candidates', reason: active.includes(d) ? 'Received article candidates' : 'No articles available from checked sources', candidate_count: active.includes(d) ? 1 : 0 }])) },
+    takeaways: Object.fromEntries(domains.map(d => [d, active.includes(d) ? { domain: d, title: `Actual ${d} story`, bullets: [`${d} received summary`], sources: [{ title: `${d} publisher`, url: `https://example.test/${d}` }] } : { status: 'no_received_candidates', reason: 'No articles available from checked sources', bullets: [], sources: [] }])),
+    chapters: active.map((domain, i) => ({ domain, title: `Actual ${domain} story`, time: '00:00', seconds: i * 10, source_name: `${domain} publisher`, source_url: `https://example.test/${domain}` })),
+    flashcards: active.map(domain => ({ domain, question: `${domain} question`, answer: `${domain} received summary`, cite: `${domain} publisher` })),
+    domain_audio: Object.fromEntries(active.map(d => [d, `/audio/${id}-${d}.mp3`])) };
+}
+function runtime(records = []) {
+  const elements = new Map(), storage = new Map(), events = new Map(), intervals = new Map(), calls = [];
+  let chatReply = null; let chatPending = null; let statusPending = null; let failStatus = false; let serial = 0, status = { running: false, stage: 'idle', source_health: null }, failEpisodes = false;
+  function element(id = '') {
+    const classes = new Set(); let content = '', markup = '';
+    const el = { id, style: {}, className: '', value: '', disabled: false, hidden: false, children: [], attrs: {}, paused: true, duration: 60, currentTime: 0, src: '', failPlay: false, playCount: 0,
+      classList: { add: (...a) => a.forEach(x => classes.add(x)), remove: (...a) => a.forEach(x => classes.delete(x)), contains: x => classes.has(x), toggle(x) { classes.has(x) ? classes.delete(x) : classes.add(x); } },
+      setAttribute(k,v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; }, removeAttribute(k) { delete this.attrs[k]; if (k === 'src') this.src = ''; },
+      pause() { this.paused = true; }, load() {}, play() { this.playCount++; this.paused = false; return this.failPlay ? Promise.reject(new Error('no audio')) : Promise.resolve(); }, addEventListener() {},
+      querySelectorAll() { return []; }, appendChild(child) { this.children.push(child); if (child.id) elements.set(child.id, child); }, replaceChildren(...children) { this.children = children; markup = ''; content = ''; }, remove() { elements.delete(this.id); } };
+    Object.defineProperties(el, { textContent: { get: () => content, set(v) { content = String(v); markup = ''; el.children = []; } }, innerText: { get: () => content, set(v) { content = String(v); markup = ''; el.children = []; } }, innerHTML: { get: () => markup, set(v) { markup = String(v); content = ''; el.children = []; } } });
+    return el;
+  }
+  for (const m of html.matchAll(/\bid="([^"]+)"/g)) elements.set(m[1], element(m[1]));
+  const context = vm.createContext({ console: { log() {}, warn() {}, error() {} }, URL, Headers, Date,
+    document: { documentElement: { setAttribute() {} }, body: element(), getElementById: id => elements.get(id) || null, createElement: () => element(), querySelectorAll: () => [] },
+    localStorage: { getItem: k => storage.get(k) || null, setItem: (k,v) => storage.set(k,String(v)), removeItem: k => storage.delete(k) },
+    window: { location: { origin: 'https://example.test' }, addEventListener: (k,fn) => events.set(k,fn), scrollTo() {}, prompt: () => null },
+    setTimeout: () => ++serial, clearTimeout() {}, setInterval: fn => { intervals.set(++serial,fn); return serial; }, clearInterval: id => intervals.delete(id),
+    fetch: async (url, options = {}) => { calls.push([url,options]); if (url === '/api/refresh/status' && statusPending) { const pending = statusPending; statusPending = null; return await pending; } if (url === '/api/chat' && chatPending) return await chatPending; const body = url === '/api/episodes' ? { episodes: records } : url === '/api/chat' ? (chatReply || {}) : status; const failed = (url === '/api/chat' && !chatReply) || (url === '/api/episodes' && failEpisodes) || (url === '/api/refresh/status' && failStatus); return { ok: !failed, status: failed ? 401 : 200, json: async () => body, clone() { return this; } }; } });
+  vm.runInContext(source, context, { filename: 'static/index.html' });
+  const text = id => { assert.ok(elements.has(id), `visible region ${id} exists`); const el = elements.get(id); return el.textContent + el.innerHTML + el.children.map(c => c.textContent + c.innerHTML).join(''); };
+  return { context, elements, storage, calls, intervals, text, chat: reply => { chatReply = reply; }, delayChat: promise => { chatPending = promise; }, delayStatus: promise => { statusPending = promise; }, load: () => context.loadEpisodesFromBackend(), select: id => context.changeEpisode(id), state: s => { status = s; }, failEpisodes: () => { failEpisodes = true; }, failStatus: () => { failStatus = true; }, startup: async () => { events.get('DOMContentLoaded')(); await settle(); } };
+}
+async function settle() { for (let i = 0; i < 12; i++) await Promise.resolve(); }
+
+test('each domain can be empty without archived/sample filler or a Listen action', async () => {
+  for (const empty of domains) { const r = runtime([episode('ep-900', domains.filter(d => d !== empty))]); await r.load();
+    assert.match(r.text(`content-${empty}`), /No articles available from checked sources/);
+    assert.doesNotMatch(r.text(`content-${empty}`), /ARCHIVED BRIEFING|Episode #142|playArticleAudio|Actual .* story/);
+  }
+});
+test('populated to empty to recovered resets deck, citations, mastery and zero-card handlers', async () => {
+  const r = runtime([episode('ep-900'), episode('ep-899', []), episode('ep-898', ['gov'])]); await r.load();
+  r.context.rateRecall('easy'); r.select('ep-899');
+  assert.match(r.text('fc-question'), /No.*cards/i); assert.equal(r.text('fc-answer'), ''); assert.equal(r.text('fc-source-cite'), ''); assert.equal(r.text('card-index-badge'), 'Card 0/0');
+  r.context.nextFlashcard(); r.context.prevFlashcard(); r.context.flipFlashcard(); r.context.rateRecall('easy');
+  assert.equal(vm.runInContext('currentCardIndex', r.context), 0); assert.ok(![...r.storage.keys()].some(k => k.includes('ep-899'))); assert.equal(r.text('mastery-pct'), '0% Ready');
+  for (const id of ['fc-prev','fc-next','fc-hard','fc-good','fc-easy']) assert.equal(r.elements.get(id)?.disabled, true);
+  r.select('ep-898'); assert.equal(r.text('fc-question'), 'gov question'); assert.equal(r.text('card-index-badge'), 'Card 1/1'); assert.equal(r.elements.get('fc-easy').disabled, false);
+});
+test('empty same-episode media never loads fabricated episode or generic domain clips', async () => {
+  const ep = episode('ep-900', []), r = runtime([ep]); await r.load(); const a = r.elements.get('native-audio');
+  assert.equal(a.src, ''); assert.equal(r.elements.get('play-btn').disabled, true);
+  r.context.playArticleAudio('cloud'); r.context.togglePlay(); r.context.jumpTo(30, '00:30'); assert.equal(a.playCount, 0); assert.equal(a.src, '');
+});
+test('failed domain playback stays with that episode and cannot use generic fallback', async () => {
+  const r = runtime([episode('ep-900')]); await r.load(); const a = r.elements.get('native-audio'); a.failPlay = true;
+  r.context.playArticleAudio('ai'); await settle(); assert.equal(a.src, '/audio/ep-900-ai.mp3'); assert.equal(a.playCount, 1); assert.match(r.text('audio-status-msg'), /unavailable/i);
+});
+test('missing TTS output disables chapter seek while preserving real citations', async () => {
+  const ep = episode('ep-900',['ai','data']); ep.audio_url = null; ep.domain_audio = {};
+  const r = runtime([ep]); await r.load(); assert.match(r.text('chapters-list'), /data publisher/); assert.match(r.text('chapters-list'), /disabled/); assert.doesNotMatch(r.text('content-ai'), /playArticleAudio/);
+  r.context.jumpTo(10,'00:10'); assert.equal(r.elements.get('native-audio').playCount,0);
+});
+test('real empty backend list clears embedded examples and cannot reselect a stale sample', async () => {
+  const r = runtime([]); await r.load(); assert.match(r.text('ep-title'), /No episodes/i); assert.equal(r.text('episode-select'), ''); assert.equal(r.elements.get('native-audio').src, '');
+  r.select('ep-142'); assert.match(r.text('ep-title'), /No episodes/i);
+});
+test('startup authorization failure clears sample briefing without claiming source failure', async () => {
+  const r = runtime([]); r.failEpisodes(); await r.startup(); assert.match(r.text('ep-title'), /unavailable/i); assert.equal(r.elements.get('native-audio').src, ''); assert.doesNotMatch(r.text('source-health-summary'), /publisher.*failed|unavailable sources/i);
+});
+test('legacy missing coverage is unknown and explicitly recorded legacy audio remains playable', async () => {
+  const ep = episode('ep-900'); delete ep.content_availability; delete ep.takeaways.cloud; delete ep.domain_audio;
+  const r = runtime([ep]); await r.load(); assert.match(r.text('content-cloud'), /coverage.*not recorded|coverage.*unknown/i); assert.equal(r.elements.get('native-audio').src, '/audio/ep-900.mp3');
+});
+
+function health(status = 'healthy', extra = {}) {
+  return { schema_version: 1, check_id: 'run-received', run_id: 'run-received', checked_at: '2026-10-07T01:02:03Z', status, available_sources: status === 'unavailable' ? 0 : status === 'partial' ? 1 : 2, total_sources: 2, body_acquisition: 'not_checked', sources: [
+    { name: 'AI publisher', domain: 'ai', outcome: 'available', accepted: 1, parse_warning: false },
+    { name: 'Cloud publisher', domain: 'cloud', outcome: status === 'partial' || status === 'unavailable' ? 'unavailable' : 'quiet', accepted: 0, parse_warning: true },
+  ], latest_run: null, last_completed_at: '2026-10-07T01:02:03Z', last_attempt_at: '2026-10-07T01:02:03Z', ...extra };
+}
+test('captured health and quiet/warnings remain independent of historical selection and downstream error', async () => {
+  const r = runtime([episode('ep-900'), episode('ep-899',['data'])]);
+  r.state({ running: false, stage: 'error', source_health: health() }); await r.startup();
+  assert.match(r.text('source-health-summary'), /Healthy.*2\/2/); assert.match(r.text('source-health-time'), /2026-10-07T01:02:03Z/);
+  assert.match(r.text('source-health-details'), /quiet|Quiet/); assert.match(r.text('source-health-details'), /warning/i); assert.match(r.text('source-health-body'), /Not checked/i);
+  const before = r.text('source-health-time'); r.select('ep-899'); assert.equal(r.text('source-health-time'), before); assert.match(r.text('source-health-summary'), /Healthy/);
+});
+test('mixed/unavailable/never-checked health uses captured outcomes without poll timestamps', async () => {
+  for (const [state, expected] of [['partial', /Partially unavailable.*1\/2/], ['unavailable', /Unavailable.*0\/2/], ['not_checked', /Not yet checked/]]) {
+    const r = runtime([episode('ep-900')]); r.state({ running:false, stage:'idle', source_health:health(state) }); await r.startup(); assert.match(r.text('source-health-summary'), expected);
+  }
+});
+test('no-content latest check retains dated history and creates no episode or audio', async () => {
+  const r = runtime([episode('ep-900')]); r.state({ running:false,stage:'no_content',source_health:health('healthy',{latest_run:{status:'no_content',finished_at:'2026-10-07T01:03:04Z',episode_id:null}}) });
+  await r.startup(); assert.match(r.text('latest-check-banner'), /No articles available from checked sources.*history/i); assert.match(r.text('latest-check-banner'), /2026-10-07T01:03:04Z/);
+  assert.equal(r.text('ep-title'),'Received stories'); assert.equal(r.elements.get('native-audio').src,'/audio/ep-900.mp3');
+});
+test('startup restores status polling without another ingestion and cancel preserves last captured check', async () => {
+  const r = runtime([episode('ep-900')]); r.state({ running:true,stage:'synthesizing',source_health:health() }); await r.startup();
+  assert.equal(r.intervals.size,1); assert.ok(!r.calls.some(([url]) => url === '/api/refresh'));
+  const poll = [...r.intervals.values()][0]; const time = r.text('source-health-time');
+  r.state({ running:false,stage:'cancelled',source_health:health('cancelled',{last_attempt_at:'2026-10-07T02:00:00Z'}) }); await poll(); await settle();
+  assert.equal(r.text('source-health-time'),time); assert.match(r.text('source-health-note'), /cancelled.*last complete check/i); assert.equal(r.intervals.size,0);
+});
+test('failed health load remains unknown rather than reporting publishers unavailable', async () => {
+  const r = runtime([episode('ep-900')]); r.failStatus(); await r.startup(); assert.match(r.text('source-health-summary'), /Unknown|could not be loaded/i); assert.match(r.text('source-health-time'), /Not recorded/);
+});
+test('health names render as literal text; captured details cannot inject markup', async () => {
+  const h = health(); h.sources[0].name = '<img src=x onerror=alert(1)>'; const r = runtime([episode('ep-900')]);
+  r.state({running:false,stage:'idle',source_health:h}); await r.startup();
+  const details = r.elements.get('source-health-details'); assert.ok(details.children[0].textContent.includes('<img')); assert.equal(details.children[0].innerHTML,'');
+});
+
+test('all-empty fallback chat/interview cannot invent evidence or stale starter topics', async () => {
+  const r = runtime([episode('ep-900', [])]); await r.load(); assert.doesNotMatch(r.text('chat-starter-chips'), /Fabric|SPIFFE|Anthropic|Interview Me/i);
+  for (const query of ['hello','Interview me','overview']) {
+    await r.context.respondToQuery(query); assert.match(r.text('chat-messages'), /No article evidence|No supported article/i);
+    assert.doesNotMatch(r.text('chat-messages'), /Architectural Prompt|validated architectural|8 Domains Available|strictly grounded/i);
+  }
+});
+test('sparse fallback chat counts only supported domains and explains an empty-domain query', async () => {
+  const r = runtime([episode('ep-900',['ai','gov'])]); await r.load(); await r.context.respondToQuery('cloud');
+  assert.match(r.text('chat-messages'), /No articles available from checked sources/); assert.doesNotMatch(r.text('chat-messages'), /Actual cloud story|8 Domains Available/);
+  await r.context.respondToQuery('overview'); assert.match(r.text('chat-messages'), /2 domains|2 Domains/);
+});
+test('a response requested for the previous episode cannot enter the new episode chat', async () => {
+  const r = runtime([episode('ep-900'),episode('ep-899',['data'])]); await r.load(); let release;
+  r.delayChat(new Promise(resolve => { release = resolve; })); const pending = r.context.respondToQuery('hello');
+  await settle(); r.select('ep-899'); release({ok:true,status:200,json:async () => ({response:'OLD EPISODE REPLY',model:'gemini-test',grounded_episode_id:'ep-900'})});
+  await pending; assert.doesNotMatch(r.text('chat-messages'), /OLD EPISODE REPLY/);
+});
+test('status poll failure preserves a timestamped last complete check without marking publisher failure', async () => {
+  const r = runtime([episode('ep-900')]); r.state({running:true,stage:'synthesizing',source_health:health()}); await r.startup(); const time = r.text('source-health-time');
+  r.failStatus(); await [...r.intervals.values()][0](); await settle(); assert.equal(r.text('source-health-time'),time); assert.match(r.text('source-health-summary'), /Healthy/); assert.match(r.text('source-health-note'), /could not be loaded.*last captured snapshot/i);
+});
+
+test('manual refresh status authorization failure unlocks Run without implying source failure', async () => {
+  const r = runtime([episode('ep-900')]); await r.load(); r.failStatus(); await r.context.triggerManualRun();
+  assert.equal(r.elements.get('manual-run-btn').disabled,false); assert.match(r.text('source-health-summary'), /Unknown/); assert.equal(r.intervals.size,0);
+});
+test('late pre-cancel status response cannot restart polling or replace captured cancellation', async () => {
+  const r = runtime([episode('ep-900')]); await r.load(); let release;
+  r.delayStatus(new Promise(resolve => { release = resolve; })); const oldPoll = r.context.pollRefreshStatus(); await settle();
+  r.state({running:false,stage:'cancelled',source_health:health('cancelled')}); await r.context.cancelManualRun();
+  release({ok:true,status:200,json:async () => ({running:true,stage:'synthesizing',source_health:health()})}); await oldPoll; await settle();
+  assert.equal(r.intervals.size,0); assert.match(r.text('source-health-note'), /cancelled/i); assert.equal(r.elements.get('manual-run-btn').disabled,false);
+});
+
+test('unavailable domain sources explain failure without showing quiet-content claims', async () => {
+  const ep = episode('ep-900',['ai']); ep.content_availability.domains.cloud = {status:'source_unavailable',reason:'Checked sources unavailable',candidate_count:0};
+  const r = runtime([ep]); await r.load(); assert.match(r.text('content-cloud'), /Checked sources unavailable/); assert.doesNotMatch(r.text('content-cloud'), /No articles available from checked sources|playArticleAudio/);
+});
+test('history becoming empty resets playback progress and ready status rather than retaining old media state', async () => {
+  const records = [episode('ep-900')], r = runtime(records); await r.load(); r.elements.get('progress-bar').style.width='55%'; r.elements.get('current-time').innerText='00:30';
+  records.splice(0); await r.load(); assert.equal(r.elements.get('progress-bar').style.width,'0%'); assert.equal(r.text('current-time'),'00:00'); assert.match(r.text('audio-status-msg'), /unavailable|No episode/i);
+});
+test('repeated status polls reuse captured timestamps and make only cached API reads', async () => {
+  const r = runtime([episode('ep-900')]); r.state({running:true,stage:'ingesting',source_health:health()}); await r.startup();
+  const time = r.text('source-health-time'); for(let i=0;i<3;i++) await [...r.intervals.values()][0]();
+  assert.equal(r.text('source-health-time'),time); assert.equal(r.elements.get('source-health-details').children.length,2);
+  assert.ok(r.calls.every(([url,options]) => ['/api/episodes','/api/refresh/status'].includes(url) && !options.method));
+});
+
+test('manual Run supersedes an in-flight startup idle response and tracks a fresh running status', async () => {
+  const r = runtime([episode('ep-900')]); let releaseOld, releaseFresh;
+  r.delayStatus(new Promise(resolve => { releaseOld = resolve; })); await r.startup();
+  r.delayStatus(new Promise(resolve => { releaseFresh = resolve; }));
+  const run = r.context.triggerManualRun(); await settle();
+  releaseOld({ok:true,status:200,json:async () => ({running:false,stage:'idle',source_health:health()})}); await settle();
+  try {
+    assert.equal(r.elements.get('manual-run-btn').disabled,true,'pre-refresh idle response must not unlock Run');
+    assert.equal(r.calls.filter(([url]) => url === '/api/refresh/status').length,2,'successful POST must fetch a fresh status');
+    releaseFresh({ok:true,status:200,json:async () => ({running:true,stage:'ingesting',progress:25,source_health:health()})});
+    await run; assert.equal(r.elements.get('manual-run-btn').disabled,true); assert.equal(r.intervals.size,1);
+    assert.equal(r.calls.filter(([url,options]) => url === '/api/refresh' && options.method === 'POST').length,1);
+    assert.match(r.text('manual-run-btn'), /Ingesting feeds/);
+  } finally { releaseFresh({ok:true,status:200,json:async () => ({running:false,stage:'idle'})}); await run; }
+});
+test('malformed fresh status unlocks Run safely and cannot be overwritten by a stale running response', async () => {
+  const r = runtime([episode('ep-900')]); let releaseOld;
+  r.delayStatus(new Promise(resolve => { releaseOld = resolve; })); await r.startup();
+  r.state([]); await r.context.triggerManualRun();
+  releaseOld({ok:true,status:200,json:async () => ({running:true,stage:'ingesting',source_health:health()})}); await settle();
+  assert.equal(r.elements.get('manual-run-btn').disabled,false); assert.equal(r.intervals.size,0);
+  assert.match(r.text('source-health-summary'), /Unknown/); assert.equal(r.calls.filter(([url]) => url === '/api/refresh/status').length,2);
+});
+
+test('offline interview recalls only the supplied card question and cannot invent a prompt when no card exists', async () => {
+  const ep = episode('ep-900'); ep.flashcards[0].question = 'What does the received AI summary say?';
+  const r = runtime([ep]); await r.load(); await r.context.respondToQuery('Interview me');
+  assert.match(r.text('chat-messages'), /What does the received AI summary say\?/);
+  assert.doesNotMatch(r.text('chat-messages'), /Explain the production trade-offs and failure modes|Socratic System Design Challenge|architectural rationale/i);
+  ep.flashcards = []; const noCards = runtime([ep]); await noCards.load(); await noCards.context.respondToQuery('Interview me');
+  assert.match(noCards.text('chat-messages'), /insufficient.*evidence|no supported.*question/i);
+  assert.doesNotMatch(noCards.text('chat-messages'), /Architectural Prompt|Explain the production trade-offs/i);
+});
+test('offline matching query shows received passages without expert expansion and unrelated queries admit insufficient evidence', async () => {
+  const r = runtime([episode('ep-900')]); await r.load(); await r.context.respondToQuery('received summary');
+  assert.match(r.text('chat-messages'), /ai received summary/);
+  assert.doesNotMatch(r.text('chat-messages'), /high-reliability production|non-deterministic execution|compliance risks|validated architectural controls/i);
+  await r.context.respondToQuery('quantum entanglement'); assert.match(r.text('chat-messages'), /insufficient.*evidence/i);
+});
+test('offline greeting describes received summaries without asserting full-paper expertise', async () => {
+  const ep = episode('ep-900'); ep.content_basis = 'rss_summaries'; const r = runtime([ep]); await r.load(); await r.context.respondToQuery('hello');
+  assert.match(r.text('chat-messages'), /received RSS summaries/i); assert.doesNotMatch(r.text('chat-messages'), /strictly grounded|Lead Enterprise Architect|inspect low-level system mechanisms|Socratic Copilot/i);
+});
+test('offline aliases for empty security and operational domains explain captured coverage gaps', async () => {
+  for (const query of ['security','SRE','governance','cloud']) {
+    const r = runtime([episode('ep-900')]); await r.load(); await r.context.respondToQuery(query);
+    assert.match(r.text('chat-messages'), /No articles available from checked sources/);
+    assert.doesNotMatch(r.text('chat-messages'), /Grounded Intelligence Briefing/);
+  }
+});
+function acceptedEpisodeWithoutTakeawayBullets() {
+  // Exercise the actual synthesis producer and validator before the same JSON
+  // enters the actual inline SPA. No providers, .env, storage or app import.
+  const result = spawnSync(process.env.TECHPULSE_TEST_PYTHON || 'python3', ['-B', '-c', `
+import json
+from src.synthesizer import generate_deterministic_fallback, validate_synthesis
+from src.content_availability import DOMAIN_ORDER
+corpus = {d: [] for d in DOMAIN_ORDER}
+corpus['ai'] = [{'domain': 'ai', 'title': 'Received AI release', 'summary': 'Actual received AI summary.', 'source_name': 'AI publisher', 'url': 'https://example.test/ai'}]
+episode = generate_deterministic_fallback(corpus, 900)
+episode['takeaways']['ai']['bullets'] = []
+episode['audio_url'] = '/audio/ep-900.mp3'
+episode['domain_audio'] = {'ai': '/audio/ep-900-ai.mp3'}
+episode['audio_availability'] = {'podcast': {'status': 'available', 'reason': 'Recorded output available'}, 'domains': {d: {'status': 'available' if d == 'ai' else 'unavailable', 'reason': 'Recorded domain audio available' if d == 'ai' else 'No domain narration'} for d in DOMAIN_ORDER}}
+ok, reason = validate_synthesis(episode)
+assert ok, reason
+print(json.dumps(episode))
+`], { cwd: new URL('../', import.meta.url), encoding: 'utf8', env: { PATH: process.env.PATH, PYTHON_DOTENV_DISABLED: '1', GEMINI_API_KEY: '', API_SECRET_KEY: '', PYTHONDONTWRITEBYTECODE: '1', TZ: 'Asia/Singapore' } });
+  assert.equal(result.status, 0, 'actual Python validator must accept fixture: ' + result.stderr);
+  return JSON.parse(result.stdout);
+}
+test('validator-accepted available domain with no takeaway bullets preserves chapters, cards and recorded audio', async () => {
+  const ep = acceptedEpisodeWithoutTakeawayBullets(), r = runtime([ep]); await r.load();
+  assert.match(r.text('chapters-list'), /Received AI release/); assert.equal(r.text('card-index-badge'), 'Card 1/1');
+  assert.equal(r.text('fc-question'), 'What does the received summary report about Received AI release?'); assert.equal(r.elements.get('play-btn').disabled,false);
+  assert.equal(r.elements.get('native-audio').src,'/audio/ep-900.mp3'); assert.match(r.text('content-ai'), /No takeaway summary passages recorded/i);
+  assert.match(r.text('content-ai'), /Received AI release/); assert.doesNotMatch(r.text('content-ai'), /No articles available from checked sources|unsupported article content/);
+  r.context.playArticleAudio('ai'); await settle(); assert.equal(r.elements.get('native-audio').src,'/audio/ep-900-ai.mp3'); assert.equal(r.elements.get('native-audio').playCount,1);
+  await r.context.respondToQuery('Interview me'); assert.match(r.text('chat-messages'), /What does the received summary report about Received AI release\?/);
+  await r.context.respondToQuery('overview'); assert.match(r.text('chat-messages'), /Insufficient article evidence in the recorded summary passages/);
+});

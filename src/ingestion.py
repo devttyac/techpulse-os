@@ -8,6 +8,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Dict, List, Any
 from urllib.parse import urlparse
+from xml.sax import SAXParseException
 import feedparser
 import httpx
 from bs4 import BeautifulSoup
@@ -97,6 +98,12 @@ async def fetch_feed_items(client: httpx.AsyncClient, domain: str, feed_meta: Di
 
         parsed = feedparser.parse(response.text)
         stats["parse_warning"] = bool(parsed.get("bozo"))
+        # A valid empty RSS/Atom feed is quiet. An HTML page or unusable parse
+        # is unavailable, even when feedparser returned an empty entries list.
+        unusable_xml = isinstance(parsed.get("bozo_exception"), SAXParseException) and not parsed.entries
+        if (not parsed.get("version") and not parsed.entries) or unusable_xml:
+            stats["outcome"] = "parse_error"
+            return items
         for entry in parsed.entries[:5]:  # Top 5 most recent entries per feed
             stats["entries_considered"] += 1
             title = entry.get("title", "").strip()
@@ -176,8 +183,8 @@ async def ingest_all_domains(*, diagnostics=None) -> Dict[str, List[Dict[str, An
             feeds = [f for f in stats["feeds"] if f["domain"] == domain]
             stats["per_domain"][domain] = (sum(f["accepted"] for f in feeds)
                                           if feeds and all("accepted" in f for f in feeds) else None)
-        stats["feeds_failed"] = sum(f.get("outcome") in ("http_error", "failed") for f in stats["feeds"])
-        stats["feeds_unfinished"] = sum(f.get("outcome") not in ("http_error", "failed", "success", "cancelled") for f in stats["feeds"])
+        stats["feeds_failed"] = sum(f.get("outcome") in ("http_error", "failed", "parse_error") for f in stats["feeds"])
+        stats["feeds_unfinished"] = sum(f.get("outcome") not in ("http_error", "failed", "parse_error", "success", "cancelled") for f in stats["feeds"])
         stats["links_rejected"] = sum(f.get("rejected_links", 0) for f in stats["feeds"])
 
     total_articles = sum(len(v) for v in results.values())

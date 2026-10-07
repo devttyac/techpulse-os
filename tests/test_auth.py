@@ -110,7 +110,7 @@ def test_key_set_missing_header_is_rejected():
     async def go():
         with _env(TEST_KEY):
             async with _client() as c:
-                for method, path in (("GET", "/api/episodes"), ("POST", "/api/settings")):
+                for method, path in (("GET", "/api/episodes"), ("GET", "/api/refresh/status"), ("POST", "/api/settings")):
                     r = await c.request(method, path, json={} if method == "POST" else None)
                     assert r.status_code == 401, f"{method} {path}: expected 401, got {r.status_code}"
     _run(go())
@@ -120,7 +120,7 @@ def test_key_set_wrong_header_is_rejected():
     async def go():
         with _env(TEST_KEY):
             async with _client() as c:
-                for method, path in (("GET", "/api/episodes"), ("POST", "/api/settings")):
+                for method, path in (("GET", "/api/episodes"), ("GET", "/api/refresh/status"), ("POST", "/api/settings")):
                     r = await c.request(
                         method, path, headers={"X-API-Key": "wrong"},
                         json={} if method == "POST" else None,

@@ -22,7 +22,9 @@ from pydantic import BaseModel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from src.ingestion import ingest_all_domains
+from src.ingestion import ingest_all_domains, DOMAIN_FEEDS
+from src.content_availability import (DOMAIN_ORDER, SOURCE_FAILURES, build_content_availability,
+    empty_source_health, build_source_health, load_source_health, save_source_health, sanitize_source_health)
 from src.synthesizer import synthesize_briefing, local_now
 from src.tts_engine import generate_episode_podcast_audio, generate_all_domain_audios
 from src.grounded_chat import process_grounded_chat
@@ -83,6 +85,8 @@ async def lifespan(app: FastAPI):
         logger.info("API authentication is enabled: /api/* requires a valid X-API-Key header")
     else:
         logger.warning("API is in READ-ONLY mode: API_SECRET_KEY is unset, so all non-GET /api/* requests are rejected")
+    global source_health
+    source_health = load_source_health(STORAGE_DIR)
     cfg = load_config()
     cron_expr = cfg.get("cron_schedule", os.getenv("CRON_SCHEDULE", "0 7 * * *"))
     try:
@@ -510,7 +514,43 @@ pipeline_state = {
     "error": None
 }
 
+# Recovery reads one bounded file. Polling never scans episodes or source feeds.
+source_health = load_source_health(STORAGE_DIR)
 current_pipeline_task: Optional[asyncio.Task] = None
+
+
+def _cache_source_health(snapshot):
+    global source_health
+    source_health = sanitize_source_health(snapshot)
+    try:
+        save_source_health(STORAGE_DIR, source_health)
+    except Exception:
+        # The valid in-memory check survives persistence failure.
+        logger.error("Source-health snapshot write failed")
+
+
+def _publish_source_check(run):
+    snapshot = build_source_health(run.data["ingestion"], run.data["run_id"], datetime.now(timezone.utc).isoformat())
+    snapshot["latest_run"] = source_health.get("latest_run")
+    _cache_source_health(snapshot)
+
+
+def _finish_source_run(run):
+    snapshot = dict(source_health)
+    if run.data["stages"]["ingestion"]["status"] != "completed":
+        attempt = build_source_health(run.data["ingestion"], run.data["run_id"], run.data["finished_at"])
+        snapshot["status"] = "cancelled" if run.data["status"] == "cancelled" else "unknown"
+        snapshot["last_attempt_at"] = run.data["finished_at"]
+        snapshot["last_attempt"] = {key: attempt[key] for key in ("run_id", "checked_at", "status", "available_sources", "sources")}
+        snapshot["last_attempt"]["status"] = snapshot["status"]
+    snapshot["latest_run"] = {"status": run.data["status"], "finished_at": run.data["finished_at"],
+                              "episode_id": run.data.get("episode_id")}
+    _cache_source_health(snapshot)
+
+
+def _usable_audio(path):
+    return isinstance(path, (str, os.PathLike)) and os.path.isfile(path) and os.path.getsize(path) > 1000
+
 
 def _audit_action(action, outcome, *, run_id=None, changed_fields=()):
     try:
@@ -550,6 +590,7 @@ def _finalize_pipeline_run(run, status, category=None, episode_path=None, episod
             run.data["status"] = "failed"
             run.data["error_category"] = "episode_metadata_write_failed"
             logger.error("Episode provenance write failed")
+    _finish_source_run(run)
     run.append_attempted = True
     try:
         append_record(STORAGE_DIR, "runs.jsonl", run.data)
@@ -578,7 +619,7 @@ async def run_daily_pipeline(*, run_record=None):
     pipeline_state["running"] = True
     pipeline_state["stage"] = "checking"
     pipeline_state["progress"] = 15
-    pipeline_state["message"] = "Scanning RSS feeds for newly published technical whitepapers..."
+    pipeline_state["message"] = "Checking configured RSS sources for available articles..."
     pipeline_state["error"] = None
 
     try:
@@ -588,6 +629,21 @@ async def run_daily_pipeline(*, run_record=None):
         # Keep counts truthful even when an existing caller supplies a custom
         # ingestion function which does not populate optional feed diagnostics.
         run.data["ingestion"]["per_domain"] = {d: len(items) for d, items in corpus.items()}
+        _publish_source_check(run)
+        availability = build_content_availability(corpus, run.data["ingestion"])
+        run.data["content_availability"] = availability
+        if not any(state["candidate_count"] for state in availability["domains"].values()):
+            feeds = run.data["ingestion"].get("feeds", [])
+            expected_ids = {f"{domain}:{i}" for domain, values in DOMAIN_FEEDS.items() for i in range(len(values))}
+            checked_ids = {feed.get("feed_id") for feed in feeds if isinstance(feed, dict)}
+            all_failed = checked_ids == expected_ids and all(feed.get("outcome") in SOURCE_FAILURES for feed in feeds)
+            terminal_status = "failed" if all_failed else "no_content"
+            terminal_error = "sources_unavailable" if all_failed else None
+            pipeline_state.update(stage="error" if all_failed else "no_content", progress=100,
+                message="Checked sources were unavailable. Previous episodes remain available in history." if all_failed else
+                        "No articles available from checked sources. Previous episodes remain available in history.",
+                error=terminal_error, last_run=datetime.now(timezone.utc).isoformat())
+            return
         dedup_started = time.monotonic()
         run.data["stages"]["dedup"]["status"] = "running"
         all_corpus_urls = sorted([item["url"] for items in corpus.values() for item in items if item.get("url")])
@@ -603,11 +659,10 @@ async def run_daily_pipeline(*, run_record=None):
 
             # Feed the prior episode's chapter titles to validate_synthesis's
             # anti-repeat rule so it actually fires in production. Only trust
-            # a complete, well-formed prior chapter list (exactly 8, no Nones)
-            # -- a malformed or short prior episode must not cause spurious
-            # rejections of an otherwise-good synthesis.
+            # a well-formed prior list. Sparse episodes have fewer chapters;
+            # malformed prior metadata must not cause spurious rejection.
             prior_chapter_titles = [c.get("title") for c in latest_ep.get("chapters", [])]
-            if len(prior_chapter_titles) == 8 and all(t is not None for t in prior_chapter_titles):
+            if 1 <= len(prior_chapter_titles) <= 8 and all(isinstance(t, str) and t.strip() for t in prior_chapter_titles):
                 previous_titles = prior_chapter_titles
 
             latest_hash = latest_ep.get("corpus_hash")
@@ -636,7 +691,7 @@ async def run_daily_pipeline(*, run_record=None):
                 logger.info(f"Ingested corpus hash matches latest Episode #{latest_num}. Skipping duplicate synthesis.")
                 pipeline_state["stage"] = "up_to_date"
                 pipeline_state["progress"] = 100
-                pipeline_state["message"] = "Feeds are up-to-date! No new whitepapers published as yet."
+                pipeline_state["message"] = "Checked RSS candidates match the previous briefing. History remains available."
                 pipeline_state["last_episode_id"] = latest_ep["id"]
                 pipeline_state["last_run"] = datetime.now(timezone.utc).isoformat()
                 pipeline_state["running"] = False
@@ -653,7 +708,7 @@ async def run_daily_pipeline(*, run_record=None):
         
         pipeline_state["stage"] = "synthesizing"
         pipeline_state["progress"] = 50
-        pipeline_state["message"] = f"New papers found! Synthesizing briefing for Episode #{next_num}..."
+        pipeline_state["message"] = f"Available articles found. Synthesizing briefing for Episode #{next_num}..."
 
         # Step 2: Synthesis with 120s hard timeout (schema-constrained output is
         # 3-5x larger than before -- 8 full takeaways vs 1 -- and this single
@@ -661,6 +716,17 @@ async def run_daily_pipeline(*, run_record=None):
         briefing_data = await _observed_stage(run, "synthesis", asyncio.wait_for(
             synthesize_briefing(corpus, next_num, previous_titles=previous_titles,
                                diagnostics=run.data["synthesis"]), timeout=120.0))
+        if briefing_data is None:
+            terminal_status = "no_content"
+            pipeline_state.update(stage="no_content", progress=100,
+                message="No articles available from checked sources. Previous episodes remain available in history.",
+                last_run=datetime.now(timezone.utc).isoformat())
+            return
+        briefing_data["content_availability"] = availability
+        for domain, state in availability["domains"].items():
+            takeaway = briefing_data.get("takeaways", {}).get(domain)
+            if isinstance(takeaway, dict):
+                takeaway.update(domain=domain, status=state["status"], reason=state["reason"])
         run.data["episode_id"] = briefing_data["id"]
         run.data["selection"] = selection_record(corpus, briefing_data, run.data["synthesis"]["path"],
                                                 provider_attempted=bool(run.data["synthesis"]["attempts"]))
@@ -672,21 +738,52 @@ async def run_daily_pipeline(*, run_record=None):
         pipeline_state["message"] = "Synthesizing Neural Edge-TTS podcast dialogue (GuyNeural & AriaNeural)..."
 
         # Step 3: Audio TTS with 60s hard timeout
-        final_mp3, dyn_chapters, duration_str, total_secs = await _observed_stage(run, "podcast_audio",
-            asyncio.wait_for(generate_episode_podcast_audio(briefing_data, AUDIO_DIR), timeout=60.0), "call_returned")
-        run.data["stages"]["podcast_audio"].update(output_file_present=os.path.isfile(final_mp3),
+        try:
+            final_mp3, dyn_chapters, duration_str, total_secs = await _observed_stage(run, "podcast_audio",
+                asyncio.wait_for(generate_episode_podcast_audio(briefing_data, AUDIO_DIR), timeout=60.0), "call_returned")
+        except Exception as exc:
+            # Audio failure does not discard the already-generated text briefing.
+            # CancelledError inherits BaseException and continues to propagate.
+            logger.warning("Podcast audio unavailable (category=%s)", error_category(exc))
+            final_mp3, dyn_chapters, duration_str, total_secs = None, [], "00:00", 0
+        run.data["stages"]["podcast_audio"].update(output_file_present=_usable_audio(final_mp3),
             returned_chapters=len(dyn_chapters), audio_validated=False)
+        podcast_present = (_usable_audio(final_mp3) and os.path.abspath(final_mp3) ==
+                           os.path.abspath(os.path.join(AUDIO_DIR, f"{briefing_data['id']}.mp3")))
+        briefing_data["audio_url"] = f"/audio/{briefing_data['id']}.mp3" if podcast_present else ""
+        audio_availability = briefing_data.setdefault("audio_availability", {})
+        audio_availability["podcast"] = {"status": "available" if podcast_present else "unavailable",
+                                          "reason": "Audio generated." if podcast_present else "Audio generation failed."}
+        if not podcast_present:
+            duration_str, total_secs = "00:00", 0
         briefing_data["duration"] = duration_str
         briefing_data["total_seconds"] = total_secs
         if dyn_chapters:
             briefing_data["chapters"] = dyn_chapters
 
         # Generate standalone per-domain audio files
-        domain_outputs = await _observed_stage(run, "domain_audio", asyncio.wait_for(
-            generate_all_domain_audios(briefing_data, AUDIO_DIR), timeout=60.0), "call_returned")
+        try:
+            domain_outputs = await _observed_stage(run, "domain_audio", asyncio.wait_for(
+                generate_all_domain_audios(briefing_data, AUDIO_DIR), timeout=60.0), "call_returned")
+        except Exception as exc:
+            logger.warning("Domain audio unavailable (category=%s)", error_category(exc))
+            domain_outputs = {}
         run.data["stages"]["domain_audio"].update(returned_outputs=len(domain_outputs),
             expected_domains=len(briefing_data.get("takeaways", {})), audio_validated=False)
         
+        domain_outputs = domain_outputs if isinstance(domain_outputs, dict) else {}
+        briefing_data["domain_audio"] = {domain: f"/audio/{briefing_data['id']}-{domain}.mp3"
+            for domain, path in domain_outputs.items() if domain in DOMAIN_ORDER
+            and availability["domains"][domain]["status"] == "available" and _usable_audio(path)
+            and os.path.abspath(path) == os.path.abspath(os.path.join(AUDIO_DIR, f"{briefing_data['id']}-{domain}.mp3"))}
+        domain_availability = {}
+        for domain in DOMAIN_ORDER:
+            present = domain in briefing_data["domain_audio"]
+            state = availability["domains"][domain]
+            domain_availability[domain] = {"status": "available" if present else "unavailable",
+                "reason": "Audio generated." if present else state["reason"] if state["status"] != "available" else "Audio generation failed."}
+        audio_availability["domains"] = domain_availability
+
         # Save episode JSON
         ep_path = os.path.join(EPISODES_DIR, f"{briefing_data['id']}.json")
         with run.stage("episode_write"):
@@ -729,8 +826,8 @@ async def run_daily_pipeline(*, run_record=None):
         terminal_error = error_category(e)
         pipeline_state["running"] = False
         pipeline_state["stage"] = "error"
-        pipeline_state["error"] = str(e)
-        pipeline_state["message"] = f"Pipeline failed: {e}"
+        pipeline_state["error"] = terminal_error
+        pipeline_state["message"] = "Pipeline failed. Check the run status for details."
         logger.error("Daily pipeline failed (category=%s)", terminal_error)
     finally:
         pipeline_state["running"] = False
@@ -809,7 +906,7 @@ async def manual_refresh(auth: bool = Depends(require_auth)):
     pipeline_state["running"] = True
     pipeline_state["stage"] = "checking"
     pipeline_state["progress"] = 10
-    pipeline_state["message"] = "Scanning RSS feeds for newly published technical whitepapers..."
+    pipeline_state["message"] = "Checking configured RSS sources for available articles..."
     pipeline_state["error"] = None
 
     run = RunRecord("manual")
@@ -862,7 +959,7 @@ async def reset_refresh(auth: bool = Depends(require_auth)):
 
 @app.get("/api/refresh/status")
 async def get_refresh_status(auth: bool = Depends(require_auth)):
-    return pipeline_state
+    return {**pipeline_state, "source_health": source_health}
 
 @app.get("/api/settings")
 async def get_settings(auth: bool = Depends(require_auth)):
@@ -944,12 +1041,18 @@ type: literature-note
 
 ## Timecoded Chapters & Primary Whitepapers
 """
+    if ep.get("content_basis") == "rss_summaries":
+        md_content += "\nContent basis: received RSS summaries; full article bodies were not checked.\n\n"
     for c in ep.get("chapters", []):
         md_content += f"- **[{c.get('time')}]** {c.get('title')} — [{c.get('source_name')}]({c.get('source_url')})\n"
 
     md_content += "\n---\n\n## Domain Takeaways\n"
     for dom, data in ep.get("takeaways", {}).items():
         md_content += f"\n### {data.get('badge', dom.upper())}: {data.get('title')}\n"
+        availability = ep.get("content_availability", {}).get("domains", {}).get(dom, {})
+        if availability.get("status") in ("no_received_candidates", "source_unavailable"):
+            md_content += f"\n{availability.get('reason', 'No articles available from checked sources.')}\n"
+            continue
         for b in data.get("bullets", []):
             if ":" in b:
                 hdr, body = b.split(":", 1)
@@ -1028,6 +1131,28 @@ async def serve_audio(filename: str):
     file_path = os.path.join(AUDIO_DIR, filename)
     seed_path = os.path.join(os.path.dirname(__file__), "..", "seed_data", "audio", filename)
     
+    audio_match = re.fullmatch(r"(ep-[0-9]+)(?:-([a-z]+))?\.mp3", filename)
+    if audio_match:
+        episode_id, domain = audio_match.groups()
+        episode_file = os.path.join(EPISODES_DIR, f"{episode_id}.json")
+        if os.path.isfile(episode_file):
+            with open(episode_file) as fp:
+                episode = json.load(fp)
+            coverage = episode.get("content_availability")
+            if isinstance(coverage, dict) and coverage.get("schema_version") == 1:
+                audio_status = episode.get("audio_availability", {})
+                if domain:
+                    state = coverage.get("domains", {}).get(domain, {})
+                    declared = episode.get("domain_audio", {}).get(domain)
+                    permitted = (state.get("status") == "available"
+                        and audio_status.get("domains", {}).get(domain, {}).get("status") == "available"
+                        and declared == f"/audio/{filename}")
+                else:
+                    permitted = (audio_status.get("podcast", {}).get("status") == "available"
+                        and episode.get("audio_url") == f"/audio/{filename}")
+                if not permitted:
+                    raise HTTPException(status_code=404, detail="Audio unavailable for this episode coverage")
+
     # 1. Always ensure volume file is up to date with full-article seed audio
     if os.path.exists(seed_path):
         if not os.path.exists(file_path) or os.path.getsize(file_path) < os.path.getsize(seed_path):
@@ -1128,6 +1253,11 @@ async def podcast_rss(request: Request):
             c_href = html.escape(_safe_url(c.get("source_url")), quote=True)
             show_notes_html += f"<li><strong>{c_time}</strong>: <a href=\"{c_href}\">{c_title} ({c_source})</a></li>"
         show_notes_html += "</ul>"
+        if ep.get("content_basis") == "rss_summaries":
+            show_notes_html += "<p>Content basis: received RSS summaries; full article bodies were not checked.</p>"
+        for domain, state in ep.get("content_availability", {}).get("domains", {}).items():
+            if state.get("status") in ("no_received_candidates", "source_unavailable"):
+                show_notes_html += f"<p>{html.escape(domain.upper())}: {html.escape(str(state.get('reason', 'No articles available from checked sources.')))}</p>"
         
         content_encoded = ET.SubElement(item, "content:encoded")
         content_encoded.text = show_notes_html
@@ -1144,11 +1274,16 @@ async def podcast_rss(request: Request):
             if os.path.exists(seed_audio_path):
                 audio_length = str(os.path.getsize(seed_audio_path))
 
-        ET.SubElement(item, "enclosure", {
-            "url": audio_url,
-            "length": audio_length,
-            "type": "audio/mpeg"
-        })
+        coverage = ep.get("content_availability")
+        has_coverage = isinstance(coverage, dict) and coverage.get("schema_version") == 1
+        podcast_available = (ep.get("audio_availability", {}).get("podcast", {}).get("status") == "available"
+                             and ep.get("audio_url") == f"/audio/{ep.get('id')}.mp3")
+        if not has_coverage or (podcast_available and _usable_audio(audio_file_path)):
+            ET.SubElement(item, "enclosure", {
+                "url": audio_url,
+                "length": audio_length,
+                "type": "audio/mpeg"
+            })
         
         # Podlove Simple Chapters for mobile lock screens
         psc = ET.SubElement(item, "psc:chapters", {"version": "1.2"})

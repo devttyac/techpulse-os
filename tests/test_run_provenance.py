@@ -101,10 +101,10 @@ class RunProvenanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([a["outcome"] for a in stats.get("attempts", [])], ["url_provenance_rejected", "accepted"])
         self.assertEqual(stats["attempts"][0]["url_substitutions"], 3)
 
-    async def test_post_response_exception_is_not_left_as_returned_response(self):
+    async def test_nonobject_json_is_classified_as_validation_rejection(self):
         stats = {}
         await self.synthesize(lambda payload: ["[]", payload], stats)
-        self.assertEqual(stats["attempts"][0]["outcome"], "postprocessing_failure")
+        self.assertEqual(stats["attempts"][0]["outcome"], "validation_rejected")
         self.assertEqual(stats["attempts"][1]["outcome"], "accepted")
 
     def test_known_environment_secrets_never_enter_model_or_article_identifiers(self):

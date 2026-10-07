@@ -421,7 +421,7 @@
 
               <!-- Native HTML5 Audio Element (Direct Browser Control) -->
               <div class="pt-1">
-                <audio id="native-audio" controls class="w-full h-8 rounded-lg opacity-90 brightness-95" preload="metadata" src="/audio/ep-142.mp3"></audio>
+                <audio id="native-audio" controls class="w-full h-8 rounded-lg opacity-90 brightness-95" preload="metadata"></audio>
                 <div id="audio-status-msg" class="text-[10px] font-mono text-cyan-400 mt-1 hidden"></div>
               </div>
 
@@ -863,6 +863,14 @@
                 <span>Stop</span>
               </button>
             </div>
+            <details id="source-health" class="rounded-xl theme-card-bg border p-3 text-[11px] text-slate-300">
+              <summary id="source-health-summary" class="cursor-pointer font-medium" aria-live="polite">Source health: Not yet checked</summary>
+              <p id="source-health-time" class="mt-2 text-slate-400">Last captured check: Not recorded</p>
+              <p id="source-health-body" class="mt-1">Article bodies: Not checked</p>
+              <p id="source-health-note" class="mt-1"></p>
+              <ul id="source-health-details" class="mt-2 space-y-1"></ul>
+            </details>
+            <p id="latest-check-banner" class="hidden rounded-xl border border-cyan-500/30 p-3 text-[11px] text-cyan-300" role="status"></p>
           </div>
         </section>
 
@@ -879,7 +887,7 @@
           </div>
 
           <!-- Interactive 3D Flip Flashcard -->
-          <div class="flashcard-container" onclick="flipFlashcard()">
+          <div id="fc-flip" class="flashcard-container" role="button" tabindex="0" aria-label="Flip flashcard" onclick="flipFlashcard()" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); flipFlashcard(); }">
             <div id="flashcard-inner" class="flashcard-inner relative">
               
               <!-- Front Side -->
@@ -918,14 +926,14 @@
           <!-- Flashcard Deck Controls (Wraps gracefully on phones) -->
           <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
             <div class="flex items-center gap-1">
-              <button onclick="prevFlashcard(event)" class="px-2.5 py-1 rounded-lg bg-black/50 hover:bg-black/80 text-slate-300 hover:text-white border border-white/10 text-xs font-mono transition">‹ Prev</button>
-              <button onclick="nextFlashcard(event)" class="px-2.5 py-1 rounded-lg bg-black/50 hover:bg-black/80 text-slate-300 hover:text-white border border-white/10 text-xs font-mono transition">Next ›</button>
+              <button id="fc-prev" onclick="prevFlashcard(event)" class="px-2.5 py-1 rounded-lg bg-black/50 hover:bg-black/80 text-slate-300 hover:text-white border border-white/10 text-xs font-mono transition">‹ Prev</button>
+              <button id="fc-next" onclick="nextFlashcard(event)" class="px-2.5 py-1 rounded-lg bg-black/50 hover:bg-black/80 text-slate-300 hover:text-white border border-white/10 text-xs font-mono transition">Next ›</button>
             </div>
 
             <div class="flex items-center gap-1 text-[10px] font-mono">
-              <button onclick="rateRecall('hard', event)" class="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition">Hard</button>
-              <button onclick="rateRecall('good', event)" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition">Good</button>
-              <button onclick="rateRecall('easy', event)" class="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition">Mastered ✓</button>
+              <button id="fc-hard" onclick="rateRecall('hard', event)" class="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition">Hard</button>
+              <button id="fc-good" onclick="rateRecall('good', event)" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition">Good</button>
+              <button id="fc-easy" onclick="rateRecall('easy', event)" class="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition">Mastered ✓</button>
             </div>
           </div>
 
@@ -1211,7 +1219,20 @@
     let currentEpisodeId = 'ep-142';
     function renderFlashcard() {
       const card = flashcards[currentCardIndex] || flashcards[0];
-      if (!card) return;
+      for (const id of ['fc-prev', 'fc-next', 'fc-hard', 'fc-good', 'fc-easy']) {
+        const control = document.getElementById(id);
+        if (control) control.disabled = !card || ((id === 'fc-prev' || id === 'fc-next') && flashcards.length < 2);
+      }
+      const flip = document.getElementById('fc-flip');
+      if (flip) { flip.setAttribute('aria-disabled', String(!card)); flip.setAttribute('tabindex', card ? '0' : '-1'); }
+      if (!card) {
+        currentCardIndex = 0;
+        for (const [id, text] of [['fc-domain-badge', 'No cards'], ['fc-question', 'No flashcards available for this episode.'], ['fc-answer', ''], ['fc-source-cite', ''], ['card-index-badge', 'Card 0/0']]) {
+          const el = document.getElementById(id); if (el) el.innerText = text;
+        }
+        const inner = document.getElementById('flashcard-inner'); if (inner) inner.classList.remove('flipped');
+        return;
+      }
       
       const badge = document.getElementById('fc-domain-badge') || document.getElementById('card-badge');
       if (badge) {
@@ -1236,18 +1257,21 @@
     }
 
     function flipFlashcard() {
+      if (!flashcards.length) return;
       const inner = document.getElementById('flashcard-inner');
       if (inner) inner.classList.toggle('flipped');
     }
 
     function nextFlashcard(e) {
       if (e) e.stopPropagation();
+      if (!flashcards.length) return;
       currentCardIndex = (currentCardIndex + 1) % flashcards.length;
       renderFlashcard();
     }
 
     function prevFlashcard(e) {
       if (e) e.stopPropagation();
+      if (!flashcards.length) return;
       currentCardIndex = (currentCardIndex - 1 + flashcards.length) % flashcards.length;
       renderFlashcard();
     }
@@ -1278,6 +1302,7 @@
 
     function rateRecall(level, e) {
       if (e) e.stopPropagation();
+      if (!flashcards.length || !currentEpisodeId) return;
       const statusMap = { 'easy': 'mastered', 'good': 'good', 'hard': 'hard' };
       const status = statusMap[level] || 'hard';
       
@@ -2208,6 +2233,50 @@
       gov: { badgeBg: 'bg-white/10 text-orange-300 border border-white/10', dot: 'bg-orange-400' }
     };
 
+    const DOMAIN_IDS = ['ai', 'cloud', 'data', 'sec', 'devops', 'arch', 'finops', 'gov'];
+
+    function coverageState(ep, domain) {
+      const coverage = ep.content_availability;
+      const value = coverage && coverage.schema_version === 1 && coverage.domains ? coverage.domains[domain] : null;
+      return value && ['available', 'no_received_candidates', 'source_unavailable'].includes(value.status) ? value : null;
+    }
+
+    function hasDomainContent(ep, domain) {
+      const state = coverageState(ep, domain);
+      if (state) return state.status === 'available';
+      // Legacy coverage is unknown. Preserve recorded content without inferring
+      // that empty takeaway bullets invalidate its chapters, cards or audio.
+      const data = (ep.takeaways || {})[domain];
+      return !!data && data.status !== 'no_received_candidates' && data.status !== 'source_unavailable' &&
+        ((typeof data.title === 'string' && data.title.trim()) || hasTakeawayPassages(ep, domain));
+    }
+
+    function hasTakeawayPassages(ep, domain) {
+      const state = coverageState(ep, domain), data = (ep.takeaways || {})[domain];
+      return (!state || state.status === 'available') && !!data && Array.isArray(data.bullets) && data.bullets.some(b => typeof b === 'string' && b.trim());
+    }
+
+    function mediaUrl(value) {
+      // Media is a local, explicitly recorded MP3, never an inferred old clip.
+      if (typeof value !== 'string') return '';
+      const path = value.startsWith('/audio/') ? value : '/audio/' + value;
+      return /^\/audio\/[A-Za-z0-9_-]+\.mp3$/.test(path) ? path : '';
+    }
+
+    function episodeAudioUrl(ep) {
+      const status = ep.audio_availability && ep.audio_availability.podcast;
+      if (status && status.status !== 'available') return '';
+      if (ep.content_availability && !DOMAIN_IDS.some(d => hasDomainContent(ep, d))) return '';
+      return mediaUrl(ep.audio_url);
+    }
+
+    function domainAudioUrl(ep, domain) {
+      if (!hasDomainContent(ep, domain)) return '';
+      const status = ep.audio_availability && ep.audio_availability.domains && ep.audio_availability.domains[domain];
+      if (status && status.status !== 'available') return '';
+      return mediaUrl(ep.domain_audio && ep.domain_audio[domain]);
+    }
+
     function updateAllDomainContent(ep) {
       const allDomains = ['ai', 'cloud', 'data', 'sec', 'devops', 'arch', 'finops', 'gov'];
       const takeaways = ep.takeaways || {};
@@ -2219,8 +2288,8 @@
         const data = takeaways[dom];
         const style = DOMAIN_STYLES[dom] || DOMAIN_STYLES.ai;
 
-        if (data) {
-          const bulletsHtml = (data.bullets || []).map(b => `
+        if (hasDomainContent(ep, dom) && data) {
+          const bulletsHtml = (data.bullets || []).filter(b => typeof b === 'string' && b.trim()).map(b => `
             <li class="flex items-start gap-2.5">
               <span class="w-1.5 h-1.5 rounded-full ${style.dot} mt-1.5 flex-shrink-0"></span>
               <span>${escapeHtml(b)}</span>
@@ -2241,10 +2310,10 @@
                   ${escapeHtml(data.badge || dom.toUpperCase())}
                 </span>
                 <div class="flex items-center gap-2">
-                  <button onclick="playArticleAudio('${dom}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition text-[10px] sm:text-[11px] font-semibold active:scale-95">
+                  ${domainAudioUrl(ep, dom) ? `<button onclick="playArticleAudio('${dom}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition text-[10px] sm:text-[11px] font-semibold active:scale-95">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     <span>🎧 Listen to Domain Paper</span>
-                  </button>
+                  </button>` : '<span class="text-[10px] text-slate-400">Domain audio unavailable</span>'}
                   <span class="text-[11px] sm:text-xs text-slate-400 font-mono">Released: ${escapeHtml(data.release_date || ep.date || 'Aug 2026')}</span>
                 </div>
               </div>
@@ -2253,6 +2322,7 @@
                 <ul class="text-xs sm:text-sm text-slate-300 space-y-2 mt-2.5">
                   ${bulletsHtml}
                 </ul>
+                ${hasTakeawayPassages(ep, dom) ? '' : '<p class="text-xs text-slate-400 mt-2.5">No takeaway summary passages recorded for this available domain.</p>'}
               </div>
               ${data.interview_framing ? `
               <div class="p-3 sm:p-3.5 rounded-xl bg-black/30 border border-white/10 flex items-start gap-3">
@@ -2270,14 +2340,13 @@
             </div>
           `;
         } else {
-          container.innerHTML = `
-            <div class="p-5 rounded-2xl theme-card-bg border text-center space-y-3">
-              <span class="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-white/10 text-slate-400 border border-white/10">ARCHIVED BRIEFING</span>
-              <h4 class="text-sm font-semibold text-slate-200">${escapeHtml(ep.title)}</h4>
-              <p class="text-xs text-slate-400 max-w-lg mx-auto leading-relaxed">${escapeHtml(ep.summary)}</p>
-              <p class="text-[11px] text-cyan-400 font-mono">Switch to Episode #142 for today's active ${dom.toUpperCase()} architecture brief.</p>
-            </div>
-          `;
+          const state = coverageState(ep, dom);
+          const explanation = state && state.status === 'source_unavailable'
+            ? 'Checked sources unavailable; coverage could not be established.'
+            : state && state.status === 'no_received_candidates'
+              ? 'No articles available from checked sources'
+              : state ? 'No takeaway summary passages recorded for this available domain.' : 'Domain coverage not recorded for this historical episode.';
+          container.innerHTML = `<div class="p-5 rounded-2xl theme-card-bg border space-y-2"><h4 class="text-sm font-semibold text-slate-200">${dom.toUpperCase()} coverage</h4><p class="text-xs text-slate-400">${escapeHtml(explanation)}</p></div>`;
         }
       });
     }
@@ -2310,12 +2379,12 @@
       
       const chatBadge = document.getElementById('chat-ep-badge');
       if (chatBadge) {
-        chatBadge.innerText = `🔒 Grounded in Episode #${epNum} Papers`;
+        chatBadge.innerText = `Episode #${epNum} · ${DOMAIN_IDS.filter(d => hasDomainContent(ep, d)).length} domains with summaries`;
       }
 
       const chipsContainer = document.getElementById('chat-starter-chips');
       if (chipsContainer) {
-        const starters = EPISODE_STARTERS[epId] || EPISODE_STARTERS['ep-142'];
+        const starters = DOMAIN_IDS.filter(d => hasDomainContent(ep, d)).slice(0, 3).map(domain => ({ label: (ep.takeaways[domain].title || domain.toUpperCase()), prompt: 'Summarize the received article evidence for ' + domain + '.' }));
         chipsContainer.innerHTML = starters.map((s, idx) => `
           <button data-idx="${idx}" class="chat-starter-btn px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 border border-white/10 text-[10px] sm:text-[11px] text-cyan-300 whitespace-nowrap transition flex-shrink-0">${escapeHtml(s.label)}</button>
         `).join('');
@@ -2332,10 +2401,10 @@
             <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 flex-shrink-0 font-mono font-bold text-xs">AI</div>
             <div class="p-3 rounded-2xl bg-night-900 border border-white/5 space-y-1.5 max-w-[92%]">
               <p class="text-slate-200 leading-relaxed text-[11px] sm:text-xs">
-                Active Grounding switched to <strong>Episode #${epNum} (${escapeHtml(ep.title)})</strong>.
+                Selected <strong>Episode #${escapeHtml(epNum)} (${escapeHtml(ep.title)})</strong>.
               </p>
               <p class="text-slate-400 text-[10px] sm:text-[11px]">
-                Ask questions, compare architectures, or tap a starter chip below to evaluate today's papers.
+                ${DOMAIN_IDS.some(d => hasDomainContent(ep, d)) ? 'Ask about the available article summaries using a starter below.' : 'No article evidence available for this episode.'}
               </p>
             </div>
           </div>
@@ -2358,11 +2427,13 @@
       if (synthesis && typeof synthesis === 'object' && !Array.isArray(synthesis)) {
         if (synthesis.path === 'llm' && typeof synthesis.model === 'string' && synthesis.model.trim()) {
           labelText = 'Model-generated (LLM)';
-          detailText = 'Synthesis model: ' + synthesis.model;
+          detailText = 'Synthesis model: ' + synthesis.model + (ep.content_basis === 'rss_summaries' ? ' · Uses received RSS summaries; article bodies were not acquired.' : ' · Article content basis not recorded.');
           modeClasses = 'border-cyan-500/30 text-cyan-300';
         } else if (synthesis.path === 'deterministic_fallback' && synthesis.model === null) {
           labelText = 'Deterministic fallback';
-          detailText = 'Main narration and flashcards use fixed templates; domain takeaways use feed summaries.';
+          detailText = ep.fallback_content === 'source_derived'
+            ? 'Narration, flashcards and domain takeaways use received RSS summaries; article bodies were not acquired.'
+            : 'Main narration and flashcards use fixed templates; domain takeaways use feed summaries.';
           modeClasses = 'border-amber-500/30 text-amber-300';
         }
       }
@@ -2375,13 +2446,13 @@
 
     function changeEpisode(epId) {
       console.log('Switching active episode to:', epId);
-      currentEpisodeId = epId;
       const ep = episodes[epId];
       if (!ep) {
         console.error('Episode not found:', epId);
         return;
       }
 
+      currentEpisodeId = epId;
       renderGenerationProvenance(ep);
 
       const select = document.getElementById('episode-select');
@@ -2407,26 +2478,14 @@
       const progBar = document.getElementById('progress-bar');
       if (progBar) progBar.style.width = '0%';
 
-      const audio = getAudio();
-      if (audio) {
-        audio.pause();
-        audio.src = `/audio/${epId}.mp3?v=ep_${epId}`;
-        audio.load();
-        showAudioStatus(`Ready: Episode #${ep.episode_number || epId}`);
-        const playIcon = document.getElementById('play-icon');
-        const pauseIcon = document.getElementById('pause-icon');
-        if (playIcon) playIcon.classList.remove('hidden');
-        if (pauseIcon) pauseIcon.classList.add('hidden');
-      }
+      initAudioSource(epId);
 
       renderChapters(ep);
       updateAllDomainContent(ep);
 
-      if (ep.flashcards && ep.flashcards.length > 0) {
-        flashcards = ep.flashcards;
-        currentCardIndex = 0;
-        renderFlashcard();
-      }
+      flashcards = (Array.isArray(ep.flashcards) ? ep.flashcards : []).filter(card => !ep.content_availability || (DOMAIN_IDS.includes(card.domain) && hasDomainContent(ep, card.domain)));
+      currentCardIndex = 0;
+      renderFlashcard();
       updateMasteryUI();
 
       updateChatSection(ep, epId);
@@ -2435,7 +2494,7 @@
     function renderChapters(ep) {
       const container = document.getElementById('chapters-list');
       if (!container) return;
-      const chapters = ep.chapters || [];
+      const chapters = (ep.chapters || []).filter(c => !ep.content_availability || (DOMAIN_IDS.includes(c.domain) && hasDomainContent(ep, c.domain)));
       container.innerHTML = chapters.map(c => {
         const sourceName = c.source_name || c.sourceName || 'TechPulse';
         const sourceUrl = c.source_url || c.sourceUrl || '#';
@@ -2447,7 +2506,7 @@
         return `
         <div class="p-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 transition">
           <div class="flex items-center gap-2">
-            <button onclick="jumpTo(${seconds}, '${jumpTime}')" class="px-2 py-0.5 rounded bg-black/70 font-mono text-cyan-400 font-bold hover:bg-cyan-500/20 border border-white/10 text-[11px] transition flex-shrink-0">${escapeHtml(c.time)}</button>
+            <button ${episodeAudioUrl(ep) ? `onclick="jumpTo(${seconds}, '${jumpTime}')"` : 'disabled aria-disabled="true"'} class="px-2 py-0.5 rounded bg-black/70 font-mono text-cyan-400 font-bold hover:bg-cyan-500/20 border border-white/10 text-[11px] transition flex-shrink-0">${escapeHtml(c.time)}</button>
             <span class="text-slate-200 font-medium text-xs leading-snug">${escapeHtml(c.title)}</span>
           </div>
           <div class="flex items-center justify-between sm:justify-end gap-2 pl-7 sm:pl-0">
@@ -2534,6 +2593,7 @@
     }
 
     async function respondToQuery(query) {
+      const requestedEpisode = currentEpisodeId;
       const thread = document.getElementById('chat-messages');
       const typingDiv = document.createElement('div');
       typingDiv.id = 'typing-indicator';
@@ -2542,7 +2602,7 @@
         <div class="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 flex-shrink-0 font-mono font-bold text-[10px]">AI</div>
         <div class="p-2.5 rounded-2xl bg-night-900 border border-white/5 text-slate-400 text-xs flex items-center gap-1.5">
           <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-          <span class="text-[10px] font-mono">Analyzing grounded paper corpus for #${currentEpisodeId}...</span>
+          <span class="text-[10px] font-mono">Looking up recorded episode content for ${escapeHtml(currentEpisodeId)}...</span>
         </div>
       `;
       if (thread) {
@@ -2552,10 +2612,10 @@
 
       try {
         // 1. Try Backend API
-        const backendRes = await callBackendChat(query);
+        const backendRes = await callBackendChat(query, requestedEpisode);
+        if (requestedEpisode !== currentEpisodeId) return;
         
-        const ind = document.getElementById('typing-indicator');
-        if (ind) ind.remove();
+        typingDiv.remove();
 
         if (backendRes) {
           addBotMessage(backendRes.text, backendRes.footerHtml, false);
@@ -2563,140 +2623,57 @@
         }
       } catch (err) {
         console.error("Chat API error:", err);
-        const ind = document.getElementById('typing-indicator');
-        if (ind) ind.remove();
+        typingDiv.remove();
       }
 
-      // 2. Client-Side Dynamic Grounding Engine
+      // Offline support quotes recorded summaries and cards; it adds no expert
+      // conclusions, unseen article passages or invented interview questions.
       const q = query.trim().toLowerCase();
-      const ep = episodes[currentEpisodeId] || episodes['ep-142'] || {};
-      const epNum = ep.episode_number || (currentEpisodeId ? currentEpisodeId.replace('ep-', '') : '142');
-      const takeaways = ep.takeaways || {};
-      let response = '';
-
-      // Conversational Greeting
-      if (['hi', 'hello', 'hey', 'how are you', 'who are you', 'what can you do', 'what\'s up', 'good morning', 'good evening', 'help'].some(g => q === g || q.startsWith(g + ' ') || q.endsWith(' ' + g))) {
-        const domainBadges = Object.values(takeaways).slice(0, 4).map(d => `<span class="p-1.5 rounded-lg bg-black/40 border border-white/5">${escapeHtml(d.badge || 'DOMAIN')}</span>`).join('');
-        response = `
-          <div class="space-y-2.5">
-            <p class="text-slate-200 leading-relaxed text-xs">
-              Hello Aaron! I am your <strong>Lead Enterprise Architect & Socratic Copilot</strong>, strictly grounded in <strong>Episode #${epNum} (${escapeHtml(ep.title || 'Technical Briefing')})</strong>.
-            </p>
-            <p class="text-slate-300 text-[11px] leading-relaxed">
-              I can evaluate production trade-offs, inspect low-level system mechanisms, or conduct a system design interview across today's topics:
-            </p>
-            <div class="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-cyan-300 pt-1">
-              ${domainBadges}
-            </div>
-            <p class="text-slate-400 text-[10px] mt-1">
-              Ask any question or type <strong>"Interview Me"</strong> for a system design challenge.
-            </p>
-          </div>
-        `;
-      } else if (['interview', 'challenge', 'question', 'quiz', 'coach', 'spar', 'test me'].some(k => q.includes(k))) {
-        const topDom = Object.values(takeaways)[0] || {};
-        response = `
-          <div class="space-y-3">
-            <div>
-              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">🎯 Socratic System Design Challenge (Ep #${epNum})</span>
-              <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">${escapeHtml(topDom.title || ep.title || 'System Architecture')}</h4>
-            </div>
-            <div class="p-2.5 rounded-xl bg-black/40 border border-white/10 text-slate-300 text-[11px] space-y-1">
-              <strong class="text-cyan-300 font-mono text-[10px]">Architectural Prompt:</strong>
-              <p class="leading-relaxed">${escapeHtml(topDom.interview_framing || 'Explain the production trade-offs and failure modes.')}</p>
-            </div>
-            <p class="text-slate-400 text-[10px]">Reply with your architectural rationale.</p>
-          </div>
-        `;
-      } else {
-        // Universal Dynamic Semantic Search across active episode
-        const stopwords = new Set(['what', 'is', 'the', 'about', 'tell', 'me', 'how', 'does', 'work', 'in', 'and', 'for', 'of', 'a', 'an', 'to', 'with', 'on', 'can', 'you', 'explain']);
-        const queryWords = q.split(/[^a-z0-9\-]+/).filter(w => !stopwords.has(w) && w.length > 1);
-        
-        let bestHits = [];
-        for (const [dom, d] of Object.entries(takeaways)) {
-          for (const b of (d.bullets || [])) {
-            const bLower = b.toLowerCase();
-            const score = queryWords.reduce((acc, w) => acc + (bLower.includes(w) ? 3 : 0), 0);
-            if (score > 0) {
-              bestHits.push({ score, dom, d, text: b });
-            }
-          }
-        }
-
-        bestHits.sort((a, b) => b.score - a.score);
-
-        if (bestHits.length > 0) {
-          const matched = bestHits[0];
-          const topHits = bestHits.slice(0, 2);
-          const topBullets = topHits.map(h => {
-            const parts = h.text.split(':');
-            if (parts.length > 1) {
-              return `<li class="leading-relaxed"><strong class="text-cyan-300">${escapeHtml(parts[0].trim())}:</strong>${escapeHtml(parts.slice(1).join(':'))}</li>`;
-            }
-            return `<li class="leading-relaxed">${escapeHtml(h.text)}</li>`;
-          }).join('');
-          
-          response = `
-            <div class="space-y-3.5 text-slate-200 text-xs">
-              <div>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-cyan-300 border border-white/10">${escapeHtml(matched.d.badge || matched.dom.toUpperCase())}</span>
-                <h4 class="font-bold text-slate-100 text-xs sm:text-sm mt-1.5">${escapeHtml(matched.d.title)}</h4>
-              </div>
-              <div class="p-3 rounded-xl bg-night-900 border border-white/5 space-y-2.5 text-slate-300 text-[11px] sm:text-xs">
-                <div>
-                  <h5 class="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold mb-1">1. Architectural Foundation & Definition</h5>
-                  <p class="leading-relaxed">In enterprise distributed systems, <strong>${escapeHtml(matched.d.title)}</strong> represents a key operational mechanism for high-reliability production.</p>
-                </div>
-                <div>
-                  <h5 class="text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">2. Production Pitfalls & Failure Modes</h5>
-                  <p class="leading-relaxed">Without strict architectural guardrails, distributed components suffer from non-deterministic execution states and compliance risks.</p>
-                </div>
-                <div>
-                  <h5 class="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold mb-1">3. Episode #${epNum} Implementation Mechanics</h5>
-                  <p class="leading-relaxed mb-1.5">In Episode #${epNum}, this mechanism is implemented through the following validated architectural controls:</p>
-                  <ul class="list-disc list-inside space-y-1.5 pl-1 text-slate-300">
-                    ${topBullets}
-                  </ul>
-                </div>
-              </div>
-              ${matched.d.interview_framing ? `
-              <div class="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[11px] text-slate-300 space-y-1">
-                <strong class="text-amber-300 font-mono text-[10px]">💡 Staff Architect Interview & Regulatory Framing:</strong>
-                <p class="leading-relaxed">${escapeHtml(matched.d.interview_framing)}</p>
-              </div>` : ''}
-            </div>
-          `;
-        } else {
-          // Dynamic Episode Overview Fallback
-          const topDom = Object.entries(takeaways).slice(0, 3);
-          const topCards = topDom.map(([dom, d]) => `
-            <div class="p-2 rounded-xl bg-black/30 border border-white/5 space-y-0.5">
-              <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-white/10 text-cyan-300">${escapeHtml(d.badge || dom.toUpperCase())}</span>
-              <h5 class="text-xs font-bold text-slate-100">${escapeHtml(d.title)}</h5>
-              <p class="text-[11px] text-slate-300 leading-snug">${escapeHtml((d.bullets || [''])[0])}</p>
-            </div>
-          `).join('');
-
-          response = `
-            <div class="space-y-2.5">
-              <h4 class="font-bold text-cyan-300 text-xs sm:text-sm">Grounded Intelligence Briefing: Episode #${epNum}</h4>
-              <p class="text-slate-300 text-[11px] leading-relaxed">
-                Analyzing today's technical corpus for <strong>${escapeHtml(ep.title || 'Technical Briefing')}</strong>:
-              </p>
-              <div class="space-y-2">
-                ${topCards}
-              </div>
-              <div class="pt-1.5 border-t border-white/10 flex items-center justify-between text-[10px] font-mono text-cyan-400">
-                <span>Grounded in Episode #${epNum}</span>
-                <span>8 Domains Available</span>
-              </div>
-            </div>
-          `;
+      if (requestedEpisode !== currentEpisodeId) return;
+      const ep = episodes[requestedEpisode] || {};
+      const aliases = { ai: ['ai', 'agent'], cloud: ['cloud'], data: ['data'], sec: ['security', 'sec'], devops: ['devops', 'sre'], arch: ['architecture', 'arch'], finops: ['finops'], gov: ['governance', 'gov'] };
+      const words = new Set(q.match(/[a-z0-9]+/g) || []);
+      const requestedDomain = DOMAIN_IDS.find(domain => aliases[domain].some(term => words.has(term)));
+      if (requestedDomain && !hasDomainContent(ep, requestedDomain)) {
+        const state = coverageState(ep, requestedDomain);
+        addBotMessage(state && state.status === 'no_received_candidates' ? 'No articles available from checked sources for ' + requestedDomain + '.' : state && state.status === 'source_unavailable' ? 'Checked sources unavailable for ' + requestedDomain + '.' : 'Domain coverage not recorded for ' + requestedDomain + '.');
+        return;
+      }
+      const available = DOMAIN_IDS.filter(domain => hasDomainContent(ep, domain));
+      const summaryDomains = available.filter(domain => hasTakeawayPassages(ep, domain));
+      const cards = (Array.isArray(ep.flashcards) ? ep.flashcards : []).filter(card => card && typeof card.question === 'string' && card.question.trim() && typeof card.answer === 'string' && card.answer.trim() &&
+        (!ep.content_availability || (DOMAIN_IDS.includes(card.domain) && hasDomainContent(ep, card.domain))) && (!requestedDomain || card.domain === requestedDomain));
+      if (!available.length && !cards.length) {
+        addBotMessage('No article evidence available for this episode. Questions and interview prompts require supported articles.');
+        return;
+      }
+      if (['interview', 'challenge', 'question', 'quiz', 'coach', 'spar', 'test me'].some(term => q.includes(term))) {
+        addBotMessage(cards.length ? 'Recorded episode card question: ' + cards[0].question : 'Insufficient article evidence for a supported interview question in this episode.');
+        return;
+      }
+      const basis = ep.content_basis === 'rss_summaries' ? 'Received RSS summaries; article bodies were not acquired.' : 'Recorded episode summary passages; article content basis not recorded.';
+      if (['hi', 'hello', 'hey', 'how are you', 'who are you', 'what can you do', 'good morning', 'good evening', 'help'].some(term => q === term || q.startsWith(term + ' '))) {
+        addBotMessage(basis + ' I can show recorded passages and recall recorded card questions. ' + available.length + ' domains have available content; ' + summaryDomains.length + ' have takeaway passages.');
+        return;
+      }
+      const overview = ['overview', 'summary', 'summarize', 'briefing'].includes(q);
+      const stopwords = new Set(['what', 'is', 'the', 'about', 'tell', 'me', 'how', 'does', 'work', 'in', 'and', 'for', 'of', 'a', 'an', 'to', 'with', 'on', 'can', 'you', 'explain', 'summarize']);
+      const queryWords = [...words].filter(word => !stopwords.has(word) && word.length > 1);
+      const passages = [];
+      for (const domain of summaryDomains) {
+        if (requestedDomain && domain !== requestedDomain) continue;
+        const data = ep.takeaways[domain];
+        for (const text of data.bullets) {
+          if (typeof text !== 'string' || !text.trim()) continue;
+          if (overview || (requestedDomain && queryWords.every(word => aliases[domain].includes(word))) || queryWords.some(word => text.toLowerCase().includes(word))) passages.push({ domain, title: data.title, text });
         }
       }
-
-      addBotMessage(response, '', true);
+      if (!passages.length) {
+        addBotMessage('Insufficient article evidence in the recorded summary passages to answer this query.');
+        return;
+      }
+      const rows = passages.slice(0, 4).map(passage => `<div class="p-2 rounded-xl bg-black/30 border border-white/5 space-y-1"><h5 class="text-xs font-bold text-slate-100">${escapeHtml(passage.title || passage.domain.toUpperCase())}</h5><p class="text-[11px] text-slate-300">${escapeHtml(passage.text)}</p></div>`).join('');
+      addBotMessage(`<div class="space-y-2"><p class="text-[11px] text-slate-400">${escapeHtml(basis)}</p>${rows}<p class="text-[10px] font-mono text-cyan-300">${available.length} domains available</p></div>`, '', true);
     }
 
     function clearChat() {
@@ -2706,7 +2683,7 @@
         <div class="flex items-start gap-2">
           <div class="w-6 h-6 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 flex-shrink-0 font-mono font-bold text-xs">AI</div>
           <div class="p-3 rounded-2xl bg-night-900 border border-white/5 space-y-1 max-w-[90%]">
-            <p class="text-slate-200 text-xs">Chat history cleared. Grounded QA ready for your next question.</p>
+            <p class="text-slate-200 text-xs">Chat history cleared. Recorded summaries and card questions are available when the selected episode includes them.</p>
           </div>
         </div>
       `;
@@ -2833,71 +2810,42 @@
       }
     }
 
-    function playArticleAudio(domain, domainTitle) {
+    function clearAudio() {
       const audio = getAudio();
-      if (!audio) return;
-      
-      const ep = episodes[currentEpisodeId] || {};
-      const data = (ep.takeaways || {})[domain] || {};
-      const title = domainTitle || data.title || (domain.toUpperCase() + ' Architecture Paper');
+      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+      isPlaying = false;
+      const play = document.getElementById('play-icon'), pause = document.getElementById('pause-icon');
+      if (play) play.classList.remove('hidden'); if (pause) pause.classList.add('hidden');
+    }
 
-      const domainUrl = `/audio/${currentEpisodeId}-${domain}.mp3`;
-      audio.src = domainUrl;
-      audio.load();
-      showAudioStatus(`▶ Playing Domain Paper: ${title}`);
-      
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          isPlaying = true;
-          const playIcon = document.getElementById('play-icon');
-          const pauseIcon = document.getElementById('pause-icon');
-          if (playIcon) playIcon.classList.add('hidden');
-          if (pauseIcon) pauseIcon.classList.remove('hidden');
-        }).catch(() => {
-          // Fallback to generic article audio
-          audio.src = `/audio/article-${domain}.mp3`;
-          audio.load();
-          audio.play().catch(err => console.warn("Fallback play error:", err));
-        });
-      }
+    function playArticleAudio(domain, domainTitle) {
+      const audio = getAudio(), ep = episodes[currentEpisodeId] || {};
+      const url = DOMAIN_IDS.includes(domain) ? domainAudioUrl(ep, domain) : '';
+      if (!audio || !url) { showAudioStatus('Domain audio unavailable for this episode.', true); return; }
+      const selected = currentEpisodeId;
+      audio.pause(); audio.src = url; audio.load();
+      showAudioStatus('Playing domain summary: ' + (domainTitle || (ep.takeaways[domain] || {}).title || domain));
+      Promise.resolve(audio.play()).catch(() => {
+        if (selected === currentEpisodeId && audio.src.endsWith(url)) showAudioStatus('Domain audio unavailable for this episode.', true);
+      });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function initAudioSource(epId) {
-      const audio = getAudio();
-      if (!audio) return;
-      audio.src = `/audio/${epId}.mp3?v=tp_${epId}`;
-      audio.load();
-      showAudioStatus(`Ready: ${epId}.mp3 — Full Episode Briefing`);
+      clearAudio();
+      const audio = getAudio(), ep = episodes[epId] || {}, url = episodeAudioUrl(ep);
+      const play = document.getElementById('play-btn'); if (play) play.disabled = !url;
+      if (audio && url) { audio.src = url; audio.load(); showAudioStatus('Ready: ' + epId + ' — Episode briefing'); }
+      else showAudioStatus('Episode audio unavailable.', true);
     }
 
     function togglePlay() {
       const audio = getAudio();
-      if (!audio) return;
-
+      if (!audio || !audio.src || !currentEpisodeId) return;
       if (audio.paused) {
-        showAudioStatus('Streaming audio...');
-        audio.play().then(() => {
-          isPlaying = true;
-          const playIcon = document.getElementById('play-icon');
-          const pauseIcon = document.getElementById('pause-icon');
-          if (playIcon) playIcon.classList.add('hidden');
-          if (pauseIcon) pauseIcon.classList.remove('hidden');
-          showAudioStatus('▶ Playing: ' + currentEpisodeId);
-        }).catch(err => {
-          console.error("Play error:", err);
-          showAudioStatus('Tap play button on native player bar below', true);
-        });
-      } else {
-        audio.pause();
-        isPlaying = false;
-        const playIcon = document.getElementById('play-icon');
-        const pauseIcon = document.getElementById('pause-icon');
-        if (playIcon) playIcon.classList.remove('hidden');
-        if (pauseIcon) pauseIcon.classList.add('hidden');
-        showAudioStatus('⏸ Paused');
-      }
+        const selected = currentEpisodeId;
+        Promise.resolve(audio.play()).catch(() => { if (selected === currentEpisodeId) showAudioStatus('Episode audio unavailable.', true); });
+      } else { audio.pause(); isPlaying = false; showAudioStatus('Paused'); }
     }
 
     function setSpeed(speed) {
@@ -2911,19 +2859,16 @@
     }
 
     function jumpTo(seconds, label) {
-      const curTime = document.getElementById('current-time');
-      if (curTime) curTime.innerText = label;
-      const a = getAudio();
-      if (a) {
-        a.currentTime = seconds;
-        if (a.paused) a.play();
-      }
-      if (a && a.paused) {
-        togglePlay();
-      }
+      const a = getAudio(), ep = episodes[currentEpisodeId] || {}, url = episodeAudioUrl(ep);
+      if (!a || !url || !Number.isFinite(seconds) || seconds < 0) return;
+      if (!a.src.endsWith(url)) { a.pause(); a.src = url; a.load(); }
+      const curTime = document.getElementById('current-time'); if (curTime) curTime.innerText = label;
+      a.currentTime = seconds;
+      if (a.paused) Promise.resolve(a.play()).catch(() => showAudioStatus('Episode audio unavailable.', true));
     }
 
     function seekAudio(event) {
+      if (!episodeAudioUrl(episodes[currentEpisodeId] || {})) return;
       const rect = event.currentTarget.getBoundingClientRect();
       const clickX = event.clientX - rect.left;
       const pct = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
@@ -3120,82 +3065,107 @@
     }
 
     let refreshPollTimer = null;
-    let refreshSafetyTimer = null;
+    let latestSourceHealth = null;
+    let refreshStatusPending = false;
+    let refreshStatusToken = 0;
+
+    function capturedTime(value) {
+      return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.+-]+Z?$/.test(value) && Number.isFinite(Date.parse(value)) ? value : 'Not recorded';
+    }
+
+    function renderSourceHealth(snapshot, loadFailed = false) {
+      if (snapshot && snapshot.schema_version === 1 && !Array.isArray(snapshot)) latestSourceHealth = snapshot;
+      const health = latestSourceHealth;
+      const names = { healthy: 'Healthy', partial: 'Partially unavailable', unavailable: 'Unavailable', not_checked: 'Not yet checked', cancelled: 'Check cancelled', unknown: 'Unknown' };
+      const summary = document.getElementById('source-health-summary');
+      const countsValid = health && Number.isInteger(health.total_sources) && health.total_sources >= 0 && Number.isInteger(health.available_sources) && health.available_sources >= 0 && health.available_sources <= health.total_sources;
+      if (summary) summary.textContent = 'Source health: ' + (health ? (names[health.status] || 'Unknown') : (loadFailed ? 'Unknown — could not be loaded' : 'Not yet checked')) + (countsValid ? ` · ${health.available_sources}/${health.total_sources} sources available` : '');
+      const time = document.getElementById('source-health-time');
+      if (time) time.textContent = 'Last captured check: ' + capturedTime(health && health.checked_at);
+      const body = document.getElementById('source-health-body'); if (body) body.textContent = 'Article bodies: Not checked';
+      const note = document.getElementById('source-health-note');
+      if (note) note.textContent = loadFailed ? 'Source status could not be loaded. Any displayed check is the last captured snapshot.' : health && health.status === 'cancelled' ? 'Check cancelled; showing the last complete check when available.' : 'Latest captured source check; selected episode coverage is historical and independent.';
+      const details = document.getElementById('source-health-details');
+      if (details) {
+        details.textContent = '';
+        const outcomes = { available: 'Available', quiet: 'Quiet — no candidates received', unavailable: 'Unavailable', not_checked: 'Not checked' };
+        const sources = health && Array.isArray(health.sources) ? health.sources.slice(0, 100) : [];
+        sources.forEach(source => {
+          if (!source || typeof source !== 'object') return;
+          const row = document.createElement('li');
+          const name = typeof source.name === 'string' ? source.name.slice(0, 120) : 'Source';
+          const accepted = Number.isInteger(source.accepted) && source.accepted >= 0 ? source.accepted : 0;
+          row.textContent = `${name} (${DOMAIN_IDS.includes(source.domain) ? source.domain.toUpperCase() : 'Unknown domain'}): ${outcomes[source.outcome] || 'Unknown'} · ${accepted} received` + (source.parse_warning === true ? ' · Parse warning' : '');
+          details.appendChild(row);
+        });
+      }
+      const banner = document.getElementById('latest-check-banner');
+      if (banner) {
+        const run = health && health.latest_run;
+        const empty = run && run.status === 'no_content';
+        banner.textContent = empty ? 'Latest check (' + capturedTime(run.finished_at) + '): No articles available from checked sources. Previous dated episodes remain available in history.' : '';
+        banner.classList[empty ? 'remove' : 'add']('hidden');
+      }
+    }
+
+    function stopStatusPolling() {
+      if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
+    }
+
+    function renderRefreshState(state) {
+      const btn = document.getElementById('manual-run-btn'), cancel = document.getElementById('cancel-run-btn');
+      if (cancel) cancel.classList[state.running ? 'remove' : 'add']('hidden');
+      if (!btn) return;
+      if (state.running) {
+        const stage = { checking: 'Scanning feeds', ingesting: 'Ingesting feeds', synthesizing: 'Synthesizing', audio_tts: 'Generating audio' }[state.stage] || 'Processing';
+        btn.textContent = stage + ' (' + (Number.isFinite(state.progress) ? state.progress : 0) + '%)…';
+        btn.disabled = true;
+      } else {
+        const messages = { no_content: 'No articles available from checked sources. History retained.', up_to_date: 'Received articles are already in episode history.', complete: 'Episode ready. Run again', error: 'Pipeline failed. Run again', cancelled: 'Pipeline cancelled. Run again' };
+        btn.textContent = messages[state.stage] || 'Force Re-Fetch Feeds Now';
+        btn.disabled = false;
+      }
+    }
+
+    async function pollRefreshStatus() {
+      if (refreshStatusPending) return;
+      refreshStatusPending = true;
+      const token = ++refreshStatusToken;
+      try {
+        const response = await apiFetch('/api/refresh/status');
+        if (token !== refreshStatusToken) return;
+        if (!response.ok) { renderSourceHealth(null, true); stopStatusPolling(); renderRefreshState({ running: false }); return; }
+        const state = await response.json();
+        if (token !== refreshStatusToken) return;
+        if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Invalid status');
+        renderSourceHealth(state.source_health); renderRefreshState(state);
+        if (state.running) {
+          if (!refreshPollTimer) refreshPollTimer = setInterval(pollRefreshStatus, 1500);
+        } else {
+          stopStatusPolling();
+          if (state.stage === 'complete' && state.last_episode_id && state.last_episode_id !== currentEpisodeId) {
+            await loadEpisodesFromBackend();
+          }
+        }
+        return state;
+      } catch (e) {
+        if (token === refreshStatusToken) { renderSourceHealth(null, true); stopStatusPolling(); renderRefreshState({ running: false }); }
+      } finally { if (token === refreshStatusToken) refreshStatusPending = false; }
+    }
 
     async function triggerManualRun() {
       const btn = document.getElementById('manual-run-btn');
-      const cancelBtn = document.getElementById('cancel-run-btn');
-      if (!btn) return;
-
-      const resetButton = () => {
-        if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
-        if (refreshSafetyTimer) { clearTimeout(refreshSafetyTimer); refreshSafetyTimer = null; }
-        if (cancelBtn) cancelBtn.classList.add('hidden');
-        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Force Re-Fetch Feeds Now</span></span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
-      };
-
+      if (!btn || btn.disabled) return;
+      // Startup/earlier status requests describe the run before this POST.
+      // Invalidate them before awaiting the refresh, then fetch a fresh status.
+      refreshStatusToken++; refreshStatusPending = false;
+      stopStatusPolling();
+      btn.disabled = true; btn.textContent = 'Scanning feeds…';
       try {
-        if (cancelBtn) cancelBtn.classList.remove('hidden');
-        btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Scanning Feeds (15%)...</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
-        
-        const refreshRes = await apiFetch('/api/refresh', { method: 'POST' });
-        if (!refreshRes.ok) { resetButton(); return; }
-
-        if (refreshPollTimer) clearInterval(refreshPollTimer);
-        if (refreshSafetyTimer) clearTimeout(refreshSafetyTimer);
-
-        // Safety timeout: auto-reset button after 60s if server ever unresponsiveness
-        refreshSafetyTimer = setTimeout(() => {
-          resetButton();
-        }, 60000);
-        
-        const checkStatus = async () => {
-          try {
-            const statusRes = await apiFetch('/api/refresh/status');
-            if (statusRes.ok) {
-              const state = await statusRes.json();
-              if (state.running) {
-                if (cancelBtn) cancelBtn.classList.remove('hidden');
-                const stageText = state.stage === 'checking' ? 'Scanning Feeds (15%)' :
-                                  state.stage === 'ingesting' ? 'Ingesting Feeds (25%)' :
-                                  state.stage === 'synthesizing' ? 'Synthesizing (60%)' :
-                                  state.stage === 'audio_tts' ? 'Generating Audio (85%)' : 'Processing...';
-                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>${stageText}</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">${state.progress || 20}%</span>`;
-              } else if (state.stage === 'up_to_date') {
-                if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
-                if (cancelBtn) cancelBtn.classList.add('hidden');
-                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-300 text-xs"><span class="font-bold text-sm">ℹ</span> <span>Feeds up-to-date! No new papers published yet.</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">Current</span>`;
-                setTimeout(resetButton, 3500);
-              } else if (state.stage === 'complete') {
-                if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
-                if (cancelBtn) cancelBtn.classList.add('hidden');
-                btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-emerald-400 text-xs"><span class="font-bold text-sm">✓</span> <span>${escapeHtml(state.message || 'Episode Ready!')}</span></span><span class="font-mono text-[10px] text-emerald-400 font-bold">100%</span>`;
-                await loadEpisodesFromBackend();
-                if (state.last_episode_id) {
-                  changeEpisode(state.last_episode_id);
-                }
-                setTimeout(resetButton, 4000);
-              } else if (state.stage === 'error') {
-                if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
-                if (cancelBtn) cancelBtn.classList.add('hidden');
-                btn.innerHTML = `<span class="text-rose-400 text-xs font-semibold">⚠️ ${escapeHtml(state.message || 'Pipeline Error')}</span>`;
-                setTimeout(resetButton, 3500);
-              } else {
-                resetButton();
-              }
-            }
-          } catch (e) {
-            console.error("Pipeline poll error:", e);
-          }
-        };
-
-        await checkStatus();
-        refreshPollTimer = setInterval(checkStatus, 1500);
-
-      } catch (err) {
-        console.error("Trigger manual run error:", err);
-        resetButton();
-      }
+        const response = await apiFetch('/api/refresh', { method: 'POST' });
+        if (!response.ok) { renderRefreshState({ running: false }); return; }
+        await pollRefreshStatus();
+      } catch (e) { renderRefreshState({ running: false }); }
     }
 
     async function cancelManualRun() {
@@ -3208,8 +3178,9 @@
           if (cancelBtn) cancelBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg> <span>Stop</span>';
           return;
         }
-        if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null; }
-        if (refreshSafetyTimer) { clearTimeout(refreshSafetyTimer); refreshSafetyTimer = null; }
+        refreshStatusToken++; refreshStatusPending = false;
+        stopStatusPolling();
+        await pollRefreshStatus();
         if (btn) {
           btn.innerHTML = `<span class="text-rose-300 font-medium text-xs">⏹ Pipeline Cancelled</span>`;
           setTimeout(() => {
@@ -3253,40 +3224,54 @@
     // ==========================================
     // 7. BACKEND API CALLS & INIT
     // ==========================================
+    function clearEpisodeView(message) {
+      currentEpisodeId = '';
+      const title = document.getElementById('ep-title'); if (title) title.innerText = message;
+      for (const id of ['ep-hosts', 'ep-duration-badge', 'total-time', 'chapters-list', 'chat-starter-chips', 'chat-ep-badge']) {
+        const el = document.getElementById(id); if (el) el.textContent = '';
+      }
+      const select = document.getElementById('episode-select'); if (select) { select.innerHTML = ''; select.value = ''; select.disabled = true; }
+      clearAudio(); showAudioStatus('No episode audio available.', true);
+      const progress = document.getElementById('progress-bar'); if (progress) progress.style.width = '0%';
+      const currentTime = document.getElementById('current-time'); if (currentTime) currentTime.innerText = '00:00';
+      const play = document.getElementById('play-btn'); if (play) play.disabled = true;
+      flashcards = []; currentCardIndex = 0; renderFlashcard(); updateMasteryUI(); renderGenerationProvenance({});
+      for (const domain of DOMAIN_IDS) {
+        const el = document.getElementById('content-' + domain); if (el) el.textContent = message;
+      }
+      const thread = document.getElementById('chat-messages'); if (thread) thread.textContent = 'No episode selected. Article evidence is unavailable.';
+    }
+
     async function loadEpisodesFromBackend() {
       try {
         const res = await apiFetch('/api/episodes');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.episodes && data.episodes.length > 0) {
-            data.episodes.forEach(ep => {
-              episodes[ep.id] = ep;
-            });
-            const select = document.getElementById('episode-select');
-            if (select) {
-              select.innerHTML = data.episodes.map(ep => `
-                <option value="${ep.id}">#${ep.episode_number || 142} (${escapeHtml(ep.date)}) — ${escapeHtml(ep.title.substring(0, 35))}...</option>
-              `).join('');
-              select.value = data.episodes[0].id;
-            }
-            changeEpisode(data.episodes[0].id);
-          }
-        }
+        if (!res.ok) { if (!currentEpisodeId) clearEpisodeView('Episode history unavailable.'); return; }
+        const data = await res.json();
+        if (!Array.isArray(data.episodes)) throw new Error('Invalid episode list');
+        const previous = currentEpisodeId;
+        for (const id of Object.keys(episodes)) delete episodes[id];
+        data.episodes.forEach(ep => { if (ep && typeof ep.id === 'string') episodes[ep.id] = ep; });
+        const records = Object.values(episodes);
+        if (!records.length) { clearEpisodeView('No episodes available yet.'); return; }
+        const select = document.getElementById('episode-select');
+        if (select) { select.disabled = false; select.innerHTML = records.map(ep => `<option value="${escapeHtml(ep.id)}">#${escapeHtml(ep.episode_number || ep.id)} (${escapeHtml(ep.date)}) — ${escapeHtml(String(ep.title || '').substring(0, 35))}</option>`).join(''); }
+        changeEpisode(episodes[previous] ? previous : records[0].id);
       } catch (e) {
-        console.log('Using embedded episodes dataset.');
+        if (!currentEpisodeId) clearEpisodeView('Episode history unavailable.');
       }
     }
 
-    async function callBackendChat(query) {
+    async function callBackendChat(query, episodeId = currentEpisodeId) {
       try {
         const res = await apiFetch('/api/chat', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ query: query, episode_id: currentEpisodeId })
+          body: JSON.stringify({ query: query, episode_id: episodeId })
         });
         if (res.ok) {
           const data = await res.json();
           const rawText = data.response || '';
+          if (typeof rawText !== 'string' || !rawText.trim() || (data.grounded_episode_id && data.grounded_episode_id !== episodeId)) return null;
           let footerHtml = '';
           if (data.model && data.model.includes('gemini')) {
             footerHtml = `<div class="mt-2 pt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono text-emerald-400"><span>⚡ ${escapeHtml(data.model)}</span><span>Grounded in ${escapeHtml(data.grounded_episode_id || currentEpisodeId)}</span></div>`;
@@ -3304,7 +3289,7 @@
     window.addEventListener('DOMContentLoaded', () => {
       const audio = getAudio();
       if (audio) {
-        initAudioSource('ep-142');
+        clearAudio();
 
         audio.addEventListener('play', () => {
           isPlaying = true;
@@ -3349,23 +3334,12 @@
         });
       }
 
-      changeEpisode('ep-142');
-      renderFlashcard();
-      updateMasteryUI();
-      renderChapters(episodes['ep-142']);
+      for (const id of Object.keys(episodes)) delete episodes[id];
+      clearEpisodeView('Loading episode history…');
       loadEpisodesFromBackend();
 
-      // Check initial pipeline state
-      apiFetch('/api/refresh/status').then(r => r.json()).then(state => {
-        if (state && state.running) {
-          const btn = document.getElementById('manual-run-btn');
-          const cancelBtn = document.getElementById('cancel-run-btn');
-          if (cancelBtn) cancelBtn.classList.remove('hidden');
-          if (btn) {
-            btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-cyan-400 text-xs"><svg class="w-3.5 h-3.5 text-cyan-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Processing (${state.progress || 20}%)...</span></span><span class="font-mono text-[10px] text-cyan-400 font-bold">Active</span>`;
-          }
-        }
-      }).catch(() => {});
+      renderSourceHealth(null);
+      pollRefreshStatus();
     });
 
   </script>
