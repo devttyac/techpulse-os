@@ -189,3 +189,49 @@ The interface distinguishes model generation, deterministic fallback and unknown
 legacy provenance. The current fallback still uses fixed main narration and
 flashcards; domain takeaways use feed summaries. Provenance exposes this existing
 behavior and does not change curation, providers, chat grounding or publication.
+
+
+## 8. RSS Coverage and Source Health Revision
+
+New briefings contain `content_availability` with eight stable domain IDs. An
+`available` domain has received RSS candidates. `no_received_candidates` means
+no articles were available from checked sources. `source_unavailable` means its
+checked feeds failed. These states do not prove that publishers have no new
+articles: this release adds no freshness filter or full-article acquisition.
+Absent metadata in historical episodes remains unknown.
+
+When all domains are empty, the pipeline records `no_content`, creates no episode
+or audio, and keeps dated history. When every configured source fails, the run
+records `failed` instead. Empty checks occur before unchanged-corpus deduplication.
+Sparse briefings contain active chapters, narration and cards only; inactive
+panels explain their gaps. New fallback text and cards derive from received RSS
+summaries. They do not claim full-article grounding. Historical fixed fallback
+content keeps its legacy disclosure. Audio failures retain the text briefing with
+explicit unavailable audio metadata. New unavailable podcasts have no RSS
+enclosure, and empty-domain clips are not served from stale audio files.
+
+`GET /api/refresh/status` returns a cached `source_health` snapshot under the
+existing API authentication rules. `/healthz` remains public and excludes this
+source detail. Status polling and snapshot recovery make no feed or model calls.
+The snapshot records its own check/run ID, checked time, source outcome/count and
+parse caution, plus the latest run's terminal status. Quiet valid feeds count as
+healthy; parse warnings can coexist with usable feeds. Invalid non-feed responses
+are unavailable. `partial` means a mixture of successful, failed or unfinished
+sources; `unknown` and `not_checked` retain their explicit uncertainty. Body
+acquisition always remains `not_checked` in this release. A downstream synthesis
+or audio failure does not change a completed source check into publisher failure.
+
+`STORAGE_DIR/latest_source_health.json` is a separate bounded snapshot (64 KiB
+maximum) written through atomic replacement with mode `0600`. It uses fixed
+catalogue names and allowlisted operational fields, without feed URL queries,
+article text or exception prose. Cancellation or timeout preserves the previous
+completed sources and check timestamp, while recording a separate partial
+attempt and latest run outcome. A snapshot write failure preserves the current
+in-memory result; a read failure recovers as unknown. The snapshot and run history
+are separate writes, without a transaction across files. Back up this file with
+the episode data and audit logs.
+
+After merge, Aaron rebuilds the Dockge-managed service and verifies the live
+interface, refresh status, dated history, empty-domain audio guards and podcast
+feed. Repository CI checks Python, frontend regressions and the Docker build;
+those checks do not themselves deploy the service or verify live publisher access.

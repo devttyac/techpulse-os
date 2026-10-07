@@ -186,63 +186,28 @@ def test_deterministic_fallback_uses_corpus_headlines():
 
 
 def test_deterministic_fallback_all_domains_present():
-    result = generate_deterministic_fallback({}, 998)
-    assert set(result["takeaways"].keys()) == set(DOMAIN_ORDER), \
-        f"expected all 8 domains, got {sorted(result['takeaways'].keys())}"
-    assert len(result["chapters"]) == 8, f"expected 8 chapters, got {len(result['chapters'])}"
-    print("✓ generate_deterministic_fallback populates all 8 takeaway domains and chapters")
+    result = generate_deterministic_fallback(_full_corpus_all_domains(), 998)
+    assert set(result["takeaways"]) == set(DOMAIN_ORDER)
+    assert [c["domain"] for c in result["chapters"]] == DOMAIN_ORDER
 
 
 def test_deterministic_fallback_handles_zero_article_domain_gracefully():
-    result = generate_deterministic_fallback({"ai": []}, 997)
-    assert result["chapters"][0]["title"], "expected a non-empty default chapter title when a domain has zero articles"
-    assert result["takeaways"]["ai"]["bullets"], "expected fallback takeaway bullets even with zero articles"
-    print("✓ generate_deterministic_fallback handles a zero-article domain without raising")
+    assert generate_deterministic_fallback({"ai": []}, 997) is None
 
 
 def test_deterministic_fallback_empty_corpus_has_no_specimen_leak():
-    # Regression test for the finding that generate_deterministic_fallback's
-    # own zero-article branch used to reproduce all 8 RETIRED_SPECIMEN_TITLES
-    # verbatim -- so its own validate_synthesis guard rejected its own output
-    # whenever ingest_all_domains() returned an empty corpus (e.g. a network
-    # partition inside the 30s ingestion timeout).
-    corpus = {d: [] for d in DOMAIN_ORDER}
-    result = generate_deterministic_fallback(corpus, 995)
-    chapter_titles = [c["title"] for c in result["chapters"]]
-    leaked = [t for t in chapter_titles if t in RETIRED_SPECIMEN_TITLES]
-    assert not leaked, f"expected zero retired specimen titles in an all-empty-domain fallback, got: {leaked}"
-
-    ok, reason = validate_synthesis(result)
-    assert ok, f"expected the deterministic fallback's own output to pass its own validate_synthesis guard, got rejection: {reason}"
-    print("✓ generate_deterministic_fallback on an all-empty corpus leaks zero retired specimen titles and passes validate_synthesis")
+    assert generate_deterministic_fallback({d: [] for d in DOMAIN_ORDER}, 995) is None
 
 
-def test_deterministic_fallback_partial_corpus_mixes_derived_and_placeholder_titles():
-    corpus = {
-        "ai": [{
-            "title": "Anthropic Ships New Agent Router",
-            "source_name": "Anthropic Blog",
-            "url": "https://anthropic.com/x",
-            "summary": "New routing model.",
-        }],
-        "cloud": [], "data": [], "sec": [], "devops": [], "arch": [], "finops": [], "gov": [],
-    }
+def test_deterministic_fallback_partial_corpus_omits_unavailable_chapters():
+    corpus = {"ai": [{"title": "Anthropic Ships New Agent Router", "source_name": "Anthropic Blog",
+                      "url": "https://anthropic.com/x", "summary": "New routing model."}]}
     result = generate_deterministic_fallback(corpus, 994)
-    chapter_titles = [c["title"] for c in result["chapters"]]
-
-    assert any("Anthropic Ships New Agent Router" in t for t in chapter_titles), \
-        f"expected the populated AI domain's chapter title to incorporate its corpus headline, got: {chapter_titles}"
-
-    empty_domain_titles = chapter_titles[1:]  # cloud..gov, in DOMAIN_ORDER, all zero-article
-    assert all("No new developments reported" in t for t in empty_domain_titles), \
-        f"expected every zero-article domain's chapter title to use the honest placeholder, got: {empty_domain_titles}"
-
-    leaked = [t for t in chapter_titles if t in RETIRED_SPECIMEN_TITLES]
-    assert not leaked, f"expected zero retired specimen titles in a partial-corpus fallback, got: {leaked}"
-
-    ok, reason = validate_synthesis(result)
-    assert ok, f"expected a partial-corpus fallback to pass validate_synthesis, got rejection: {reason}"
-    print("✓ generate_deterministic_fallback on a partial corpus mixes derived and honest-placeholder titles and passes validate_synthesis")
+    assert len(result["chapters"]) == 1
+    assert "Anthropic Ships New Agent Router" in result["chapters"][0]["title"]
+    assert result["takeaways"]["cloud"]["bullets"] == []
+    assert result["takeaways"]["cloud"]["sources"] == []
+    assert validate_synthesis(result)[0]
 
 
 def test_is_schema_rejection_true_for_schema_shaped_messages():
@@ -301,7 +266,7 @@ def main():
         test_deterministic_fallback_all_domains_present,
         test_deterministic_fallback_handles_zero_article_domain_gracefully,
         test_deterministic_fallback_empty_corpus_has_no_specimen_leak,
-        test_deterministic_fallback_partial_corpus_mixes_derived_and_placeholder_titles,
+        test_deterministic_fallback_partial_corpus_omits_unavailable_chapters,
         test_is_schema_rejection_true_for_schema_shaped_messages,
         test_is_schema_rejection_false_for_transport_auth_quota_messages,
         test_local_now_uses_singapore_timezone_not_utc,

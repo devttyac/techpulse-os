@@ -6,14 +6,14 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 from src.provenance import error_category, model_identifier
+from src.content_availability import build_content_availability, active_domains
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("techpulse.synthesizer")
 
-# Fixed domain ordering used throughout synthesis: prompt instructions, structural
-# validation, the deterministic fallback, and the takeaways schema all key off this list.
+# Stable domain IDs for presentation and legacy complete-eight compatibility.
 DOMAIN_ORDER: List[str] = ["ai", "cloud", "data", "sec", "devops", "arch", "finops", "gov"]
 
 # --- Timezone helper -------------------------------------------------------
@@ -35,7 +35,7 @@ def local_now() -> datetime:
 # worked example in the prompt (the worked example is exactly what caused the
 # original bug: Gemini copied the specimen's values instead of generating new
 # ones). See BRIEFING_JSON_SCHEMA below for the fallback path if the nested
-# Takeaways model is rejected (googleapis/python-genai issue #60).
+# dynamic takeaways model is rejected by the provider schema parser.
 
 class Source(BaseModel):
     title: str
@@ -43,12 +43,14 @@ class Source(BaseModel):
 
 
 class Chapter(BaseModel):
+    domain: str
     title: str
     source_name: str
     source_url: str
 
 
 class ScriptSegment(BaseModel):
+    domain: str
     speaker: str
     text: str
     chapter_title: str
@@ -61,20 +63,6 @@ class Takeaway(BaseModel):
     bullets: List[str]
     interview_framing: str
     sources: List[Source]
-
-
-class Takeaways(BaseModel):
-    # Deliberately eight REQUIRED fields (not a Dict[str, Takeaway]) so the
-    # 1-of-8 collapse that caused the original bug is structurally impossible:
-    # a response missing any domain fails schema validation outright.
-    ai: Takeaway
-    cloud: Takeaway
-    data: Takeaway
-    sec: Takeaway
-    devops: Takeaway
-    arch: Takeaway
-    finops: Takeaway
-    gov: Takeaway
 
 
 class Flashcard(BaseModel):
@@ -91,13 +79,11 @@ class Briefing(BaseModel):
     hosts: str
     script_segments: List[ScriptSegment]
     chapters: List[Chapter]
-    takeaways: Takeaways
+    takeaways: Dict[str, Takeaway]
     flashcards: List[Flashcard]
 
 
-# Explicit JSON-schema fallback expressing the same "8 required takeaway keys"
-# constraint as the Takeaways model above, for use if google-genai rejects the
-# nested Pydantic model as a response_schema (see googleapis/python-genai #60).
+# Explicit JSON schema template; synthesis narrows takeaway keys to active domains.
 def _domain_takeaway_schema() -> Dict[str, Any]:
     return {
         "type": "object",
@@ -131,11 +117,12 @@ BRIEFING_JSON_SCHEMA: Dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "domain": {"type": "string"},
                     "speaker": {"type": "string"},
                     "text": {"type": "string"},
                     "chapter_title": {"type": "string"},
                 },
-                "required": ["speaker", "text", "chapter_title"],
+                "required": ["domain", "speaker", "text", "chapter_title"],
             },
         },
         "chapters": {
@@ -143,11 +130,12 @@ BRIEFING_JSON_SCHEMA: Dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "domain": {"type": "string"},
                     "title": {"type": "string"},
                     "source_name": {"type": "string"},
                     "source_url": {"type": "string"},
                 },
-                "required": ["title", "source_name", "source_url"],
+                "required": ["domain", "title", "source_name", "source_url"],
             },
         },
         "takeaways": {
@@ -243,90 +231,48 @@ RETIRED_SPECIMEN_TITLES: frozenset[str] = frozenset({
     "8. ⚖️ NIST AI Risk Management & ISO 42001 Governance",
 })
 
-# --- Domain metadata for the deterministic fallback -------------------------
-# Chapter numbering/emoji/label convention preserved from the original
-# hardcoded chapters. The literal title strings below are used ONLY as a
-# last-resort default when a domain returns zero ingested articles — every
-# other case derives the title from that domain's actual top article.
+# --- Display labels for the eight stable domain IDs -------------------------
 DOMAIN_META: Dict[str, Dict[str, Any]] = {
     "ai": {
         "num": 1, "emoji": "\U0001F916", "label": "AI & Multi-Agent Systems",
-        "time": "00:00", "seconds": 0,
-        "default_full_title": "1. \U0001F916 AI & Multi-Agent Deterministic Routing",
-        "default_source_name": "Anthropic Research",
-        "default_source_url": "https://www.anthropic.com/research/building-effective-agents",
     },
     "cloud": {
         "num": 2, "emoji": "☁️", "label": "Cloud & Platform Resiliency",
-        "time": "01:15", "seconds": 75,
-        "default_full_title": "2. ☁️ Multi-Region Resiliency & Azure Landing Zones",
-        "default_source_name": "Azure Architecture",
-        "default_source_url": "https://learn.microsoft.com/azure/architecture/",
     },
     "data": {
         "num": 3, "emoji": "\U0001F4CA", "label": "Data & Modern Lakehouse",
-        "time": "02:25", "seconds": 145,
-        "default_full_title": "3. \U0001F4CA Microsoft Fabric Direct Lake vs Snowflake Iceberg",
-        "default_source_name": "MS Fabric Team Blog",
-        "default_source_url": "https://blog.fabric.microsoft.com/",
     },
     "sec": {
         "num": 4, "emoji": "\U0001F6E1️", "label": "Zero-Trust & Workload Security",
-        "time": "03:40", "seconds": 220,
-        "default_full_title": "4. \U0001F6E1️ Zero-Trust SPIFFE Workload Tokens & Attestation",
-        "default_source_name": "SPIFFE Foundation",
-        "default_source_url": "https://spiffe.io/docs/latest/spiffe-about/overview/",
     },
     "devops": {
         "num": 5, "emoji": "⚙️", "label": "SRE & Observability",
-        "time": "04:55", "seconds": 295,
-        "default_full_title": "5. ⚙️ SRE Kernel eBPF Observability & Distributed Tracing",
-        "default_source_name": "eBPF.io",
-        "default_source_url": "https://ebpf.io/what-is-ebpf/",
     },
     "arch": {
         "num": 6, "emoji": "⚡", "label": "Distributed Systems Architecture",
-        "time": "06:10", "seconds": 370,
-        "default_full_title": "6. ⚡ Distributed Systems Architecture & Outbox CDC",
-        "default_source_name": "Debezium Community",
-        "default_source_url": "https://debezium.io/",
     },
     "finops": {
         "num": 7, "emoji": "\U0001F4B0", "label": "Cloud Economics & FinOps",
-        "time": "07:25", "seconds": 445,
-        "default_full_title": "7. \U0001F4B0 Spot GPU Orchestration & LLM Token FinOps",
-        "default_source_name": "FinOps Foundation",
-        "default_source_url": "https://www.finops.org/",
     },
     "gov": {
         "num": 8, "emoji": "⚖️", "label": "AI Governance & Compliance",
-        "time": "08:35", "seconds": 515,
-        "default_full_title": "8. ⚖️ NIST AI Risk Management & ISO 42001 Governance",
-        "default_source_name": "NIST AI & Cybersecurity",
-        "default_source_url": "https://www.nist.gov/itl/ai-risk-management-framework",
     },
 }
 
-SYSTEM_SYNTHESIS_PROMPT = """You are the Principal AI Synthesis Engine for TechPulse OS.
-Your task is to analyze today's ingested engineering articles across 8 technology domains and generate an executive multi-host technical podcast briefing, structured interview takeaways, 8 timecoded chapters (one per technology domain), and spaced-repetition flashcards.
-
-The briefing hosts are:
-- Host A: Enterprise Cloud Architect & AI Systems Specialist
-- Host B: Principal Systems Architect & Engineering Governance Lead
-
-Return a single JSON object with exactly these top-level fields: "title", "summary", "hosts", "script_segments", "chapters", "takeaways", "flashcards".
-
-STRUCTURAL REQUIREMENTS (do not deviate from these):
-- "chapters" MUST contain exactly 8 entries, one per domain, in this fixed order: ai, cloud, data, sec, devops, arch, finops, gov. Each entry has "title", "source_name", "source_url".
-- Each chapter "title" MUST name the SPECIFIC technology, product release, vulnerability, or finding reported in TODAY'S supplied articles for that domain. Generic or evergreen topic names that could describe any day's briefing are forbidden — the title must be traceable to a specific article below. Number and lightly emoji-prefix each title, e.g. "1. <emoji> <Domain Label>: <specific finding from today's article>".
-- Each chapter's "source_name" and "source_url" MUST be copied from one of the articles supplied for that domain in the corpus below — never invented, and never carried over from a prior day's briefing.
-- "takeaways" MUST be a JSON object with exactly these 8 keys, all REQUIRED: "ai", "cloud", "data", "sec", "devops", "arch", "finops", "gov". Do not omit any domain, even if that domain's corpus is thin — derive something concrete from whatever was supplied. Each value has "badge", "release_date", "title", "bullets" (array of strings), "interview_framing", and "sources" (array of {"title", "url"}). Every field must be grounded in that domain's own supplied articles.
-- "flashcards" MUST contain between 4 and 8 entries. Each flashcard's "cite" field MUST reference a specific article title or publication from today's corpus — never a generic or previous-day citation. Each entry has "domain", "question", "answer", "cite", "color_class".
-- "script_segments" is an array of {"speaker", "text", "chapter_title"} alternating between Host A and Host B, covering all 8 chapters in order. Each "chapter_title" MUST exactly match one of the 8 "title" strings used in "chapters".
-
-Do not reuse chapter titles, takeaway content, or flashcards from any previous briefing. Every field must be grounded in today's supplied article corpus below — never fabricate sources, dates, or findings.
+SYSTEM_SYNTHESIS_PROMPT = """You synthesize TechPulse OS briefings from received RSS headlines and summaries.
+Return title, summary, hosts, script_segments, chapters, takeaways and flashcards.
+Generate content ONLY for AVAILABLE DOMAIN IDS supplied below. Gaps are valid.
+Chapters appear in the supplied domain order with domain, title, source_name and source_url.
+Each title names a specific received finding; each source belongs to that same domain.
+Script segments contain domain, speaker, text and chapter_title; the domain and title
+must join the same chapter. Alternate Host A and Host B where useful.
+Takeaways contain only available domain keys with badge, release_date, title, bullets,
+interview_framing and sources. Never invent dates, findings, guidance or citations.
+Flashcards may contain zero entries. Only produce cards supported by received summaries,
+with domain (the stable ID), question, answer, cite and color_class. No minimum card count.
+Never fill unavailable domains with evergreen material or previous episodes.
+If a summary cannot support a claim, omit the claim. Explain coverage gaps in the synopsis.
 """
-
 
 def extract_full_articles_corpus(domain_corpus: Dict[str, List[Dict[str, Any]]]) -> Dict[str, str]:
     corpus_map = {}
@@ -343,75 +289,68 @@ def extract_full_articles_corpus(domain_corpus: Dict[str, List[Dict[str, Any]]])
     return corpus_map
 
 
-def validate_synthesis(parsed: dict, previous_titles: Optional[List[str]] = None) -> tuple[bool, Optional[str]]:
-    """Structural guard against a recurrence of the specimen-copying bug.
-
-    Rejects a synthesized payload (causing the model cascade to advance to the
-    next candidate, or fall through to the deterministic fallback if all
-    candidates are rejected) when:
-      - chapter count != 8
-      - any chapter title matches a retired prompt-specimen title (leak)
-      - the takeaways keys don't exactly match the 8 required domains
-      - previous_titles is supplied and the new chapter title list is identical
-      - script_segments[].chapter_title does not bidirectionally join with
-        chapters[].title (every segment references a real chapter, and every
-        chapter is referenced by at least one segment)
-    """
+def validate_synthesis(parsed: dict, previous_titles: Optional[List[str]] = None,
+                       availability=None) -> tuple[bool, Optional[str]]:
+    """Validate active content joins; old complete-eight payloads remain readable."""
+    if not isinstance(parsed, dict):
+        return False, "synthesis is not an object"
+    coverage = availability or parsed.get("content_availability")
+    active = active_domains(coverage) if coverage is not None else list(DOMAIN_ORDER)
     chapters = parsed.get("chapters", [])
-    if not isinstance(chapters, list) or len(chapters) != 8:
-        return False, f"expected exactly 8 chapters, got {len(chapters) if isinstance(chapters, list) else type(chapters).__name__}"
-
+    if not isinstance(chapters, list) or len(chapters) != len(active) or not active:
+        return False, "chapter count does not match available domains"
+    if any(not isinstance(c, dict) for c in chapters):
+        return False, "chapter is not an object"
+    legacy = all("domain" not in c for c in chapters) and active == DOMAIN_ORDER
+    domains = list(DOMAIN_ORDER) if legacy else [c.get("domain") for c in chapters]
+    if domains != active:
+        return False, "chapter domains do not match available domain order"
     titles = [c.get("title") for c in chapters]
-
-    leaked = [t for t in titles if t in RETIRED_SPECIMEN_TITLES]
-    if leaked:
-        return False, f"retired prompt-specimen title(s) leaked into output: {leaked}"
-
-    takeaways = parsed.get("takeaways", {})
-    if not isinstance(takeaways, dict) or set(takeaways.keys()) != set(DOMAIN_ORDER):
-        got = sorted(takeaways.keys()) if isinstance(takeaways, dict) else type(takeaways).__name__
-        return False, f"takeaways keys {got} do not match the required 8 domains {DOMAIN_ORDER}"
-
-    # Phase 2: this assumes every one of the 8 domains always has fresh
-    # coverage, so a full repeat of the title list is always stale. Phase 2
-    # introduces a "continuing coverage" flag for domains with no fresh
-    # articles, which can legitimately repeat a title -- this blanket
-    # all-8-equal check will need to become domain-aware at that point.
+    if any(not isinstance(t, str) or not t.strip() for t in titles) or len(set(titles)) != len(titles):
+        return False, "chapter titles must be distinct nonempty strings"
+    if any(t in RETIRED_SPECIMEN_TITLES for t in titles):
+        return False, "retired prompt-specimen title leaked into output"
     if previous_titles is not None and titles == previous_titles:
-        return False, "chapter titles are identical to the previous episode (stale/repeated synthesis)"
-
-    # Bidirectional chapter_title <-> chapters join. tts_engine.py's
-    # generate_episode_podcast_audio matches script_segments[].chapter_title
-    # against chapters[].title via exact string equality (chapter_map); a miss
-    # silently defaults source_name/source_url instead of raising, and main.py
-    # then overwrites the correct 8-chapter list with whatever dynamic_chapters
-    # tts_engine produced -- so a broken join here is a silent data-loss bug
-    # downstream, not just a cosmetic mismatch.
-    script_segments = parsed.get("script_segments", [])
-    if not isinstance(script_segments, list):
-        return False, f"expected script_segments to be a list, got {type(script_segments).__name__}"
-
-    chapter_title_set = set(titles)
-    referenced_titles: set = set()
-    unknown_titles: List[str] = []
-    for i, seg in enumerate(script_segments):
-        if not isinstance(seg, dict):
-            return False, f"script_segments[{i}] is not an object (got {type(seg).__name__})"
-        seg_chapter_title = seg.get("chapter_title")
-        if seg_chapter_title in chapter_title_set:
-            referenced_titles.add(seg_chapter_title)
-        else:
-            label = seg_chapter_title if isinstance(seg_chapter_title, str) else "<missing chapter_title>"
-            if label not in unknown_titles:
-                unknown_titles.append(label)
-
-    if unknown_titles:
-        return False, f"script_segments reference chapter_title(s) not present in chapters: {unknown_titles}"
-
-    unreferenced_titles = [t for t in titles if t not in referenced_titles]
-    if unreferenced_titles:
-        return False, f"chapter title(s) not referenced by any script_segments entry: {unreferenced_titles}"
-
+        return False, "chapter titles are identical to the previous episode"
+    takeaways = parsed.get("takeaways", {})
+    if not isinstance(takeaways, dict) or not set(active).issubset(takeaways) or not set(takeaways).issubset(DOMAIN_ORDER):
+        return False, "takeaway domains do not match available domains"
+    if coverage is None and set(takeaways) != set(DOMAIN_ORDER):
+        return False, "legacy takeaways must have all eight domains"
+    for domain, data in takeaways.items():
+        if not isinstance(data, dict):
+            return False, "takeaway is not an object"
+        if domain not in active and (data.get("bullets") or data.get("sources") or data.get("interview_framing") or data.get("title")):
+            return False, "inactive takeaway contains unsupported content"
+        if domain in active and (not isinstance(data.get("bullets"), list) or not isinstance(data.get("sources"), list)):
+            return False, "active takeaway fields must be lists"
+        if domain in active:
+            if any(not isinstance(data.get(k), str) for k in ("badge", "release_date", "title", "interview_framing")):
+                return False, "active takeaway fields must be text"
+            if any(not isinstance(b, str) for b in data["bullets"]):
+                return False, "takeaway bullets must be text"
+            if any(not isinstance(source, dict) or any(not isinstance(source.get(k), str) for k in ("title", "url")) for source in data["sources"]):
+                return False, "takeaway sources must have text titles and URLs"
+    segments = parsed.get("script_segments", [])
+    if not isinstance(segments, list):
+        return False, "script_segments must be a list"
+    title_domains = dict(zip(titles, domains))
+    referenced = set()
+    for seg in segments:
+        if not isinstance(seg, dict) or not isinstance(seg.get("chapter_title"), str) or seg["chapter_title"] not in title_domains:
+            return False, "script segment references an unknown chapter"
+        if not legacy and seg.get("domain") != title_domains[seg["chapter_title"]]:
+            return False, "script segment domain does not match its chapter"
+        if not isinstance(seg.get("text"), str) or not seg["text"].strip():
+            return False, "script segment has no supported narration"
+        referenced.add(seg["chapter_title"])
+    if referenced != set(titles):
+        return False, "chapter has no script segment"
+    cards = parsed.get("flashcards", [])
+    if not isinstance(cards, list) or any(not isinstance(c, dict) for c in cards):
+        return False, "flashcards must be objects"
+    if not legacy and any(c.get("domain") not in active for c in cards):
+        return False, "flashcard belongs to an unavailable domain"
     return True, None
 
 
@@ -426,9 +365,9 @@ def enforce_corpus_urls(parsed: dict, domain_corpus: Dict[str, List[Dict[str, An
 
     The prompt asks the model to copy URLs from the supplied articles, but that
     is a request, not a control. This enforces it:
-      - chapters[i].source_url (domain = DOMAIN_ORDER[i]) not found anywhere in
-        the FULL corpus is replaced, with source_name, by that domain's top
-        article; a domain with no articles gets a blank URL and name.
+      - explicit chapter domain IDs constrain citations to that domain's corpus;
+        old complete-eight chapters retain the positional mapping. Unsupported
+        citations are replaced with the same domain's top received article.
       - takeaways[domain].sources[] entries whose url is not in the corpus are
         dropped (logged, not counted).
     Returns (payload, substitution_count). Malformed chapters count as
@@ -464,9 +403,14 @@ def enforce_corpus_urls(parsed: dict, domain_corpus: Dict[str, List[Dict[str, An
                 substitutions += 1  # uncorrectable; counted so it pushes toward rejection
                 continue
             url = chapter.get("source_url")
-            if isinstance(url, str) and url in allowed:
+            domain_id = chapter.get("domain")
+            domain_id = domain_id if isinstance(domain_id, str) else None
+            domain_urls = {a.get("url") for a in (domain_corpus.get(domain_id) or []) if isinstance(a, dict)} if isinstance(domain_corpus, dict) and domain_id else None
+            if isinstance(url, str) and url in allowed and (domain_urls is None or url in domain_urls):
                 continue
-            domain = DOMAIN_ORDER[i] if i < len(DOMAIN_ORDER) else None
+            domain = domain_id
+            if domain is None and len(chapters) == 8 and not parsed.get("content_availability"):
+                domain = DOMAIN_ORDER[i] if i < len(DOMAIN_ORDER) else None
             target = top_by_domain.get(domain) if domain else None
             chapter["source_url"] = target["url"] if target else ""
             chapter["source_name"] = target["source_name"] if target else ""
@@ -474,7 +418,7 @@ def enforce_corpus_urls(parsed: dict, domain_corpus: Dict[str, List[Dict[str, An
 
     takeaways = parsed.get("takeaways")
     if isinstance(takeaways, dict):
-        for takeaway in takeaways.values():
+        for domain, takeaway in takeaways.items():
             if not isinstance(takeaway, dict) or "sources" not in takeaway:
                 continue
             sources = takeaway["sources"]
@@ -485,6 +429,7 @@ def enforce_corpus_urls(parsed: dict, domain_corpus: Dict[str, List[Dict[str, An
             kept = [
                 s for s in sources
                 if isinstance(s, dict) and isinstance(s.get("url"), str) and s["url"] in allowed
+                and (not parsed.get("content_availability") or s["url"] in {a.get("url") for a in (domain_corpus.get(domain) or []) if isinstance(a, dict)})
             ]
             dropped += len(sources) - len(kept)
             takeaway["sources"] = kept
@@ -497,202 +442,57 @@ def enforce_corpus_urls(parsed: dict, domain_corpus: Dict[str, List[Dict[str, An
     return parsed, substitutions
 
 
+def _inactive_takeaway(domain, state):
+    return {"domain": domain, "status": state["status"], "reason": state["reason"],
+            "badge": DOMAIN_META[domain]["label"].upper(), "release_date": "", "title": "",
+            "bullets": [], "interview_framing": "", "sources": []}
+
+
 def _build_takeaway_for_domain(domain: str, articles: List[Dict[str, Any]]) -> Dict[str, Any]:
     meta = DOMAIN_META[domain]
-
     if not articles:
-        return {
-            "badge": meta["label"].upper(),
-            "release_date": local_now().strftime("%b %Y"),
-            "title": meta["default_full_title"].split(". ", 1)[-1],
-            "bullets": [f"No new {meta['label']} articles were ingested today; showing baseline domain guidance."],
-            "interview_framing": f"Discuss current best practices and open questions in {meta['label']}.",
-            "sources": [{"title": meta["default_source_name"], "url": meta["default_source_url"]}],
-        }
-
-    bullets: List[str] = []
-    for a in articles[:3]:
-        title = (a.get("title") or "").strip()
-        summary = (a.get("summary") or "").strip()
-        if title and summary:
-            bullets.append(f"{title}: {summary}")
-        elif title:
-            bullets.append(title)
-    if not bullets:
-        bullets = [f"Reviewed {len(articles)} article(s) in {meta['label']} today."]
-
+        return _inactive_takeaway(domain, build_content_availability({})["domains"][domain])
     top = articles[0]
-    sources = [
-        {"title": a.get("title"), "url": a.get("url")}
-        for a in articles[:2]
-        if a.get("title") and a.get("url")
-    ]
-    if not sources:
-        sources = [{"title": meta["default_source_name"], "url": meta["default_source_url"]}]
-
-    return {
-        "badge": meta["label"].upper(),
-        "release_date": local_now().strftime("%b %Y"),
-        "title": (top.get("title") or meta["default_full_title"]),
-        "bullets": bullets,
-        "interview_framing": f"Be ready to explain how '{top.get('title', meta['label'])}' impacts enterprise {meta['label'].lower()} decisions.",
-        "sources": sources,
-    }
+    bullets = [f"{a.get('title', '')}: {a.get('summary', '')}" if a.get("summary")
+               else a.get("title", "") for a in articles[:3] if a.get("title")]
+    return {"domain": domain, "status": "available", "reason": "Articles available from received RSS candidates.",
+            "badge": meta["label"].upper(), "release_date": "", "title": top.get("title", ""),
+            "bullets": bullets, "interview_framing": "",
+            "sources": [{"title": a["title"], "url": a["url"]} for a in articles[:2]
+                        if a.get("title") and a.get("url")]}
 
 
-def generate_deterministic_fallback(domain_corpus: Dict[str, List[Dict[str, Any]]], episode_num: int) -> Dict[str, Any]:
-    logger.info("Generating structured deterministic intelligence payload from ingested corpus across all 8 domains...")
-
-    full_articles = extract_full_articles_corpus(domain_corpus)
-
-    # Derive chapter titles from each domain's top article headline, decorrelating
-    # this path from the LLM synthesis path so the two cannot silently collapse
-    # to the same content. The old hardcoded strings survive only as the
-    # last-resort default for a domain that returned zero articles.
-    chapters: List[Dict[str, Any]] = []
-    for domain in DOMAIN_ORDER:
-        meta = DOMAIN_META[domain]
-        articles = domain_corpus.get(domain) or []
-        top_item = articles[0] if articles else {}
-        headline = (top_item.get("title") or "").strip()
-
-        if headline:
-            title = f"{meta['num']}. {meta['emoji']} {meta['label']}: {headline}"
-        else:
-            # Same derived format as above, but with honest placeholder text --
-            # deliberately NOT meta["default_full_title"], which is byte-identical
-            # to a RETIRED_SPECIMEN_TITLES entry. Using that here would make
-            # validate_synthesis reject the fallback's own output on any
-            # all-empty-domain corpus (e.g. a network partition inside
-            # ingest_all_domains()'s 30s timeout) -- indistinguishable, in the
-            # data and the UI, from the originally reported specimen-copying bug.
-            title = f"{meta['num']}. {meta['emoji']} {meta['label']}: No new developments reported"
-
-        chapters.append({
-            "time": meta["time"],
-            "seconds": meta["seconds"],
-            "title": title,
-            "source_name": top_item.get("source_name", meta["default_source_name"]),
-            "source_url": top_item.get("url", meta["default_source_url"]),
-        })
-
-    chapter_title_by_domain = {domain: chapters[i]["title"] for i, domain in enumerate(DOMAIN_ORDER)}
-
-    takeaways = {
-        domain: _build_takeaway_for_domain(domain, domain_corpus.get(domain) or [])
-        for domain in DOMAIN_ORDER
-    }
-
-    script_segments = [
-        {
-            "speaker": "Host A",
-            "text": "Good morning and welcome to TechPulse OS. Today, we lead with enterprise multi-agent system design. Anthropic's latest engineering report highlights that autonomous agent swarms without a deterministic router suffer from cascading hallucination loops in high-context tasks.",
-            "chapter_title": chapter_title_by_domain["ai"]
-        },
-        {
-            "speaker": "Host B",
-            "text": "That's a crucial architectural shift. In enterprise distributed systems, we cannot rely on unbounded prompt loops. The Main-as-Router pattern enforces strict state serialization and pre-execution dry-run approval gates, directly meeting production reliability and safety standards.",
-            "chapter_title": chapter_title_by_domain["ai"]
-        },
-        {
-            "speaker": "Host A",
-            "text": "Moving to Cloud & Platforms: achieving cross-region high availability with RTO under 60 seconds requires decoupling Anycast ingress from asynchronous storage replication across Azure Landing Zones and AWS.",
-            "chapter_title": chapter_title_by_domain["cloud"]
-        },
-        {
-            "speaker": "Host B",
-            "text": "Correct. Using Azure Front Door paired with GitOps controllers like FluxCD ensures identical stateless pod topologies while avoiding multi-region synchronous database locking penalties.",
-            "chapter_title": chapter_title_by_domain["cloud"]
-        },
-        {
-            "speaker": "Host A",
-            "text": "Turning to enterprise data architecture, Microsoft Fabric's Direct Lake mode is transforming analytical reporting. Instead of duplicating data into VertiPaq files via scheduled batch jobs, it queries Delta Parquet files directly from OneLake into VertiPaq memory on demand.",
-            "chapter_title": chapter_title_by_domain["data"]
-        },
-        {
-            "speaker": "Host B",
-            "text": "And Snowflake is competing directly with managed Apache Iceberg tables. The advantage for architects is vendor neutrality: an external Iceberg catalog allows Spark, Databricks, and Snowflake engines to operate on the same S3 storage tier without vendor lock-in.",
-            "chapter_title": chapter_title_by_domain["data"]
-        },
-        {
-            "speaker": "Host A",
-            "text": "In infrastructure security, static credentials in CI/CD pipelines are officially obsolete. SPIFFE and SPIRE automated workload identity federation issues ephemeral X.509 SVID certificates rotating every 60 minutes.",
-            "chapter_title": chapter_title_by_domain["sec"]
-        },
-        {
-            "speaker": "Host B",
-            "text": "SPIRE inspects Linux kernel cgroups and container namespaces directly, satisfying NIST SP 800-207 Zero Trust credential lifecycle mandates.",
-            "chapter_title": chapter_title_by_domain["sec"]
-        },
-        {
-            "speaker": "Host A",
-            "text": "In SRE and observability: eBPF socket tracing captures TCP latency and packet drops inside kernel space with under 1% CPU overhead, propagating W3C distributed trace context into OpenTelemetry.",
-            "chapter_title": chapter_title_by_domain["devops"]
-        },
-        {
-            "speaker": "Host B",
-            "text": "And in distributed systems architecture, Debezium Change Data Capture reads database Write-Ahead Logs to guarantee Transactional Outbox atomicity without fragile Two-Phase Commit locks.",
-            "chapter_title": chapter_title_by_domain["arch"]
-        },
-        {
-            "speaker": "Host A",
-            "text": "On Cloud Economics and FinOps: auto-pausing idle Fabric capacities and leveraging Graviton4 spot instance pools reduces batch inference spend by over 35 percent.",
-            "chapter_title": chapter_title_by_domain["finops"]
-        },
-        {
-            "speaker": "Host B",
-            "text": "Finally, on AI governance, the NIST AI Risk Management Framework and ISO 42001 guidelines mandate immutable audit logging capturing prompt snapshots, model temperature, and output for every production GenAI decision.",
-            "chapter_title": chapter_title_by_domain["gov"]
-        }
-    ]
-
-    flashcards = [
-        {
-            "domain": "\U0001F916 AI & Agent Systems",
-            "question": "In an enterprise interview, explain why the Deterministic Main-as-Router pattern is preferred over recursive monolithic swarms.",
-            "answer": "Decouples stateful planning from tool execution. It enforces strict dry-run approval gates, caps step retry loops to 3, and produces immutable audit trails required by enterprise production standards (NIST AI RMF & ISO 42001).",
-            "cite": "Source: Anthropic Research 2026",
-            "color_class": "bg-indigo-500/20 text-indigo-300"
-        },
-        {
-            "domain": "\U0001F4CA Data & Modern Lakehouse",
-            "question": "How does Microsoft Fabric Direct Lake mode differ from Import and DirectQuery in terms of memory paging?",
-            "answer": "Direct Lake loads Delta Parquet straight from OneLake into VertiPaq memory on demand without .PBIX duplication or scheduled refresh pipelines, falling back to DirectQuery only if capacity memory is exceeded.",
-            "cite": "Source: Microsoft Fabric Team Blog",
-            "color_class": "bg-emerald-500/20 text-emerald-300"
-        },
-        {
-            "domain": "\U0001F6E1️ Zero Trust & Security",
-            "question": "How does SPIFFE/SPIRE workload identity satisfy NIST SP 800-207 Zero Trust static secret removal rules?",
-            "answer": "It replaces static API tokens and database passwords with automated, cryptographic X.509 SVID tokens that rotate automatically every 60 minutes with mTLS verification.",
-            "cite": "Source: SPIFFE Spec & NIST SP 800-207",
-            "color_class": "bg-rose-500/20 text-rose-300"
-        },
-        {
-            "domain": "⚙️ SRE & Kernel Observability",
-            "question": "Why does eBPF kernel tracing outperform legacy user-space APM daemon agents during high network throughput?",
-            "answer": "eBPF attaches verified bytecode sandboxes directly to kernel kprobes and socket buffers, eliminating expensive user-to-kernel context switching and running with <1% CPU overhead.",
-            "cite": "Source: eBPF.io Foundation 2026",
-            "color_class": "bg-amber-500/20 text-amber-300"
-        }
-    ]
-
-    return {
-        "id": f"ep-{episode_num}",
-        "episode_number": episode_num,
-        "date": local_now().strftime("%b %d, %Y"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "title": "Executive Briefing: Full-Stack Enterprise Architecture, Agentic Governance & Zero Trust",
-        "summary": "Today's briefing covers all 8 engineering pillars: Anthropic deterministic agent routing, cross-region Kubernetes failover, Fabric Direct Lake, SPIFFE workload attestation, kernel eBPF tracing, Debezium transactional outbox CDC, spot GPU FinOps, and NIST AI Risk Management.",
-        "hosts": "Host A (Enterprise Cloud Architect) & Host B (Principal Systems Architect & Governance Lead)",
-        "duration": "09:45",
-        "total_seconds": 585,
-        "full_articles": full_articles,
-        "script_segments": script_segments,
-        "chapters": chapters,
-        "takeaways": takeaways,
-        "flashcards": flashcards
-    }
+def generate_deterministic_fallback(domain_corpus, episode_num, *, availability=None):
+    """Summarize received RSS evidence; never substitute fixed expert guidance."""
+    coverage = availability or build_content_availability(domain_corpus)
+    active = active_domains(coverage)
+    if not active:
+        return None
+    chapters, segments, cards = [], [], []
+    for index, domain in enumerate(active):
+        articles = domain_corpus[domain]
+        top, meta = articles[0], DOMAIN_META[domain]
+        title = f"{index + 1}. {meta['emoji']} {meta['label']}: {top.get('title', '')}"
+        chapters.append({"domain": domain, "time": "00:00", "seconds": 0, "title": title,
+                         "source_name": top.get("source_name", ""), "source_url": top.get("url", "")})
+        narration = " ".join(f"{a.get('title', '')}. {a.get('summary', '')}".strip() for a in articles[:3])
+        segments.append({"domain": domain, "speaker": "Host A" if index % 2 == 0 else "Host B",
+                         "text": narration, "chapter_title": title})
+        for article in articles[:1]:
+            if article.get("summary") and article.get("title"):
+                cards.append({"domain": domain, "question": f"What does the received summary report about {article['title']}?",
+                              "answer": article["summary"], "cite": article.get("title", ""),
+                              "color_class": "bg-indigo-500/20 text-indigo-300"})
+    takeaways = {d: (_build_takeaway_for_domain(d, domain_corpus[d]) if d in active
+                     else _inactive_takeaway(d, coverage["domains"][d])) for d in DOMAIN_ORDER}
+    return {"id": f"ep-{episode_num}", "episode_number": episode_num,
+            "date": local_now().strftime("%b %d, %Y"), "created_at": datetime.now(timezone.utc).isoformat(),
+            "title": f"RSS Briefing: {len(active)} available domains", "summary":
+            f"Received RSS summaries cover {', '.join(active)}. {8 - len(active)} domains have no available articles.",
+            "hosts": "Host A & Host B", "duration": "00:00", "total_seconds": 0,
+            "content_basis": "rss_summaries", "fallback_content": "source_derived",
+            "content_availability": coverage, "full_articles": extract_full_articles_corpus(domain_corpus),
+            "script_segments": segments, "chapters": chapters, "takeaways": takeaways, "flashcards": cards}
 
 
 async def synthesize_briefing(
@@ -700,13 +500,18 @@ async def synthesize_briefing(
     episode_num: int = 142,
     previous_titles: Optional[List[str]] = None,
     *, diagnostics=None,
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     stats = diagnostics if diagnostics is not None else {}
     stats.update(path=None, model=None, schema_variant=None, fallback_reason=None,
-                 attempts=[], url_substitutions=0, prompt_version="corpus-instructions-v1",
-                 schema_version=1, validator_version=1)
+                 attempts=[], url_substitutions=0, prompt_version="corpus-instructions-v2",
+                 schema_version=1, validator_version=1, content_basis="rss_summaries")
     api_key = os.getenv("GEMINI_API_KEY")
     full_articles = extract_full_articles_corpus(domain_corpus)
+    availability = build_content_availability(domain_corpus)
+    active = active_domains(availability)
+    if not active:
+        stats.update(path="no_content", fallback_reason="no_received_candidates")
+        return None
 
     if not api_key:
         stats.update(path="deterministic_fallback", fallback_reason="no_api_key")
@@ -724,14 +529,20 @@ async def synthesize_briefing(
 
     # Prepare article corpus summary for LLM
     corpus_text = ""
-    for domain, articles in domain_corpus.items():
+    for domain in active:
+        articles = domain_corpus[domain]
         corpus_text += f"\n\n### DOMAIN: {domain.upper()}\n"
         for a in articles[:3]:
             corpus_text += f"- [{a.get('source_name')}]: {a.get('title')} ({a.get('url')})\n  Summary: {a.get('summary')}\n"
 
-    prompt = f"{SYSTEM_SYNTHESIS_PROMPT}\n\n## INGESTED ARTICLE CORPUS:\n{corpus_text}"
+    prompt = f"{SYSTEM_SYNTHESIS_PROMPT}\n\nAVAILABLE DOMAIN IDS: {', '.join(active)}\n\n## INGESTED ARTICLE CORPUS:\n{corpus_text}"
 
     global _USE_DICT_SCHEMA
+    active_takeaways = create_model("ActiveTakeaways", **{d: (Takeaway, ...) for d in active})
+    active_briefing = create_model("ActiveBriefing", __base__=Briefing, takeaways=(active_takeaways, ...))
+    active_json_schema = json.loads(json.dumps(BRIEFING_JSON_SCHEMA))
+    active_json_schema["properties"]["takeaways"] = {
+        "type": "object", "properties": {d: _domain_takeaway_schema() for d in active}, "required": active}
 
     for m in models_to_try:
         attempt = None
@@ -749,7 +560,7 @@ async def synthesize_briefing(
                     response = client.models.generate_content(
                         model=m, contents=prompt,
                         config={"response_mime_type": "application/json", "response_schema":
-                                BRIEFING_JSON_SCHEMA if variant == "json_schema_dict" else Briefing})
+                                active_json_schema if variant == "json_schema_dict" else active_briefing})
                     attempt["outcome"] = "response_returned"
                     return response
                 except Exception as exc:
@@ -797,12 +608,15 @@ async def synthesize_briefing(
                 attempt["outcome"] = "invalid_json"
                 raise
 
-            ok, reject_reason = validate_synthesis(parsed, previous_titles)
+            ok, reject_reason = validate_synthesis(parsed, previous_titles, availability)
             if not ok:
                 attempt["outcome"] = "validation_rejected"
                 logger.warning("Synthesis rejected by structural validator; trying fallback models")
                 continue
 
+            for domain, chapter in zip(active, parsed["chapters"]):
+                chapter["domain"] = domain
+            parsed["content_availability"] = availability
             parsed, url_substitutions = enforce_corpus_urls(parsed, domain_corpus)
             attempt["url_substitutions"] = url_substitutions
             if url_substitutions > MAX_URL_SUBSTITUTIONS:
@@ -813,6 +627,20 @@ async def synthesize_briefing(
                 )
                 continue
 
+            # Normalize accepted complete-eight legacy provider fixtures to explicit IDs.
+            for domain, chapter in zip(active, parsed["chapters"]):
+                chapter["domain"] = domain
+            domains_by_title = {c["title"]: c["domain"] for c in parsed["chapters"]}
+            for segment in parsed["script_segments"]:
+                segment["domain"] = domains_by_title[segment["chapter_title"]]
+            for domain in DOMAIN_ORDER:
+                if domain not in active:
+                    parsed["takeaways"][domain] = _inactive_takeaway(domain, availability["domains"][domain])
+                else:
+                    parsed["takeaways"][domain].update(domain=domain, status="available", reason=availability["domains"][domain]["reason"])
+            parsed["content_availability"] = availability
+            parsed["content_basis"] = "rss_summaries"
+            parsed.pop("fallback_content", None)
             parsed["id"] = f"ep-{episode_num}"
             parsed["episode_number"] = episode_num
             parsed["date"] = local_now().strftime("%b %d, %Y")

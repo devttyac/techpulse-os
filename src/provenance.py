@@ -76,7 +76,10 @@ def selection_record(corpus, episode, path, *, provider_attempted=False):
     chapters = episode.get("chapters", []) if episode else []
     for i, domain in enumerate(DOMAIN_ORDER):
         articles = corpus.get(domain, [])
-        chapter_url = chapters[i].get("source_url") if i < len(chapters) else None
+        chapter = next((c for c in chapters if isinstance(c, dict) and c.get("domain") == domain), None)
+        if chapter is None and len(chapters) == 8 and not episode.get("content_availability") and all(isinstance(c, dict) and "domain" not in c for c in chapters):
+            chapter = chapters[i]
+        chapter_url = chapter.get("source_url") if chapter else None
         result[domain] = {
             "candidate_count": len(articles),
             "reason": "no_candidates" if not articles else ("position_0" if path == "deterministic_fallback" else "feed_order_prefix_then_model_choice"),

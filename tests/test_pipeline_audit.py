@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
+import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _IMPORT_STORAGE = tempfile.TemporaryDirectory(prefix="techpulse-audit-import-")
@@ -38,7 +39,7 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
                   "current_pipeline_task": None,
                   "pipeline_state": {"running": False, "stage": "idle", "progress": 0, "error": None}}
         self.patches = [patch.object(main, key, value) for key, value in values.items()]
-        self.patches += [patch.dict(os.environ, {"GEMINI_API_KEY": ""}),
+        self.patches += [patch.dict(os.environ, {"GEMINI_API_KEY": "", "API_SECRET_KEY": ""}),
                          patch.object(main, "ingest_all_domains", AsyncMock(return_value=corpus())),
                          patch.object(main, "generate_episode_podcast_audio", audio),
                          patch.object(main, "generate_all_domain_audios", AsyncMock(return_value={}))]
@@ -54,6 +55,80 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
         path = self.root / filename
         self.assertTrue(path.exists(), "Every terminal run needs a durable history entry")
         return [json.loads(line) for line in path.read_text().splitlines()]
+
+    async def test_empty_run_preserves_history_before_subset_dedup(self):
+        path = self.root / "episodes" / "ep-9.json"
+        path.write_text(json.dumps({"id":"ep-9", "title":"History", "summary":"History", "date":"Jan 01, 2020", "ingested_urls":["https://example.test/ai"]}))
+        before = path.read_bytes()
+        with patch.object(main, "ingest_all_domains", AsyncMock(return_value={d: [] for d in DOMAIN_ORDER})):
+            await main.run_daily_pipeline()
+        self.assertEqual(self.rows()[0]["status"], "no_content")
+        self.assertEqual(main.pipeline_state["stage"], "no_content")
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list((self.root / "episodes").iterdir()), [path])
+        self.assertEqual(self.rows()[0]["stages"]["synthesis"]["status"], "not_started")
+
+    async def test_all_source_failures_are_failed_not_no_content(self):
+        async def failed_ingest(*, diagnostics):
+            diagnostics["feeds"] = [{"feed_id":f"{d}:{i}", "domain":d, "outcome":"http_error", "accepted":0} for d,feeds in main.DOMAIN_FEEDS.items() for i in range(len(feeds))]
+            return {d: [] for d in DOMAIN_ORDER}
+        with patch.object(main, "ingest_all_domains", failed_ingest):
+            await main.run_daily_pipeline()
+        self.assertEqual(self.rows()[0]["status"], "failed")
+        self.assertEqual(main.pipeline_state["stage"], "error")
+
+    async def test_unavailable_podcast_persists_episode_without_audio_url(self):
+        with patch.object(main, "generate_episode_podcast_audio", AsyncMock(return_value=(None, [], "00:00", 0))):
+            await main.run_daily_pipeline()
+        episode = json.loads((self.root / "episodes" / "ep-143.json").read_text())
+        self.assertEqual(episode["audio_url"], "")
+        self.assertEqual(episode["audio_availability"]["podcast"]["status"], "unavailable")
+        self.assertEqual(episode["content_availability"]["domains"]["ai"]["status"], "available")
+
+    async def test_audio_timeout_and_domain_failure_keep_text_episode(self):
+        with patch.object(main,"generate_episode_podcast_audio",AsyncMock(side_effect=asyncio.TimeoutError)), patch.object(main,"generate_all_domain_audios",AsyncMock(side_effect=RuntimeError("SECRET_SENTINEL"))):
+            await main.run_daily_pipeline()
+        self.assertTrue((self.root/"episodes"/"ep-143.json").exists(), "Audio failure must retain the text episode")
+        episode=json.loads((self.root/"episodes"/"ep-143.json").read_text())
+        self.assertEqual(episode["pipeline_run"]["status"],"completed")
+        self.assertEqual(episode["pipeline_run"]["stages"]["podcast_audio"]["status"],"failed")
+        self.assertEqual(episode["pipeline_run"]["stages"]["domain_audio"]["status"],"failed")
+        self.assertEqual(episode["audio_url"],"")
+        self.assertEqual(episode["domain_audio"],{})
+        self.assertEqual(episode["audio_availability"]["domains"]["ai"]["status"],"unavailable")
+        self.assertNotIn("SECRET_SENTINEL",json.dumps(episode))
+
+    async def test_sparse_real_fallback_persists_id_coverage_and_consumers(self):
+        received={"ai":corpus()["ai"],"finops":corpus()["finops"]}
+        with patch.object(main,"ingest_all_domains",AsyncMock(return_value=received)):
+            await main.run_daily_pipeline()
+        episode=json.loads((self.root/"episodes"/"ep-143.json").read_text())
+        self.assertEqual([chapter["domain"] for chapter in episode["chapters"]],["ai","finops"])
+        self.assertEqual(episode["content_availability"]["domains"]["cloud"]["status"],"no_received_candidates")
+        self.assertEqual(episode["takeaways"]["cloud"]["bullets"],[])
+        self.assertEqual(episode["audio_availability"]["domains"]["cloud"]["status"],"unavailable")
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app),base_url="http://test") as client:
+            response=await client.get("/api/episodes/ep-143")
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json()["content_availability"],episode["content_availability"])
+            exported=await client.get("/api/export-markdown/ep-143")
+            self.assertIn("No articles available from checked sources.",exported.text)
+            self.assertIn("RSS summaries",exported.text)
+            self.assertIn("AI",exported.text)
+            feed=await client.get("/feed.xml")
+            self.assertNotIn("<enclosure",feed.text)
+            self.assertIn("No articles available from checked sources.",feed.text)
+            self.assertEqual((await client.get("/audio/ep-143-cloud.mp3")).status_code,404)
+
+    async def test_source_unavailable_takeaway_matches_authoritative_coverage(self):
+        async def ingest(*,diagnostics):
+            diagnostics["feeds"]=[{"feed_id":f"{d}:{i}","domain":d,"outcome":"failed" if d=="cloud" else "success","accepted":0} for d,feeds in main.DOMAIN_FEEDS.items() for i in range(len(feeds))]
+            return {"ai":corpus()["ai"]}
+        with patch.object(main,"ingest_all_domains",ingest): await main.run_daily_pipeline()
+        episode=json.loads((self.root/"episodes"/"ep-143.json").read_text())
+        self.assertEqual(episode["content_availability"]["domains"]["cloud"]["status"],"source_unavailable")
+        self.assertEqual(episode["takeaways"]["cloud"]["status"],"source_unavailable")
+        self.assertEqual(episode["takeaways"]["cloud"]["bullets"],[])
 
     async def test_completed_episode_has_same_record_as_durable_history(self):
         await main.run_daily_pipeline()

@@ -8,7 +8,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("techpulse.grounded_chat")
 
 GROUNDED_CHAT_SYSTEM_PROMPT = """You are the Lead Enterprise Architect & Socratic Interview Coach for TechPulse OS.
-You are strictly grounded in today's comprehensive technical paper corpus, whitepapers, and enterprise standards.
+You are grounded only in the selected episode's received RSS headlines and summaries.
+Do not claim access to full article bodies. If evidence is insufficient, say so and do not invent findings or interview questions.
 
 Guidelines:
 1. Conversational & Authoritative: Provide fluent, specification-grade architectural analyses that directly answer the user's question.
@@ -186,110 +187,85 @@ CONCEPT_EXPANSIONS: Dict[str, Dict[str, str]] = {
     }
 }
 
+def _episode_evidence(active_episode):
+    takeaways = active_episode.get("takeaways") or {}
+    full_articles = active_episode.get("full_articles") or {}
+    availability = active_episode.get("content_availability")
+    from src.content_availability import active_domains
+    allowed = set(active_domains(availability)) if availability is not None else None
+    evidence = {}
+    for domain, data in takeaways.items() if isinstance(takeaways, dict) else []:
+        if not isinstance(data, dict) or (allowed is not None and domain not in allowed):
+            continue
+        if data.get("status") not in (None, "available"):
+            continue
+        bullets = [b for b in (data.get("bullets") or []) if isinstance(b, str) and b.strip()]
+        article_text = full_articles.get(domain, "") if isinstance(full_articles, dict) else ""
+        if bullets or (isinstance(article_text, str) and article_text.strip()):
+            evidence[domain] = dict(data, bullets=bullets)
+    return evidence
+
+
+def _missing_domain_reason(query, active_episode):
+    aliases = {"ai": ("ai", "agent"), "cloud": ("cloud",), "data": ("data",),
+               "sec": ("security", "sec"), "devops": ("devops", "sre"),
+               "arch": ("architecture", "arch"), "finops": ("finops",), "gov": ("governance", "gov")}
+    words = set(re.findall(r"[a-z0-9]+", query.lower()))
+    availability = active_episode.get("content_availability") or {}
+    states = availability.get("domains", {}) if isinstance(availability, dict) else {}
+    for domain, terms in aliases.items():
+        state = states.get(domain, {})
+        if words.intersection(terms) and state.get("status") in ("no_received_candidates", "source_unavailable"):
+            return state.get("reason") or "No articles available from checked sources."
+    return None
+
+
 def dynamic_rag_synthesize(query: str, active_episode: Dict[str, Any]) -> str:
+    """Show received evidence safely; no canned architectural expansion."""
+    evidence = _episode_evidence(active_episode)
+    ep_id = str(active_episode.get("id", "unknown"))
+    ep_num = active_episode.get("episode_number", ep_id.replace("ep-", ""))
+    missing = _missing_domain_reason(query, active_episode)
+    if missing:
+        return f"{missing} Insufficient evidence in Episode #{ep_num} to answer for that domain."
+    if not evidence:
+        return f"Episode #{ep_num} has insufficient article evidence for grounded answers or interview questions."
     q = query.strip().lower()
-    ep_num = active_episode.get("episode_number", active_episode.get("id", "142").replace("ep-", ""))
-    ep_title = active_episode.get("title", "Technical Briefing")
-    takeaways = active_episode.get("takeaways", {})
-    full_articles = active_episode.get("full_articles", {})
-
-    # Greeting / Conversational Intent
-    greetings = ["hi", "hello", "hey", "how are you", "who are you", "what can you do", "what's up", "good morning", "good evening", "help"]
-    if any(q == g or q.startswith(g + " ") or q.endswith(" " + g) for g in greetings):
-        domains_summary = ", ".join([f"{data.get('badge', dom.upper())}" for dom, data in list(takeaways.items())[:4]])
-        return (
-            f"Hello Aaron! I am your **Lead Enterprise Architect Copilot**, strictly grounded in **Episode #{ep_num} ({ep_title})**.\n\n"
-            f"I am ready to evaluate production trade-offs, inspect low-level system mechanisms, or conduct a system design interview across today's topics: *{domains_summary}*. What would you like to explore?"
-        )
-
-    # Socratic System Design Challenge Intent
-    if any(k in q for k in ["interview", "challenge", "question", "quiz", "coach", "spar", "test me"]):
-        top_dom = list(takeaways.values())[0] if takeaways else {}
-        framing = top_dom.get("interview_framing", "Explain the production failure modes and architectural mitigation strategy.")
-        top_title = top_dom.get("title", ep_title)
-        return (
-            f"### 🎯 Socratic System Design Challenge (Episode #{ep_num})\n\n"
-            f"**Challenge Domain**: {top_title}\n\n"
-            f"**Architectural Prompt**:\n{framing}\n\n"
-            f"*Reply with your architectural rationale covering networking, consistency bounds, and blast-radius containment.*"
-        )
-
-    # 1. Match Concept Expansion
-    matched_concept = None
-    for k, v in CONCEPT_EXPANSIONS.items():
-        if k in q:
-            matched_concept = v
-            break
-
-    # 2. Match Domain & Bullets in Active Episode
-    q_words = set(re.findall(r'[a-z0-9\-]+', q))
-    stopwords = {'what', 'is', 'the', 'about', 'tell', 'me', 'how', 'does', 'work', 'in', 'and', 'for', 'of', 'a', 'an', 'to', 'with', 'on', 'can', 'you', 'explain', 'describe'}
-    keywords = [w for w in q_words if w not in stopwords and len(w) > 1]
-
-    scored_hits = []
-    for dom, data in takeaways.items():
-        title = data.get("title", "")
-        badge = data.get("badge", "")
-        for b in data.get("bullets", []):
-            score = sum(4 if kw in b.lower() else (2 if kw in title.lower() or kw in badge.lower() else 0) for kw in keywords)
-            if score > 0:
-                scored_hits.append((score, dom, data, b))
-
-    scored_hits.sort(key=lambda x: x[0], reverse=True)
-
-    if scored_hits and scored_hits[0][0] > 0:
-        matched_item = scored_hits[0]
-        dom_meta = matched_item[2]
-        dom_key = matched_item[1]
-        badge = dom_meta.get('badge', dom_key.upper())
-        
-        concept_title = matched_concept.get("title") if matched_concept else dom_meta.get("title", ep_title)
-        concept_def = matched_concept.get("definition") if matched_concept else f"In enterprise distributed systems, **{dom_meta.get('title')}** represents a key operational mechanism for high-reliability production."
-        concept_pitfall = matched_concept.get("pitfalls") if matched_concept else "Without strict architectural guardrails, distributed components suffer from non-deterministic execution states and compliance risks."
-        concept_sol = matched_concept.get("solution") if matched_concept else f"In Episode #{ep_num}, this mechanism is implemented through the following validated architectural controls:"
-
-        bullets_formatted = []
-        top_hits = [h for h in scored_hits if h[1] == dom_key][:2]
-        for hit in top_hits:
-            text = hit[3]
-            if ":" in text:
-                hdr, body = text.split(":", 1)
-                bullets_formatted.append(f"- **{hdr.strip()}**: {body.strip()}")
-            else:
-                bullets_formatted.append(f"- {text.strip()}")
-
-        bullets_md = "\n".join(bullets_formatted)
-        framing_md = f"\n\n💡 **Staff Architect Interview Framing**:\n{dom_meta.get('interview_framing')}" if dom_meta.get("interview_framing") else ""
-        sources_list = [f"[{s.get('title')}]({s.get('url')})" for s in dom_meta.get("sources", [])]
-        sources_md = f"\n\n**Sources**: {', '.join(sources_list)}" if sources_list else ""
-
-        return (
-            f"### [{badge}] {concept_title}\n\n"
-            f"**1. Architectural Foundation & Definition**\n{concept_def}\n\n"
-            f"**2. Production Pitfalls & Failure Modes**\n{concept_pitfall}\n\n"
-            f"**3. Episode #{ep_num} Implementation Mechanics**\n{concept_sol}\n"
-            f"{bullets_md}"
-            f"{framing_md}"
-            f"{sources_md}"
-        )
-
-    # Dynamic Fallback: Episode Overview
-    top_dom = list(takeaways.items())[:3]
-    overview_items = "\n".join([f"- **[{d.get('badge', dom.upper())}] {d.get('title')}**: {d.get('bullets', [''])[0]}" for dom, d in top_dom])
-
-    return (
-        f"### Grounded Briefing: Episode #{ep_num}\n\n"
-        f"Analyzing today's technical corpus for **{ep_title}**:\n\n"
-        f"{overview_items}\n\n"
-        f"*Grounded in Episode #{ep_num} Corpus ({len(takeaways)} Domains Available)*"
-    )
+    if any(k in q for k in ("interview", "challenge", "quiz", "coach", "test me")):
+        cards = [c for c in active_episode.get("flashcards", []) if isinstance(c, dict) and c.get("domain") in evidence]
+        if cards:
+            return f"### Episode #{ep_num} summary recall\n\n{cards[0].get('question', '')}\n\nUse only the received RSS summary when answering."
+        return f"Episode #{ep_num} has insufficient summary evidence for an interview question."
+    words = set(re.findall(r"[a-z0-9]+", q)) - {"what", "is", "the", "about", "tell", "me", "how", "does", "work", "in", "and", "for", "of", "a", "an", "to", "with", "on", "can", "you", "explain", "describe"}
+    hits = [(domain, data) for domain, data in evidence.items()
+            if any(w in (domain + ' ' + data.get('title', '') + ' ' + ' '.join(data['bullets'])).lower() for w in words)]
+    overview = q in {"hi", "hello", "hey", "help", "overview", "summary", "good morning"}
+    if not hits and not overview:
+        return f"Episode #{ep_num} has insufficient evidence to answer that question. Available domains: {', '.join(evidence)}."
+    selected = hits if hits else list(evidence.items())[:3]
+    lines = []
+    for domain, data in selected:
+        bullets = data['bullets']
+        if bullets:
+            lines.extend(f"- [{domain.upper()}] {b}" for b in bullets[:2])
+        else:
+            lines.append(f"- [{domain.upper()}] {active_episode.get('full_articles', {}).get(domain, '')}")
+        for source in data.get("sources", []):
+            if isinstance(source, dict):
+                lines.append(f"Source: [{source.get('title', '')}]({source.get('url', '')})")
+    return f"### Episode #{ep_num}: received RSS evidence\n\n" + "\n".join(lines)
 
 async def process_grounded_chat(query: str, active_episode: Dict[str, Any], chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
     api_key = os.getenv("GEMINI_API_KEY", "")
     full_articles = active_episode.get("full_articles", {})
     ep_num = active_episode.get("episode_number", active_episode.get("id", "142").replace("ep-", ""))
     ep_title = active_episode.get("title", "Technical Briefing")
-    takeaways = active_episode.get("takeaways", {})
+    takeaways = _episode_evidence(active_episode)
+    absent_reason = _missing_domain_reason(query, active_episode)
+    if not takeaways or absent_reason:
+        return {"response": dynamic_rag_synthesize(query, active_episode),
+                "model": "rss-evidence-guard", "grounded_episode_id": active_episode.get("id")}
+    full_articles = {d: text for d, text in full_articles.items() if d in takeaways}
 
     # 1. Live LLM Grounding (when Gemini API Key is configured)
     if api_key and len(api_key.strip()) > 10:
@@ -336,7 +312,7 @@ SUMMARY: {active_episode.get('summary')}
     fallback_response = dynamic_rag_synthesize(query, active_episode)
     return {
         "response": fallback_response,
-        "model": "dynamic-semantic-rag-engine",
+        "model": "rss-summary-evidence",
         "grounded_episode_id": active_episode.get("id")
     }
 

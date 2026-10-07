@@ -34,7 +34,7 @@ function createRuntime(records) {
         remove: (...names) => names.forEach(name => classes.delete(name)),
       },
       querySelectorAll: () => [],
-      pause() {}, load() {}, setAttribute() {},
+      pause() {}, load() {}, setAttribute() {}, removeAttribute() {},
     };
     Object.defineProperty(element, 'innerHTML', {
       get: () => markup,
@@ -146,4 +146,21 @@ test('recorded model markup stays literal text and cannot influence status class
   assert.match(runtime.text('ep-generation-label'), /model.generated/i);
   assert.ok(runtime.text('ep-generation-detail').includes(hostileModel));
   assert.ok(!runtime.status().className.includes(hostileModel));
+});
+
+test('source-derived fallback distinguishes RSS summaries from legacy fixed templates', async () => {
+  const ep = episode('ep-999', { schema_version: 1, synthesis: { path: 'deterministic_fallback', model: null } });
+  ep.fallback_content = 'source_derived';
+  const runtime = createRuntime([ep]); await runtime.load();
+  assert.match(runtime.text('ep-generation-detail'), /received RSS summaries/i);
+  assert.doesNotMatch(runtime.text('ep-generation-detail'), /fixed templates/i);
+});
+
+test('RSS-based model synthesis discloses received summaries and unacquired article bodies', async () => {
+  const ep = episode('ep-999', { schema_version: 1, synthesis: { path: 'llm', model: 'recorded-model' } });
+  ep.content_basis = 'rss_summaries';
+  const runtime = createRuntime([ep]); await runtime.load();
+  assert.match(runtime.text('ep-generation-detail'), /received RSS summaries/i);
+  assert.match(runtime.text('ep-generation-detail'), /article bodies were not acquired/i);
+  assert.match(runtime.text('ep-generation-detail'), /recorded-model/);
 });
