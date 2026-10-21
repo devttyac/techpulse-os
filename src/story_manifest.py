@@ -11,7 +11,7 @@ import re
 from urllib.parse import urlsplit
 
 from src.content_availability import DOMAIN_ORDER, build_content_availability
-from src.evidence_contracts import Passage, SourceUnit
+from src.evidence_contracts import Passage, SourceUnit, original_publication_event
 
 
 @dataclass(frozen=True)
@@ -429,6 +429,8 @@ def require_complete_story_sources(story: dict, evidence_store) -> CompleteStory
             raise ValueError('Invalid new-story source reference')
         seen.add(reference['version_id'])
         unit = evidence_store.read(reference['version_id'])
+        if original_publication_event(unit) is None:
+            raise ValueError('New story source lacks supported original publication')
         passages = []
         for passage_id in reference['passage_ids']:
             passage = evidence_store.passage(passage_id)

@@ -19,34 +19,34 @@ class EvidenceStore:
     def __init__(self, state_store):
         self._state = state_store
 
-    def _representation(self, artifact_id, version_id, digest, ordinal):
+    def _representation(self, artifact_id, version_id, digest, ordinal, identity):
         result = self._state.read_artifact(artifact_id)
         if result is None:
             raise EvidenceUnavailable("required source representation unavailable")
         body, metadata = result
         if (metadata != {"kind": "source-representation-v1", "version_id": version_id,
-                         "ordinal": ordinal, "digest": digest}
+                         "ordinal": ordinal, "identity": identity, "digest": digest}
                 or hashlib.sha256(body).hexdigest() != digest):
             raise EvidenceUnavailable("source representation binding mismatch")
         return body
 
-    def _save_representation(self, artifact_id, version_id, digest, ordinal, body):
+    def _save_representation(self, artifact_id, version_id, digest, ordinal, identity, body):
         existing = self._state.read_artifact(artifact_id)
         if existing is not None:
-            if self._representation(artifact_id, version_id, digest, ordinal) != body:
+            if self._representation(artifact_id, version_id, digest, ordinal, identity) != body:
                 raise EvidenceUnavailable("existing source representation differs")
             return
         self._state.put_artifact(artifact_id, "source-representation-v1", body,
                                  {"kind": "source-representation-v1", "version_id": version_id,
-                                  "ordinal": ordinal, "digest": digest})
+                                  "ordinal": ordinal, "identity": identity, "digest": digest})
 
     def _load_representations(self, unit):
         version_id = unit.version_id
         raw = self._representation("source-raw:" + version_id, version_id,
-                                   unit.acquisition.raw_representation_sha256, "raw")
+                                   unit.acquisition.raw_representation_sha256, "raw", "raw")
         members = tuple(self._representation(f"source-member:{version_id}:{index}",
-                                             version_id, digest, index)
-                        for index, digest in enumerate(unit.acquisition.member_sha256s))
+                                             version_id, member.sha256, index, member.member_id)
+                        for index, member in enumerate(unit.acquisition.members))
         return raw, members
 
     def save(self, unit, raw_representation, members=()):
@@ -60,19 +60,19 @@ class EvidenceStore:
                 or hashlib.sha256(raw_representation).hexdigest()
                 != unit.acquisition.raw_representation_sha256):
             raise ValueError("raw representation digest mismatch")
-        if (type(members) is not tuple or len(members) != len(unit.acquisition.member_sha256s)
-                or any(type(body) is not bytes or hashlib.sha256(body).hexdigest() != digest
-                       for body, digest in zip(members, unit.acquisition.member_sha256s))):
+        if (type(members) is not tuple or len(members) != len(unit.acquisition.members)
+                or any(type(body) is not bytes or hashlib.sha256(body).hexdigest() != member.sha256
+                       for body, member in zip(members, unit.acquisition.members))):
             raise ValueError("member representation digest mismatch")
         artifact_id = "source-unit:" + unit.version_id
         if self._state.read_artifact(artifact_id) is not None:
             raise ValueError("source version already exists")
         self._save_representation("source-raw:" + unit.version_id, unit.version_id,
-                                  unit.acquisition.raw_representation_sha256, "raw",
+                                  unit.acquisition.raw_representation_sha256, "raw", "raw",
                                   raw_representation)
-        for index, (digest, body) in enumerate(zip(unit.acquisition.member_sha256s, members)):
+        for index, (member, body) in enumerate(zip(unit.acquisition.members, members)):
             self._save_representation(f"source-member:{unit.version_id}:{index}",
-                                      unit.version_id, digest, index, body)
+                                      unit.version_id, member.sha256, index, member.member_id, body)
         body = json.dumps(value, sort_keys=True, ensure_ascii=False,
                           separators=(",", ":"), allow_nan=False).encode("utf-8")
         return self._state.put_artifact(artifact_id, _KIND, body,

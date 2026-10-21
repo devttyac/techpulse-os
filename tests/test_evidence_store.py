@@ -9,11 +9,11 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.evidence_contracts import build_source_unit
+from src.evidence_contracts import DateEvidence, SourceBlock, SourceLocator, SourceMember, build_source_unit
 from src.evidence_store import EvidenceStore, EvidenceUnavailable
 from src.state_store import StateStore, StoreIntegrityError
 from src.story_manifest import require_complete_story_sources
-from test_evidence_contracts import complete_unit
+from test_evidence_contracts import complete_unit, completion_for
 
 
 RAW_BYTES = b"publisher response"
@@ -93,9 +93,12 @@ class CompleteSourceStoreTests(unittest.TestCase):
         import hashlib
         unit = complete_unit()
         member = b"figure caption source bytes"
-        recipe = replace(unit.acquisition, member_sha256s=(hashlib.sha256(member).hexdigest(),))
+        recipe = replace(unit.acquisition, members=(SourceMember("asset-1", "asset",
+                                                               "figure-caption", hashlib.sha256(member).hexdigest()),))
+        completion = replace(unit.completion, required_member_ids=("asset-1",),
+                             observed_member_ids=("asset-1",))
         unit = build_source_unit(unit.article_id, unit.source_kind, unit.unit_scope,
-                                 unit.publication, recipe, unit.completion, unit.blocks)
+                                 unit.publication, recipe, completion, unit.blocks)
         with StateStore.create(self.root) as state:
             EvidenceStore(state).save(unit, RAW_BYTES, (member,))
         with StateStore.open(self.root) as state:
@@ -156,6 +159,28 @@ class CompleteSourceStoreTests(unittest.TestCase):
             refs["sources"][0]["passage_ids"] = [other.passages[0].passage_id]
             with self.assertRaises(ValueError):
                 require_complete_story_sources(refs, evidence)
+
+    def test_unknown_media_release_cannot_be_replaced_by_new_transcript_date_for_story(self):
+        base = complete_unit()
+        events = (
+            DateEvidence("original_media_release", "unknown", "", "", "unknown", "",
+                         "unknown", (), "release not established"),
+            DateEvidence("transcript_publication", "known", "2026-10-14", "transcript-page",
+                         "day", "", "Alder Labs", (), ""),
+        )
+        unit = build_source_unit(base.article_id, "publisher_transcript", "whole_transcript",
+                                 replace(base.publication, events=events), base.acquisition,
+                                 completion_for(base, "publisher_transcript", "whole_transcript"),
+                                 (SourceBlock("cue-1", "transcript_cue", base.blocks[0].text,
+                                              SourceLocator("transcript", {})),))
+        with StateStore.create(self.root) as state:
+            evidence = EvidenceStore(state)
+            evidence.save(unit, RAW_BYTES)
+            self.assertEqual(evidence.read(unit.version_id).publication.events[0].status, "unknown")
+            with self.assertRaises(ValueError):
+                require_complete_story_sources({"schema_version": 2, "story_id": "story-1",
+                    "sources": [{"version_id": unit.version_id,
+                                 "passage_ids": [unit.passages[0].passage_id]}]}, evidence)
 
 
 if __name__ == "__main__":
