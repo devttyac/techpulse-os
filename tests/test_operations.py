@@ -144,6 +144,10 @@ class OperationsTests(unittest.TestCase):
             ({"actual_started": None, "actual_finished": None}, "completed"),
             ({"actual_started": None}, "completed"),
             ({"disposition": "future_only"}, "completed"),
+            ({"disposition": "skipped"}, "completed"),
+            ({"disposition": "skipped"}, "call_returned"),
+            ({"disposition": "skipped", "actual_finished": None}, "started"),
+            ({}, "pending"),
             ({"actual_started": "2026-10-21T00:01:00+00:00"}, "skipped"),
         )
         for changes, outcome in cases:

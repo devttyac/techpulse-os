@@ -222,6 +222,11 @@ class OperationEvent:
             raise ValueError("started scheduled result lacks actual start")
         if outcome == "skipped" and (started is not None or finished is not None):
             raise ValueError("skipped scheduled slot cannot have run bounds")
+        if disposition == "skipped" and (outcome in ("started", "call_returned", "completed")
+                                         or started is not None or finished is not None):
+            raise ValueError("skipped window cannot record an executed run")
+        if outcome == "pending" and (started is not None or finished is not None):
+            raise ValueError("pending scheduled run cannot have actual bounds")
         if disposition == "future_only" and (outcome not in ("pending", "skipped", "unknown")
                                               or started is not None or finished is not None):
             raise ValueError("future-only slot cannot record an executed run")
