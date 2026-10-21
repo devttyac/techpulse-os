@@ -83,6 +83,23 @@ class RetainedReaderTests(unittest.TestCase):
         self.assertEqual(projected["audio_availability"]["podcast"]["status"], "unavailable")
         self.assertEqual(episode["audio_availability"]["podcast"]["status"], "available")
 
+    def test_unverified_domain_clip_is_not_advertised(self):
+        episode = {**self.original, "domain_audio": {"ai": "/audio/ep-198-ai.mp3"},
+                   "audio_availability": {"domains": {"ai": {"status": "available"}}}}
+        before = copy.deepcopy(episode)
+        projected = project_retained_episode(episode, audio_available=False)
+        self.assertFalse(projected["domain_audio"].get("ai"))
+        self.assertEqual(projected["audio_availability"]["domains"]["ai"]["status"], "unavailable")
+        self.assertEqual(episode, before)
+
+    def test_verified_domain_clip_keeps_declared_link_without_requiring_main_audio(self):
+        episode = {**self.original, "domain_audio": {"ai": "/audio/ep-198-ai.mp3"},
+                   "audio_availability": {"domains": {"ai": {"status": "available"}}}}
+        projected = project_retained_episode(episode, audio_available=False,
+                                             available_domains=frozenset({"ai"}))
+        self.assertEqual(projected["domain_audio"]["ai"], "/audio/ep-198-ai.mp3")
+        self.assertEqual(projected["audio_availability"]["domains"]["ai"]["status"], "available")
+
 
 if __name__ == "__main__":
     unittest.main()

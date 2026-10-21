@@ -59,7 +59,8 @@ def classify_retained_episode(episode: dict) -> RetainedEpisodeClassification:
         "No admitted saved full-article evidence; capture history unknown")
 
 
-def project_retained_episode(episode: dict, *, audio_available: bool) -> dict:
+def project_retained_episode(episode: dict, *, audio_available: bool,
+                             available_domains: frozenset[str] = frozenset()) -> dict:
     """Add truthful feature status to a detached response, leaving bytes intact."""
     classification = classify_retained_episode(episode)
     projected = deepcopy(episode)
@@ -81,4 +82,22 @@ def project_retained_episode(episode: dict, *, audio_available: bool) -> dict:
         if not isinstance(podcast, dict):
             podcast = availability["podcast"] = {}
         podcast.update(status="unavailable", reason="Retained audio not verified")
+    domain_links = projected.get("domain_audio", {})
+    if not isinstance(domain_links, dict):
+        domain_links = projected["domain_audio"] = {}
+    availability = projected.get("audio_availability", {})
+    if not isinstance(availability, dict):
+        availability = projected["audio_availability"] = {}
+    domain_states = availability.get("domains", {})
+    if not isinstance(domain_states, dict):
+        domain_states = availability["domains"] = {}
+    for domain in domain_links.keys() | domain_states.keys():
+        if domain in available_domains:
+            continue
+        if domain in domain_links:
+            domain_links[domain] = ""
+        state = domain_states.get(domain)
+        if not isinstance(state, dict):
+            state = domain_states[domain] = {}
+        state.update(status="unavailable", reason="Retained domain audio not verified")
     return projected

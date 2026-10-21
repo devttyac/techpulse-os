@@ -529,22 +529,37 @@ def _retained_audio_path(episode: dict, filename: str) -> str | None:
         measured = MP3(path)
         if not measured.info or not math.isfinite(measured.info.length) or measured.info.length <= 0:
             return None
-        expected = episode.get("total_seconds")
-        if expected is not None:
-            if type(expected) not in (int, float) or not math.isfinite(expected) or expected <= 0:
-                return None
-            if abs(measured.info.length - expected) > 2:
-                return None
-        clock = episode.get("duration")
-        if clock is not None:
-            if not isinstance(clock, str) or not re.fullmatch(r"[0-9]+:[0-5][0-9]", clock):
-                return None
-            minutes, seconds = map(int, clock.split(":"))
-            if abs(measured.info.length - (minutes * 60 + seconds)) > 2:
-                return None
+        if not domain:
+            expected = episode.get("total_seconds")
+            if expected is not None:
+                if type(expected) not in (int, float) or not math.isfinite(expected) or expected <= 0:
+                    return None
+                if abs(measured.info.length - expected) > 2:
+                    return None
+            clock = episode.get("duration")
+            if clock is not None:
+                if not isinstance(clock, str) or not re.fullmatch(r"[0-9]+:[0-5][0-9]", clock):
+                    return None
+                minutes, seconds = map(int, clock.split(":"))
+                if abs(measured.info.length - (minutes * 60 + seconds)) > 2:
+                    return None
         return path
     except (ValueError, TypeError, KeyError, AttributeError, OSError, MutagenError):
         return None
+
+
+def _retained_episode_view(saved: dict) -> dict:
+    """Use the same audio oracle for list/detail metadata and media reads."""
+    episode_id = saved["id"]
+    links = saved.get("domain_audio", {})
+    if not isinstance(links, dict):
+        links = {}
+    available_domains = frozenset(
+        domain for domain in links if domain in DOMAIN_ORDER
+        and _retained_audio_path(saved, f"{episode_id}-{domain}.mp3") is not None)
+    return project_retained_episode(
+        saved, audio_available=_retained_audio_path(saved, f"{episode_id}.mp3") is not None,
+        available_domains=available_domains)
 
 
 def _audit_action(action, outcome, *, run_id=None, changed_fields=()):
@@ -882,9 +897,7 @@ async def get_episodes(auth: bool = Depends(require_auth)):
                 saved = json.load(fp)
             if not isinstance(saved, dict) or saved.get("id") != episode_id:
                 raise ValueError("retained episode identity mismatch")
-            audio_name = f"{episode_id}.mp3"
-            episodes.append(project_retained_episode(
-                saved, audio_available=_retained_audio_path(saved, audio_name) is not None))
+            episodes.append(_retained_episode_view(saved))
         except (OSError, ValueError, TypeError) as exc:
             # Keep the retained identifier visible without inventing metadata
             # or downgrading a malformed captured record to never-captured.
@@ -917,8 +930,7 @@ async def get_episode_detail(episode_id: str, auth: bool = Depends(require_auth)
 async def read_episode_detail(episode_id: str, auth: bool = Depends(require_auth)):
     saved = await get_episode_detail(episode_id, auth)
     try:
-        return project_retained_episode(
-            saved, audio_available=_retained_audio_path(saved, f"{episode_id}.mp3") is not None)
+        return _retained_episode_view(saved)
     except (ValueError, TypeError):
         raise HTTPException(status_code=409, detail="Retained episode manifest or provenance invalid")
 

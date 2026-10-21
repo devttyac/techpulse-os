@@ -116,6 +116,36 @@ async def run_asgi_tests():
         with patch.object(app_main,"generate_episode_podcast_audio",AsyncMock(side_effect=AssertionError("Unavailable audio must not trigger TTS"))):
             assert (await client.get("/audio/ep-999-cloud.mp3")).status_code==404
             assert (await client.get("/audio/ep-999.mp3")).status_code==404
+        # Domain clips have their own duration and must agree across metadata and route.
+        sparse.update(duration="10:00", total_seconds=600,
+                      domain_audio={"ai": "/audio/ep-999-ai.mp3"})
+        sparse["audio_availability"]["domains"]["ai"] = {"status": "available"}
+        sparse_path = Path(app_main.EPISODES_DIR, "ep-999.json")
+        sparse_path.write_text(json.dumps(sparse))
+        domain_path = Path(app_main.AUDIO_DIR, "ep-999-ai.mp3")
+        saved_bytes = sparse_path.read_bytes()
+        for contents in (None, b"corrupt-domain-clip" * 100):
+            if contents is not None:
+                domain_path.write_bytes(contents)
+            expected_audio = domain_path.read_bytes() if domain_path.is_file() else None
+            for response in ((await client.get("/api/episodes")).json()["episodes"],
+                             [(await client.get("/api/episodes/ep-999")).json()]):
+                item = next(item for item in response if item["id"] == "ep-999")
+                assert not item["domain_audio"].get("ai")
+                assert item["audio_availability"]["domains"]["ai"]["status"] == "unavailable"
+            assert (await client.get("/audio/ep-999-ai.mp3")).status_code == 404
+            assert sparse_path.read_bytes() == saved_bytes
+            assert (domain_path.read_bytes() if domain_path.is_file() else None) == expected_audio
+        shutil.copyfile(Path(APP_DIR, "seed_data", "audio", "article-ai.mp3"), domain_path)
+        valid_bytes = domain_path.read_bytes()
+        for response in ((await client.get("/api/episodes")).json()["episodes"],
+                         [(await client.get("/api/episodes/ep-999")).json()]):
+            item = next(item for item in response if item["id"] == "ep-999")
+            assert item["domain_audio"]["ai"] == "/audio/ep-999-ai.mp3"
+            assert item["audio_availability"]["domains"]["ai"]["status"] == "available"
+            assert item["audio_url"] == "", "A valid domain clip cannot invent main audio"
+        assert (await client.get("/audio/ep-999-ai.mp3")).status_code == 200
+        assert sparse_path.read_bytes() == saved_bytes and domain_path.read_bytes() == valid_bytes
         r_sparse_feed=await client.get("/feed.xml")
         sparse_item=next(item for item in ET.fromstring(r_sparse_feed.content).findall("channel/item") if item.findtext("guid")=="ep-999")
         assert sparse_item.find("enclosure") is None, "Unavailable podcast must have no fictitious enclosure"
