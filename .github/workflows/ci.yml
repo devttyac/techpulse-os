@@ -29,7 +29,10 @@ jobs:
 
       - name: Syntax & PyCompile Check
         run: |
-          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py src/story_manifest.py
+          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py src/story_manifest.py src/state_store.py
+
+      - name: Run State Store Tests
+        run: python tests/test_state_store.py
 
       - name: Run Story Alignment Tests
         run: python tests/test_story_alignment.py
