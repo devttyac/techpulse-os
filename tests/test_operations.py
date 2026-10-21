@@ -109,6 +109,49 @@ class OperationsTests(unittest.TestCase):
         with StateStore.open(self.root) as store:
             self.assertEqual(store.operation_events("run-1")[0]["context"], event.context)
 
+    def test_scheduled_gap_and_future_only_preserve_unknown_instants_as_null(self):
+        base = {"nominal_slot": "2026-03-08T02:30:00",
+                "schedule_revision": 2, "resolved_instant": None,
+                "timezone": "America/New_York", "rule_revision": "2026a",
+                "actual_started": None, "actual_finished": None,
+                "disposition": "gap"}
+        with StateStore.create(self.root) as store:
+            for operation_id, disposition in (("run-gap", "gap"),
+                                              ("run-future", "future_only"),
+                                              ("run-skipped", "skipped")):
+                context = {**base, "disposition": disposition}
+                event = self.build("run", operation_id, "result",
+                                   {"outcome": "skipped", "run_id": operation_id,
+                                    "trigger": "scheduled"}, context=context)
+                store.record_run_event(event)
+        with StateStore.open(self.root) as store:
+            for operation_id in ("run-gap", "run-future", "run-skipped"):
+                saved = store.operation_events(operation_id)[0]["context"]
+                self.assertIsNone(saved["resolved_instant"])
+                self.assertIsNone(saved["actual_started"])
+                self.assertIsNone(saved["actual_finished"])
+
+    def test_scheduled_window_rejects_known_result_with_missing_or_contradictory_bounds(self):
+        base = {"nominal_slot": "2026-10-21T08:00:00",
+                "schedule_revision": 2,
+                "resolved_instant": "2026-10-21T00:00:00+00:00",
+                "timezone": "Asia/Singapore", "rule_revision": "2026a",
+                "actual_started": "2026-10-21T00:01:00+00:00",
+                "actual_finished": "2026-10-21T00:03:00+00:00",
+                "disposition": "on_time"}
+        cases = (
+            ({"resolved_instant": None}, "completed"),
+            ({"actual_started": None, "actual_finished": None}, "completed"),
+            ({"actual_started": None}, "completed"),
+            ({"disposition": "future_only"}, "completed"),
+            ({"actual_started": "2026-10-21T00:01:00+00:00"}, "skipped"),
+        )
+        for changes, outcome in cases:
+            with self.subTest(changes=changes, outcome=outcome), self.assertRaises(ValueError):
+                self.build("run", "run-1", "result",
+                           {"outcome": outcome, "run_id": "run-1", "trigger": "scheduled"},
+                           context={**base, **changes})
+
     def test_event_id_and_original_observation_time_survive_delayed_persistence(self):
         with StateStore.create(self.root) as store:
             event = self.build("run", "run-1", "result",

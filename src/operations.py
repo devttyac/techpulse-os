@@ -193,10 +193,9 @@ class OperationEvent:
             raise ValueError("scheduled run lacks complete window context")
         safe = dict(context)
         _nominal_time(safe["nominal_slot"])
-        for key in ("resolved_instant", "actual_started"):
-            _qualified_time(safe[key])
-        if safe["actual_finished"] is not None:
-            _qualified_time(safe["actual_finished"])
+        for key in ("resolved_instant", "actual_started", "actual_finished"):
+            if safe[key] is not None:
+                _qualified_time(safe[key])
         if type(safe["schedule_revision"]) is not int or safe["schedule_revision"] < 1:
             raise ValueError("invalid schedule revision")
         if (not isinstance(safe["timezone"], str) or
@@ -206,6 +205,29 @@ class OperationEvent:
             raise ValueError("invalid timezone rule revision")
         if safe["disposition"] not in _WINDOW_DISPOSITIONS:
             raise ValueError("invalid window disposition")
+        outcome = fields.get("outcome")
+        disposition = safe["disposition"]
+        resolved = safe["resolved_instant"]
+        started = safe["actual_started"]
+        finished = safe["actual_finished"]
+        if resolved is None and disposition not in ("gap", "skipped", "future_only", "unknown"):
+            raise ValueError("resolved instant is known for this window disposition")
+        if finished is not None and started is None:
+            raise ValueError("finished run has no actual start")
+        if started is not None and resolved is None:
+            raise ValueError("started run has no resolved instant")
+        if outcome in ("completed", "call_returned") and (resolved is None or started is None or finished is None):
+            raise ValueError("completed scheduled result lacks actual bounds")
+        if outcome == "started" and started is None:
+            raise ValueError("started scheduled result lacks actual start")
+        if outcome == "skipped" and (started is not None or finished is not None):
+            raise ValueError("skipped scheduled slot cannot have run bounds")
+        if disposition == "future_only" and (outcome not in ("pending", "skipped", "unknown")
+                                              or started is not None or finished is not None):
+            raise ValueError("future-only slot cannot record an executed run")
+        if started is not None and finished is not None:
+            if datetime.fromisoformat(finished) < datetime.fromisoformat(started):
+                raise ValueError("actual finish precedes actual start")
         return safe
 
     def validate(self):
