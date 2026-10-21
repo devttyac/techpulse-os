@@ -7,7 +7,7 @@ import tempfile
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if APP_DIR not in sys.path:
@@ -171,6 +171,115 @@ async def run_asgi_tests():
             assert (await client.get('/audio/ep-998.mp3')).status_code == 404
             assert legacy_audio.await_count == 0, 'Missing new audio must never call the legacy renderer'
         print('✓ Story exports preserve literal source text, citations, YAML scalars and no-audio boundaries')
+
+        # TP04: duplicate metadata must not delete retained records on a list read.
+        retained = {"id": "ep-995", "guid": "saved-guid-995", "title": "Same title",
+                    "summary": "Same summary", "hosts": "Recorded Host A & Host B",
+                    "date": "Oct 15, 2026", "zone": "Europe/London",
+                    "source_url": "https://example.test/retained", "content_basis": "rss_summaries",
+                    "audio_url": ""}
+        unknown = {**retained, "id": "ep-996", "guid": "saved-guid-996"}
+        unknown.pop("content_basis")
+        captured = {**retained, "id": "ep-994", "guid": "saved-guid-994",
+                    "legacy_evidence": {"schema_version": 1, "capture_status": "captured",
+                                        "version_ids": ["a" * 64]}}
+        captured.pop("content_basis")
+        original = {"ep-995": retained, "ep-996": unknown, "ep-994": captured}
+        before = {}
+        for episode_id, value in original.items():
+            path = Path(app_main.EPISODES_DIR, f"{episode_id}.json")
+            path.write_text(json.dumps(value))
+            before[episode_id] = path.read_bytes()
+        listed = (await client.get("/api/episodes")).json()["episodes"]
+        for episode_id, provenance, evidence in (("ep-995", "confirmed_rss", "never_captured"),
+                                                  ("ep-996", "unknown", "unknown"),
+                                                  ("ep-994", "captured", "captured_unavailable")):
+            item = next(item for item in listed if item["id"] == episode_id)
+            detail = (await client.get(f"/api/episodes/{episode_id}"))
+            assert detail.status_code == 200
+            assert item == detail.json()
+            assert item["legacy_compatibility"]["provenance"] == provenance
+            assert item["legacy_compatibility"]["evidence"] == evidence
+            assert item["legacy_compatibility"]["full_article_features"] == "unavailable"
+            for field in ("id", "guid", "hosts", "date", "zone", "source_url"):
+                assert item[field] == original[episode_id][field]
+            assert Path(app_main.EPISODES_DIR, f"{episode_id}.json").read_bytes() == before[episode_id]
+
+        # Malformed present manifests fail instead of downgrading to legacy RSS.
+        malformed = {**retained, "id": "ep-997", "story_manifest": {"schema_version": True}}
+        Path(app_main.EPISODES_DIR, "ep-997.json").write_text(json.dumps(malformed))
+        assert (await client.get("/api/episodes/ep-997")).status_code == 409
+
+        # A seed file and a large status flag cannot replace or validate saved bytes.
+        seed_record = json.loads(Path(app_main.EPISODES_DIR, "ep-142.json").read_text())
+        seed_record["audio_availability"] = {"podcast": {"status": "available"}}
+        Path(app_main.EPISODES_DIR, "ep-142.json").write_text(json.dumps(seed_record))
+        volume_audio = Path(app_main.AUDIO_DIR, "ep-142.mp3")
+        volume_audio.write_bytes(b"corrupt-retained-audio" * 90)
+        corrupt_before = volume_audio.read_bytes()
+        with patch.object(app_main, "generate_episode_podcast_audio",
+                          AsyncMock(side_effect=AssertionError("Playback must never synthesize"))):
+            assert (await client.get("/audio/ep-142.mp3")).status_code == 404
+        assert volume_audio.read_bytes() == corrupt_before
+        projected = (await client.get("/api/episodes/ep-142")).json()
+        assert projected["audio_url"] == ""
+        assert projected["audio_availability"]["podcast"]["status"] == "unavailable"
+        assert Path(app_main.EPISODES_DIR, "ep-142.json").read_bytes() == json.dumps(seed_record).encode()
+        malformed_audio = {**seed_record, "audio_availability": "invalid"}
+        Path(app_main.EPISODES_DIR, "ep-142.json").write_text(json.dumps(malformed_audio))
+        assert (await client.get("/audio/ep-142.mp3")).status_code == 404
+        assert volume_audio.read_bytes() == corrupt_before
+
+        # A versioned, explicitly available retained MP3 remains accessible.
+        retained_audio = Path(app_main.AUDIO_DIR, "ep-139.mp3")
+        assert retained_audio.is_file()
+        retained_record = json.loads(Path(app_main.EPISODES_DIR, "ep-139.json").read_text())
+        retained_record["audio_availability"] = {"podcast": {"status": "available"}}
+        Path(app_main.EPISODES_DIR, "ep-139.json").write_text(json.dumps(retained_record))
+        retained_audio_before = retained_audio.read_bytes()
+        assert (await client.get("/audio/ep-139.mp3")).status_code == 404, "Incompatible measured duration must be unavailable"
+        retained_record["total_seconds"] = 143
+        retained_record["duration"] = "02:23"
+        Path(app_main.EPISODES_DIR, "ep-139.json").write_text(json.dumps(retained_record))
+        assert (await client.get("/audio/ep-139.mp3")).status_code == 200
+        assert retained_audio.read_bytes() == retained_audio_before
+
+        # Startup may seed an empty installation, but never rewrite a retained set.
+        with tempfile.TemporaryDirectory(prefix="techpulse-startup-tp04-") as root:
+            episodes = Path(root, "episodes")
+            audio = Path(root, "audio")
+            episodes.mkdir()
+            audio.mkdir()
+            for number in (901, 902):
+                Path(episodes, f"ep-{number}.json").write_text(json.dumps({
+                    "id": f"ep-{number}", "title": "Duplicate", "summary": "Duplicate",
+                    "hosts": "Original hosts", "date": "Old date"}))
+            Path(audio, "ep-901.mp3").write_bytes(b"retained-audio")
+            original_bytes = {p: p.read_bytes() for p in (*episodes.iterdir(), *audio.iterdir())}
+            fake_scheduler = MagicMock()
+            fake_scheduler.running = False
+            with patch.object(app_main, "STORAGE_DIR", root), \
+                 patch.object(app_main, "EPISODES_DIR", str(episodes)), \
+                 patch.object(app_main, "AUDIO_DIR", str(audio)), \
+                 patch.object(app_main, "scheduler", fake_scheduler), \
+                 patch.object(app_main, "load_config", return_value={"cron_schedule": "0 7 * * *", "max_episodes_retained": 1}), \
+                 patch.object(app_main, "generate_episode_podcast_audio",
+                              AsyncMock(side_effect=AssertionError("Startup must not regenerate"))):
+                async with app_main.lifespan(app_main.app):
+                    pass
+            assert {p: p.read_bytes() for p in (*episodes.iterdir(), *audio.iterdir())} == original_bytes
+        with tempfile.TemporaryDirectory(prefix="techpulse-fresh-tp04-") as root:
+            episodes = Path(root, "episodes")
+            audio = Path(root, "audio")
+            episodes.mkdir()
+            audio.mkdir()
+            with patch.object(app_main, "STORAGE_DIR", root), \
+                 patch.object(app_main, "EPISODES_DIR", str(episodes)), \
+                 patch.object(app_main, "AUDIO_DIR", str(audio)):
+                app_main.init_seed_data()
+            assert Path(episodes, "ep-142.json").is_file()
+            assert Path(audio, "ep-142.mp3").is_file()
+        print("✓ TP04 read paths preserve retained identity, bytes, and truthful availability")
 
         # 8. Test Static SPA Root
         r_root = await client.get("/")

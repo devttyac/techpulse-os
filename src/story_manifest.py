@@ -295,6 +295,20 @@ def manifest_from_dict(payload: dict) -> StoryManifest:
     return StoryManifest(tuple(coverage), tuple(stories))
 
 
+def retained_manifest_kind(episode: dict) -> str | None:
+    """Recognize saved RSS-v1 manifests without accepting malformed presence.
+
+    The TP03 complete-source v2 story reference has a separate reader and
+    cannot be silently interpreted as historical RSS excerpt evidence.
+    """
+    if not isinstance(episode, dict):
+        raise ValueError('Retained episode must be an object')
+    if 'story_manifest' not in episode:
+        return None
+    manifest_from_dict(episode['story_manifest'])
+    return 'rss_v1'
+
+
 def apply_evidence_selections(manifest: StoryManifest,
                              selections: dict[str, tuple[str, ...]]) -> StoryManifest:
     manifest = manifest_from_dict(manifest_to_dict(manifest))
