@@ -11,6 +11,7 @@ import re
 from urllib.parse import urlsplit
 
 from src.content_availability import DOMAIN_ORDER, build_content_availability
+from src.evidence_contracts import Passage, SourceUnit, original_publication_event
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,20 @@ class StoryManifest:
     stories: tuple[Story, ...]
     schema_version: int = 1
     selection_cap: int = 3
+
+
+@dataclass(frozen=True)
+class CompleteStorySource:
+    """One new-story source and its exact selected saved passages."""
+    version_id: str
+    unit: SourceUnit
+    passages: tuple[Passage, ...]
+
+
+@dataclass(frozen=True)
+class CompleteStoryEvidence:
+    story_id: str
+    sources: tuple[CompleteStorySource, ...]
 
 
 _STATUSES = ('available', 'no_received_candidates', 'source_unavailable')
@@ -388,3 +403,39 @@ def selected_evidence_context(manifest: StoryManifest) -> dict[str, list[dict]]:
             'url': story.source_url,
             'evidence': [{'unit_id': u.unit_id, 'text': u.text} for u in chosen]})
     return context
+
+
+def require_complete_story_sources(story: dict, evidence_store) -> CompleteStoryEvidence:
+    """Resolve new-story inputs only from exact admitted saved body versions.
+
+    This is the TP03 input boundary for later new-story producers. Legacy v1
+    manifests and their RSS excerpt reader remain unchanged for retained data.
+    A URL, summary, or caller-supplied body is never promoted by this path.
+    """
+    if (type(story) is not dict or set(story) != {'schema_version', 'story_id', 'sources'}
+            or type(story['schema_version']) is not int or story['schema_version'] != 2
+            or type(story['story_id']) is not str or not story['story_id'].strip()
+            or type(story['sources']) is not list or not story['sources']):
+        raise ValueError('New story requires exact saved source versions')
+    sources, seen = [], set()
+    for reference in story['sources']:
+        if (type(reference) is not dict or set(reference) != {'version_id', 'passage_ids'}
+                or type(reference['version_id']) is not str
+                or type(reference['passage_ids']) is not list
+                or not reference['passage_ids']
+                or any(type(item) is not str for item in reference['passage_ids'])
+                or len(set(reference['passage_ids'])) != len(reference['passage_ids'])
+                or reference['version_id'] in seen):
+            raise ValueError('Invalid new-story source reference')
+        seen.add(reference['version_id'])
+        unit = evidence_store.read(reference['version_id'])
+        if original_publication_event(unit) is None:
+            raise ValueError('New story source lacks supported original publication')
+        passages = []
+        for passage_id in reference['passage_ids']:
+            passage = evidence_store.passage(passage_id)
+            if passage.version_id != unit.version_id:
+                raise ValueError('Story passage belongs to another source version')
+            passages.append(passage)
+        sources.append(CompleteStorySource(unit.version_id, unit, tuple(passages)))
+    return CompleteStoryEvidence(story['story_id'], tuple(sources))
