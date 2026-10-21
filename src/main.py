@@ -37,6 +37,9 @@ from src.provenance import (RunRecord, append_record, attach_episode_record,
                             selection_record, error_category, action_record)
 import time
 from functools import wraps
+from mutagen.mp3 import MP3
+from mutagen import MutagenError
+from src.legacy_reader import project_retained_episode
 
 load_dotenv()
 
@@ -104,24 +107,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Could not parse cron expression: {e}")
 
-    # Run startup seed data initialization, duplicate cleanup, migration, and retention
+    # Historical records are never migrated, deduplicated or retired at startup.
+    # TP26 owns reference-aware retirement after its separate acceptance gate.
     try:
         init_seed_data()
-        cleanup_duplicate_episodes()
-        sanitize_existing_episodes()
-        enforce_retention_policy()
     except Exception as e:
-        logger.error(f"Error in startup initialization/sanitization/retention: {e}")
-
-    # Pre-generate seed episode audio in background if missing
-    try:
-        ep142_mp3 = os.path.join(AUDIO_DIR, "ep-142.mp3")
-        if not os.path.exists(ep142_mp3):
-            with open(os.path.join(EPISODES_DIR, "ep-142.json"), "r") as fp:
-                ep142_data = json.load(fp)
-            asyncio.create_task(generate_episode_podcast_audio(ep142_data, AUDIO_DIR))
-    except Exception as e:
-        logger.error(f"Error checking seed audio on startup: {e}")
+        logger.error(f"Error in fresh-install seed initialization: {e}")
 
     yield
 
@@ -254,7 +245,9 @@ SEED_EPISODES = {
 }
 
 def init_seed_data():
-    # 1. Populate from seed_data, always replacing if seed file is larger/newer
+    """Install bundled examples only in a storage root without retained episodes."""
+    if any(re.fullmatch(r"ep-[0-9]+\.json", name) for name in os.listdir(EPISODES_DIR)):
+        return
     seed_dir = os.path.join(os.path.dirname(__file__), "..", "seed_data")
     if os.path.exists(seed_dir):
         for root, dirs, files in os.walk(seed_dir):
@@ -264,34 +257,12 @@ def init_seed_data():
             for file in files:
                 src_f = os.path.join(root, file)
                 dst_f = os.path.join(target_dir, file)
-                # Overwrite if destination is missing or smaller than seed
-                if not os.path.exists(dst_f) or os.path.getsize(dst_f) < os.path.getsize(src_f):
+                if not os.path.exists(dst_f):
                     try:
                         shutil.copyfile(src_f, dst_f)
-                        logger.info(f"Force-updated seed asset to volume: {dst_f} ({os.path.getsize(src_f)} bytes)")
+                        logger.info("Installed fresh seed asset: %s", dst_f)
                     except Exception as e:
                         logger.error(f"Failed to copy seed file {src_f}: {e}")
-
-    # 2. Populate and upgrade JSON episode definitions with full_articles corpus
-    seed_json_dir = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes")
-    if os.path.exists(seed_json_dir):
-        for f in os.listdir(seed_json_dir):
-            if f.endswith(".json"):
-                src_f = os.path.join(seed_json_dir, f)
-                dst_f = os.path.join(EPISODES_DIR, f)
-                # Overwrite if destination lacks full_articles or is smaller than seed
-                need_update = True
-                if os.path.exists(dst_f):
-                    try:
-                        with open(dst_f, "r") as fp:
-                            curr_data = json.load(fp)
-                        if "full_articles" in curr_data:
-                            need_update = False
-                    except:
-                        need_update = True
-                if need_update:
-                    shutil.copyfile(src_f, dst_f)
-                    logger.info(f"Upgraded episode JSON with full paper corpus: {dst_f}")
 
 def sanitize_existing_episodes():
     """Scans EPISODES_DIR and in-place sanitizes any stale MAS/TRM references in saved JSON files (gated by one-time marker)."""
@@ -414,55 +385,6 @@ def get_storage_stats() -> Dict[str, Any]:
         "max_episodes_retained": cfg.get("max_episodes_retained", 14)
     }
 
-def cleanup_duplicate_episodes():
-    """Scans EPISODES_DIR and purges any duplicate episodes with identical titles or summaries."""
-    if not os.path.exists(EPISODES_DIR):
-        return
-    files = [f for f in os.listdir(EPISODES_DIR) if f.startswith("ep-") and f.endswith(".json")]
-    def sort_key(fn: str) -> int:
-        try:
-            return int(fn.replace("ep-", "").replace(".json", ""))
-        except:
-            return 0
-    sorted_files = sorted(files, key=sort_key)
-    seen_signatures = {}
-    
-    for fn in sorted_files:
-        fp = os.path.join(EPISODES_DIR, fn)
-        try:
-            with open(fp, "r") as f:
-                data = json.load(f)
-            synthesis = data.get('pipeline_run', {}).get('synthesis', {}) if isinstance(data.get('pipeline_run'), dict) else {}
-            if ('story_manifest' in data or 'episode_fingerprint' in data
-                    or isinstance(synthesis, dict) and 'contract_version' in synthesis):
-                # New aggregate headings do not identify immutable evidence.
-                # Presence is enough: malformed records must not be deleted either.
-                continue
-            title = data.get("title", "").strip().lower()
-            summary = data.get("summary", "").strip().lower()
-            sig_title = f"title::{title}"
-            sig_sum = f"sum::{summary[:100]}"
-            
-            is_dup = bool(title and sig_title in seen_signatures) or bool(summary and sig_sum in seen_signatures)
-            if is_dup:
-                canonical_fn = seen_signatures.get(sig_title) or seen_signatures.get(sig_sum)
-                logger.warning(f"Detected duplicate episode {fn} (identical to {canonical_fn}). Purging duplicate...")
-                try:
-                    os.remove(fp)
-                    audio_fp = os.path.join(AUDIO_DIR, fn.replace(".json", ".mp3"))
-                    if os.path.exists(audio_fp):
-                        os.remove(audio_fp)
-                    logger.info(f"Successfully purged duplicate episode {fn}")
-                except Exception as e:
-                    logger.error(f"Failed to remove duplicate {fn}: {e}")
-            else:
-                if title:
-                    seen_signatures[sig_title] = fn
-                if summary:
-                    seen_signatures[sig_sum] = fn
-        except Exception as e:
-            logger.error(f"Error checking episode {fn} for duplicates: {e}")
-
 def _safe_url(value: Any) -> str:
     """Return value only if it is an absolute http(s) URL; otherwise an empty string.
 
@@ -511,14 +433,13 @@ def _plain_text(value: Any) -> str:
     return " ".join(text.split())
 
 def get_sorted_episode_files() -> List[str]:
-    cleanup_duplicate_episodes()
     def sort_key(filename: str) -> int:
         try:
             base = filename.replace("ep-", "").replace(".json", "")
             return int(base)
         except ValueError:
             return 0
-    files = [f for f in os.listdir(EPISODES_DIR) if f.endswith(".json")]
+    files = [f for f in os.listdir(EPISODES_DIR) if re.fullmatch(r"ep-[0-9]+\.json", f)]
     return sorted(files, key=sort_key, reverse=True)
 
 pipeline_state = {
@@ -567,6 +488,78 @@ def _finish_source_run(run):
 
 def _usable_audio(path):
     return isinstance(path, (str, os.PathLike)) and os.path.isfile(path) and os.path.getsize(path) > 1000
+
+
+def _retained_audio_path(episode: dict, filename: str) -> str | None:
+    """Resolve only an explicitly bound, decodable saved audio file.
+
+    TP22 adds the committed artifact lease and complete version binding.
+    No seed path, cache promotion, or synthesis is permitted on this read.
+    """
+    match = re.fullmatch(r"(ep-[0-9]+)(?:-([a-z]+))?\.mp3", filename)
+    if not match or not isinstance(episode, dict):
+        return None
+    episode_id, domain = match.groups()
+    if episode.get("id") != episode_id:
+        return None
+    try:
+        if "story_manifest" in episode:
+            valid, _ = validate_story_episode(episode)
+            if not valid:
+                return None
+            manifest = manifest_from_dict(episode["story_manifest"])
+            if episode.get("episode_fingerprint") != episode_fingerprint(manifest):
+                return None
+            if not domain and episode.get("audio_recipe_fingerprint") != audio_recipe_fingerprint(manifest, VOICE_MAP):
+                return None
+        if domain:
+            declared = episode.get("domain_audio", {}).get(domain)
+            state = episode.get("audio_availability", {}).get("domains", {}).get(domain, {})
+            coverage = episode.get("content_availability", {}).get("domains", {}).get(domain, {})
+            if coverage.get("status") != "available":
+                return None
+        else:
+            declared = episode.get("audio_url")
+            state = episode.get("audio_availability", {}).get("podcast", {})
+        if declared != f"/audio/{filename}" or state.get("status") != "available":
+            return None
+        path = os.path.join(AUDIO_DIR, filename)
+        if os.path.islink(path) or not _usable_audio(path):
+            return None
+        measured = MP3(path)
+        if not measured.info or not math.isfinite(measured.info.length) or measured.info.length <= 0:
+            return None
+        if not domain:
+            expected = episode.get("total_seconds")
+            if expected is not None:
+                if type(expected) not in (int, float) or not math.isfinite(expected) or expected <= 0:
+                    return None
+                if abs(measured.info.length - expected) > 2:
+                    return None
+            clock = episode.get("duration")
+            if clock is not None:
+                if not isinstance(clock, str) or not re.fullmatch(r"[0-9]+:[0-5][0-9]", clock):
+                    return None
+                minutes, seconds = map(int, clock.split(":"))
+                if abs(measured.info.length - (minutes * 60 + seconds)) > 2:
+                    return None
+        return path
+    except (ValueError, TypeError, KeyError, AttributeError, OSError, MutagenError):
+        return None
+
+
+def _retained_episode_view(saved: dict) -> dict:
+    """Use the same audio oracle for list/detail metadata and media reads."""
+    episode_id = saved["id"]
+    links = saved.get("domain_audio", {})
+    if not isinstance(links, dict):
+        links = {}
+    available_domains = frozenset(
+        domain for domain in links if domain in DOMAIN_ORDER
+        and _retained_audio_path(saved, f"{episode_id}-{domain}.mp3") is not None)
+    return project_retained_episode(
+        saved, audio_available=_retained_audio_path(saved, f"{episode_id}.mp3") is not None,
+        available_domains=available_domains)
 
 
 def _audit_action(action, outcome, *, run_id=None, changed_fields=()):
@@ -898,21 +891,48 @@ async def health_check():
 async def get_episodes(auth: bool = Depends(require_auth)):
     episodes = []
     for f in get_sorted_episode_files():
-        with open(os.path.join(EPISODES_DIR, f), "r") as fp:
-            episodes.append(json.load(fp))
+        episode_id = f[:-5]
+        try:
+            with open(os.path.join(EPISODES_DIR, f), "r") as fp:
+                saved = json.load(fp)
+            if not isinstance(saved, dict) or saved.get("id") != episode_id:
+                raise ValueError("retained episode identity mismatch")
+            episodes.append(_retained_episode_view(saved))
+        except (OSError, ValueError, TypeError) as exc:
+            # Keep the retained identifier visible without inventing metadata
+            # or downgrading a malformed captured record to never-captured.
+            logger.warning("Retained episode %s unavailable (%s)", episode_id, type(exc).__name__)
+            episodes.append({"id": episode_id, "audio_url": "",
+                             "legacy_compatibility": {"schema_version": 1,
+                                 "provenance": "unknown", "evidence": "unavailable",
+                                 "full_article_features": "unavailable",
+                                 "reason": "Retained episode record unreadable or invalid"}})
     return {"episodes": episodes}
 
-@app.get("/api/episodes/{episode_id}")
 async def get_episode_detail(episode_id: str, auth: bool = Depends(require_auth)):
+    """Raw internal legacy reader retained for existing non-API callers."""
+    if not re.fullmatch(r"ep-[0-9]+", episode_id):
+        raise HTTPException(status_code=404, detail="Episode not found")
     ep_file = os.path.join(EPISODES_DIR, f"{episode_id}.json")
-    if not os.path.exists(ep_file):
-        seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{episode_id}.json")
-        if os.path.exists(seed_f):
-            ep_file = seed_f
-        else:
-            raise HTTPException(status_code=404, detail="Episode not found")
-    with open(ep_file, "r") as fp:
-        return json.load(fp)
+    try:
+        with open(ep_file, "r") as fp:
+            saved = json.load(fp)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    except (OSError, ValueError):
+        raise HTTPException(status_code=409, detail="Retained episode record unavailable")
+    if not isinstance(saved, dict) or saved.get("id") != episode_id:
+        raise HTTPException(status_code=409, detail="Retained episode identity invalid")
+    return saved
+
+
+@app.get("/api/episodes/{episode_id}")
+async def read_episode_detail(episode_id: str, auth: bool = Depends(require_auth)):
+    saved = await get_episode_detail(episode_id, auth)
+    try:
+        return _retained_episode_view(saved)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=409, detail="Retained episode manifest or provenance invalid")
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest, auth: bool = Depends(require_auth)):
@@ -1165,90 +1185,22 @@ async def export_vault(req: Dict[str, Any], auth: bool = Depends(require_auth)):
 
 @app.get("/audio/{filename}")
 async def serve_audio(filename: str):
-    file_path = os.path.join(AUDIO_DIR, filename)
-    seed_path = os.path.join(os.path.dirname(__file__), "..", "seed_data", "audio", filename)
-    
     audio_match = re.fullmatch(r"(ep-[0-9]+)(?:-([a-z]+))?\.mp3", filename)
-    if audio_match:
-        episode_id, domain = audio_match.groups()
-        episode_file = os.path.join(EPISODES_DIR, f"{episode_id}.json")
-        if os.path.isfile(episode_file):
-            with open(episode_file) as fp:
-                episode = json.load(fp)
-            if 'story_manifest' in episode:
-                valid, _ = validate_story_episode(episode)
-                declared = episode.get('domain_audio', {}).get(domain) if domain else episode.get('audio_url')
-                state = episode.get('audio_availability', {}).get('domains', {}).get(domain, {}) if domain else episode.get('audio_availability', {}).get('podcast', {})
-                if not (valid and declared == f'/audio/{filename}'
-                        and state.get('status') == 'available' and _usable_audio(file_path)):
-                    raise HTTPException(status_code=404, detail='Audio unavailable for this episode coverage')
-                return FileResponse(file_path, media_type='audio/mpeg',
-                    headers={'Accept-Ranges':'bytes', 'Cache-Control':'no-cache', 'Access-Control-Allow-Origin':'*'})
-            coverage = episode.get("content_availability")
-            if isinstance(coverage, dict) and coverage.get("schema_version") == 1:
-                audio_status = episode.get("audio_availability", {})
-                if domain:
-                    state = coverage.get("domains", {}).get(domain, {})
-                    declared = episode.get("domain_audio", {}).get(domain)
-                    permitted = (state.get("status") == "available"
-                        and audio_status.get("domains", {}).get(domain, {}).get("status") == "available"
-                        and declared == f"/audio/{filename}")
-                else:
-                    permitted = (audio_status.get("podcast", {}).get("status") == "available"
-                        and episode.get("audio_url") == f"/audio/{filename}")
-                if not permitted:
-                    raise HTTPException(status_code=404, detail="Audio unavailable for this episode coverage")
-
-    # 1. Always ensure volume file is up to date with full-article seed audio
-    if os.path.exists(seed_path):
-        if not os.path.exists(file_path) or os.path.getsize(file_path) < os.path.getsize(seed_path):
-            try:
-                os.makedirs(AUDIO_DIR, exist_ok=True)
-                shutil.copyfile(seed_path, file_path)
-                logger.info(f"Updated audio {filename} from seed ({os.path.getsize(seed_path)} bytes)")
-            except Exception as e:
-                logger.warning(f"Could not overwrite volume ({e}). Serving seed file directly.")
-                return FileResponse(
-                    seed_path,
-                    media_type="audio/mpeg",
-                    headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
-                )
-
-    # 2. Serve from volume if valid
-    if os.path.exists(file_path) and os.path.getsize(file_path) > 1000:
-        return FileResponse(
-            file_path,
-            media_type="audio/mpeg",
-            headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
-        )
-
-    # 3. Serve from seed_data
-    if os.path.exists(seed_path) and os.path.getsize(seed_path) > 1000:
-        return FileResponse(
-            seed_path,
-            media_type="audio/mpeg",
-            headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
-        )
-
-    # 4. On-demand Edge-TTS Synthesis Fallback if missing
-    ep_id = filename.replace(".mp3", "")
-    ep_file = os.path.join(EPISODES_DIR, f"{ep_id}.json")
-    if os.path.exists(ep_file):
-        try:
-            with open(ep_file, "r") as fp:
-                ep_data = json.load(fp)
-            logger.info(f"Synthesizing missing audio on-demand for {filename}...")
-            await generate_episode_podcast_audio(ep_data, AUDIO_DIR)
-            if os.path.exists(file_path):
-                return FileResponse(
-                    file_path,
-                    media_type="audio/mpeg",
-                    headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"}
-                )
-        except Exception as e:
-            logger.error(f"On-demand synthesis failed for {filename}: {e}")
-
-    raise HTTPException(status_code=404, detail="Audio file not found")
+    if not audio_match:
+        raise HTTPException(status_code=404, detail="Audio unavailable")
+    episode_id = audio_match.group(1)
+    episode_file = os.path.join(EPISODES_DIR, f"{episode_id}.json")
+    try:
+        with open(episode_file, "r") as fp:
+            episode = json.load(fp)
+    except (OSError, ValueError):
+        raise HTTPException(status_code=404, detail="Audio unavailable")
+    file_path = _retained_audio_path(episode, filename)
+    if file_path is None:
+        raise HTTPException(status_code=404, detail="Audio unavailable")
+    return FileResponse(file_path, media_type="audio/mpeg",
+                        headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache",
+                                 "Access-Control-Allow-Origin": "*"})
 
 @app.get("/feed.xml")
 async def podcast_rss(request: Request):

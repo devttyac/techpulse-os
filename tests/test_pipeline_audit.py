@@ -384,10 +384,18 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(bundle.await_count, 0)
         self.assertEqual(list((self.root/'episodes').iterdir()), [])
 
-    async def test_legacy_duplicate_cleanup_remains_unchanged(self):
+    async def test_legacy_duplicate_list_read_preserves_distinct_ids_and_audio(self):
+        before = {}
         for number in (140,141):
-            (self.root/'episodes'/f'ep-{number}.json').write_text(json.dumps({'id':f'ep-{number}', 'title':'Legacy duplicate', 'summary':'Same legacy summary'}))
-        self.assertEqual(main.get_sorted_episode_files(), ['ep-140.json'])
+            record = self.root/'episodes'/f'ep-{number}.json'
+            audio = self.root/'audio'/f'ep-{number}.mp3'
+            record.write_text(json.dumps({'id':f'ep-{number}', 'title':'Legacy duplicate',
+                                          'summary':'Same legacy summary'}))
+            audio.write_bytes(f'episode-{number}'.encode())
+            before[record] = record.read_bytes()
+            before[audio] = audio.read_bytes()
+        self.assertEqual(main.get_sorted_episode_files(), ['ep-141.json', 'ep-140.json'])
+        self.assertEqual({path: path.read_bytes() for path in before}, before)
 
     async def test_independent_domain_audio_survives_unavailable_podcast(self):
         async def domain_only(data, directory):
