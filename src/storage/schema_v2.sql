@@ -3,8 +3,10 @@ CREATE TABLE operation_events (
     operation_id TEXT NOT NULL,
     kind TEXT NOT NULL,
     phase TEXT NOT NULL CHECK (phase IN ('intent', 'result', 'reconciliation')),
+    component TEXT NOT NULL,
     observed_at TEXT NOT NULL,
-    fields_json TEXT NOT NULL
+    fields_json TEXT NOT NULL,
+    context_json TEXT NOT NULL
 );
 
 CREATE INDEX operation_events_by_operation

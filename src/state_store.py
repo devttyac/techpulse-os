@@ -14,7 +14,7 @@ import sqlite3
 import tempfile
 from urllib.parse import quote
 
-from src.operations import OperationEvent, OperationPolicy
+from src.operations import OperationEvent, OperationPolicy, membership_digest
 
 
 _SCHEMA_VERSION = 2
@@ -32,7 +32,8 @@ _EXPECTED_COLUMNS = {
     "coverage": ("coverage_key", "episode_id"),
     "control_revisions": ("namespace", "control_key", "revision", "value"),
     "operation_journal": ("operation_id", "kind", "status", "metadata_json"),
-    "operation_events": ("event_id", "operation_id", "kind", "phase", "observed_at", "fields_json"),
+    "operation_events": ("event_id", "operation_id", "kind", "phase", "component",
+                         "observed_at", "fields_json", "context_json"),
     "effect_intents": ("operation_id", "kind", "status", "effect_status", "intent_event_id", "resolution_event_id"),
     "diagnostic_events": ("sequence", "event_id", "observed_at", "event_json", "byte_length"),
 }
@@ -162,8 +163,52 @@ class StateStore:
                     raise StoreIntegrityError("retained schema shape is incompatible")
             if self._db.execute("PRAGMA foreign_key_check").fetchone() is not None:
                 raise StoreIntegrityError("retained database has broken references")
+            if version == 2:
+                self._verify_effects()
         except sqlite3.Error as exc:
             raise StoreIntegrityError("retained database failed integrity check") from exc
+
+    def _verify_effects(self):
+        rows = self._db.execute(
+            "SELECT e.operation_id, e.kind, e.status, e.effect_status, "
+            "i.operation_id, i.kind, i.phase, i.fields_json, "
+            "r.operation_id, r.kind, r.phase, r.fields_json "
+            "FROM effect_intents e "
+            "LEFT JOIN operation_events i ON i.event_id = e.intent_event_id "
+            "LEFT JOIN operation_events r ON r.event_id = e.resolution_event_id"
+        )
+        for (operation_id, kind, status, effect_status, intent_op, intent_kind,
+             intent_phase, intent_fields, result_op, result_kind, result_phase,
+             result_fields) in rows:
+            if (intent_op != operation_id or intent_kind != kind or intent_phase != "intent"
+                    or kind not in ("deletion", "restoration")):
+                raise StoreIntegrityError("effect intent has invalid required record")
+            identity_key = "artifact_id" if kind == "deletion" else "episode_id"
+            original = _read_json_object(intent_fields)
+            if not original.get(identity_key):
+                raise StoreIntegrityError("effect intent lacks retained identity")
+            if status == "resolved" and result_op is None:
+                raise StoreIntegrityError("resolved effect lacks durable result")
+            if ((status == "pending" and effect_status not in ("unknown", "ambiguous"))
+                    or (status == "resolved" and effect_status not in (
+                        "verified_removed", "verified_present", "failed",
+                        "observed_absent", "observed_present"))):
+                raise StoreIntegrityError("effect status contradicts resolution state")
+            if result_op is not None:
+                if (result_op != operation_id or result_kind != kind
+                        or result_phase not in ("result", "reconciliation")):
+                    raise StoreIntegrityError("effect result record does not match intent")
+                if ((result_phase == "result" and effect_status not in (
+                        "verified_removed", "verified_present", "unknown", "failed"))
+                        or (result_phase == "reconciliation" and effect_status not in (
+                            "observed_absent", "observed_present", "ambiguous"))):
+                    raise StoreIntegrityError("effect phase contradicts observed status")
+                result = _read_json_object(result_fields)
+                if (result.get(identity_key) != original[identity_key]
+                        or result.get("outcome") != effect_status):
+                    raise StoreIntegrityError("effect result contradicts retained state")
+            elif effect_status != "unknown":
+                raise StoreIntegrityError("effect status has no durable observation")
 
     def _migrate_v1(self):
         """Add v2 tables atomically without rewriting historical v1 records."""
@@ -306,6 +351,14 @@ class StateStore:
             if self.read_artifact(item) is None:
                 raise StoreIntegrityError("publication evidence unavailable")
         with self._transaction():
+            if event.fields.get("outcome") != "committed" or event.fields.get("episode_id") != episode_id:
+                raise ValueError("publication audit result contradicts committed episode")
+            if (event.fields.get("evidence_digest") != membership_digest(ids)
+                    or event.fields.get("coverage_digest") != membership_digest(keys)
+                    or event.fields.get("episode_revision") != hashlib.sha256(encoded.encode()).hexdigest()
+                    or event.fields.get("evidence_count") != len(ids)
+                    or event.fields.get("coverage_count") != len(keys)):
+                raise ValueError("publication audit references do not match exact joins")
             self._insert_episode(episode_id, ids, keys, encoded)
             self._insert_required_event(event)
 
@@ -369,6 +422,10 @@ class StateStore:
             raise ValueError("invalid control revision or value")
         with self._transaction():
             revision = self._write_control(namespace, key, expected_revision, value)
+            if (event.fields.get("outcome") != "committed"
+                    or event.fields.get("control_key") != key
+                    or event.fields.get("control_revision") != revision):
+                raise ValueError("settings audit result contradicts committed control")
             self._insert_required_event(event)
             return revision
 
@@ -416,29 +473,31 @@ class StateStore:
                 or event.phase != phase or event.duty != OperationPolicy.duty(kind)
                 or event.schema_version != 2):
             raise ValueError("event does not match the required operation boundary")
-        # Revalidate mutable event fields at the persistence boundary.
-        OperationEvent.build(kind, event.operation_id, phase, event.fields)
+        event.validate()
 
     def _insert_required_event(self, event):
         if not isinstance(event, OperationEvent) or event.duty != "required":
             raise ValueError("required event expected")
-        canonical = OperationEvent.build(event.kind, event.operation_id, event.phase, event.fields)
+        event.validate()
         self._db.execute(
-            "INSERT INTO operation_events VALUES (?, ?, ?, ?, ?, ?)",
-            (canonical.event_id, canonical.operation_id, canonical.kind,
-             canonical.phase, canonical.observed_at, _json_object(canonical.fields)),
+            "INSERT INTO operation_events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (event.event_id, event.operation_id, event.kind, event.phase,
+             event.component, event.observed_at, _json_object(event.fields),
+             _json_object(event.context)),
         )
-        return canonical.event_id
+        return event.event_id
 
     def operation_events(self, operation_id):
         """Read required records without interpreting intent as success."""
         rows = self._db.execute(
-            "SELECT event_id, kind, phase, observed_at, fields_json FROM operation_events "
+            "SELECT event_id, kind, phase, component, observed_at, fields_json, context_json "
+            "FROM operation_events "
             "WHERE operation_id = ? ORDER BY rowid", (_id(operation_id),),
         )
         return [{"event_id": event_id, "kind": kind, "phase": phase,
-                 "observed_at": observed_at, "fields": _read_json_object(fields)}
-                for event_id, kind, phase, observed_at, fields in rows]
+                 "component": component, "observed_at": observed_at,
+                 "fields": _read_json_object(fields), "context": _read_json_object(context)}
+                for event_id, kind, phase, component, observed_at, fields, context in rows]
 
     def record_run_event(self, event):
         """Persist a run observation; callers must not use this for effects."""
@@ -535,16 +594,16 @@ class StateStore:
         if (type(max_records) is not int or max_records < 1 or
                 type(max_bytes) is not int or max_bytes < 256):
             raise ValueError("invalid diagnostic bound")
-        canonical = OperationEvent.build(event.kind, event.operation_id, event.phase, event.fields)
-        encoded = _json_object({"kind": canonical.kind, "operation_id": canonical.operation_id,
-                                "phase": canonical.phase, "fields": canonical.fields})
+        encoded = _json_object({"kind": event.kind, "operation_id": event.operation_id,
+                                "phase": event.phase, "component": event.component,
+                                "fields": event.fields, "context": event.context})
         byte_length = len(encoded.encode("utf-8"))
         if byte_length > max_bytes:
             raise ValueError("diagnostic event exceeds storage bound")
         with self._transaction():
             self._db.execute("INSERT INTO diagnostic_events(event_id, observed_at, event_json, byte_length) "
                              "VALUES (?, ?, ?, ?)",
-                             (canonical.event_id, canonical.observed_at, encoded, byte_length))
+                             (event.event_id, event.observed_at, encoded, byte_length))
             while True:
                 count, size = self._db.execute(
                     "SELECT COUNT(*), COALESCE(SUM(byte_length), 0) FROM diagnostic_events"

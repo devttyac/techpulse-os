@@ -12,6 +12,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.state_store import StateStore, StoreIntegrityError
+from src.operations import OperationEvent
 
 
 def create_v1_store(root):
@@ -209,6 +210,38 @@ class StateStoreTests(unittest.TestCase):
             self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 1)
             self.assertEqual(db.execute("SELECT value FROM control_revisions WHERE control_key = 'schedule'").fetchone()[0], b"06:00")
             self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name = 'effect_intents'").fetchone())
+
+    def test_resolved_effect_without_matching_result_fails_closed_on_open(self):
+        with StateStore.create(self.root) as store:
+            store.begin_effect("delete-1", "deletion",
+                OperationEvent.build("deletion", "delete-1", "intent", {"artifact_id": "article-1"},
+                                     component="lifecycle"))
+            store.record_effect_result("delete-1", "verified_removed",
+                OperationEvent.build("deletion", "delete-1", "result",
+                                     {"artifact_id": "article-1", "outcome": "verified_removed"},
+                                     component="lifecycle"))
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            db.execute("UPDATE effect_intents SET resolution_event_id = NULL WHERE operation_id = 'delete-1'")
+        with self.assertRaises(StoreIntegrityError):
+            StateStore.open(self.root)
+
+    def test_resolved_effect_pointing_at_other_operation_result_fails_closed(self):
+        with StateStore.create(self.root) as store:
+            for index in (1, 2):
+                operation_id = f"delete-{index}"
+                artifact_id = f"article-{index}"
+                store.begin_effect(operation_id, "deletion",
+                    OperationEvent.build("deletion", operation_id, "intent",
+                                         {"artifact_id": artifact_id}, component="lifecycle"))
+                store.record_effect_result(operation_id, "verified_removed",
+                    OperationEvent.build("deletion", operation_id, "result",
+                                         {"artifact_id": artifact_id, "outcome": "verified_removed"},
+                                         component="lifecycle"))
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            wrong = db.execute("SELECT resolution_event_id FROM effect_intents WHERE operation_id = 'delete-2'").fetchone()[0]
+            db.execute("UPDATE effect_intents SET resolution_event_id = ? WHERE operation_id = 'delete-1'", (wrong,))
+        with self.assertRaises(StoreIntegrityError):
+            StateStore.open(self.root)
 
 
 if __name__ == "__main__":
