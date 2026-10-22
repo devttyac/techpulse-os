@@ -1,10 +1,13 @@
 """TP23 contract tests for a durable, whole, nonsecret Settings revision."""
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src import settings as settings_module
 from src.settings import (SettingsConflict, SettingsIntegrityError,
