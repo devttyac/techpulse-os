@@ -41,6 +41,33 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertIsNone(result["model_registry"][0]["current_bindings"]["price_revision"])
         self.assertEqual(SettingsService(self.root).read()["config"], VALID)
 
+    def test_unaudited_settings_row_is_not_read_or_advanced(self):
+        with StateStore.create(self.root / "state") as store:
+            encoded = json.dumps({"schema_version": 1, "config": VALID}).encode()
+            store._db.execute("INSERT INTO control_revisions VALUES (?, ?, ?, ?)",
+                              ("settings_public", "settings_snapshot", 1, encoded))
+            store._db.commit()
+        service = SettingsService(self.root)
+        with self.assertRaises(SettingsIntegrityError):
+            service.read()
+        with self.assertRaises(SettingsIntegrityError):
+            service.save(VALID, expected_revision=1)
+
+    def test_fresh_defaults_do_not_invent_schedule_or_approved_model(self):
+        self.assertEqual(SettingsService.fresh_defaults(), {
+            "max_episodes_retained": 14, "timezone_id": "Asia/Singapore"})
+        self.assertEqual(SettingsService(self.root).initialization_kind(), "fresh")
+        (self.root / "config.json").write_text("{}")
+        self.assertEqual(SettingsService(self.root).initialization_kind(), "migrate")
+
+    def test_unknown_retained_file_cannot_be_classified_as_fresh(self):
+        (self.root / "unknown-retained.bin").write_bytes(b"existing")
+        service = SettingsService(self.root)
+        self.assertEqual(service.initialization_kind(), "migrate")
+        with self.assertRaises(SettingsIntegrityError):
+            service.save(VALID, expected_revision=0, initialization="fresh")
+        self.assertFalse((self.root / "state").exists())
+
     def test_invalid_whole_save_keeps_prior_revision(self):
         service = SettingsService(self.root)
         service.save(VALID, expected_revision=0, initialization="fresh")
@@ -160,11 +187,12 @@ class SettingsServiceTests(unittest.TestCase):
         approved = {
             "provider": "gemini", "model": "gemini-3.6-flash",
             "approval_status": "approved", "approval_ref": "review-fixture-1",
-            "bindings": {"api_endpoint": "v1beta/models/gemini-3.6-flash",
-                         "model_version": "3.6-flash-07-2026", "price_revision": "price-1",
-                         "capability_revision": "cap-1", "grounding_revision": "ground-1",
-                         "citation_revision": "cite-1", "pi_revision": "pi-1"},
+            "review_evidence": {"real_article_pass_ref": "fixture-1"},
+            "bindings": {key: "fixture-1" for key in settings_module.MODEL_BINDINGS},
         }
+        approved["bindings"].update({
+            "api_endpoint": "v1beta/models/gemini-3.6-flash",
+            "model_version": "3.6-flash-07-2026"})
         current = dict(approved["bindings"])
         self.assertEqual(assess_model(approved, current)["status"], "approved")
         SettingsService(self.root).save(VALID, expected_revision=0, initialization="fresh")
@@ -174,18 +202,63 @@ class SettingsServiceTests(unittest.TestCase):
         self.assertEqual(assess_model(approved, {**current, "price_revision": "price-2"})["status"], "stale")
         self.assertEqual(assess_model(approved, {**current, "pi_revision": None})["status"], "stale")
 
+    def test_registry_evidence_is_retained_across_irrelevant_settings_save(self):
+        service = SettingsService(self.root)
+        service.save(VALID, expected_revision=0, initialization="fresh")
+        first = service.read()
+        self.assertEqual(first["registry_revision"], 1)
+        self.assertEqual(first["model_registry"][0]["status"], "disabled")
+        self.assertEqual(first["model_registry"][0]["evidence_bindings"]["api_endpoint"],
+                         "v1beta/models/gemini-3.6-flash")
+        self.assertIsNone(first["model_registry"][0]["evidence_bindings"]["price_revision"])
+        self.assertEqual(first["model_registry"][0]["budget"]["max_usd"], 0.05)
+        service.save({**VALID, "max_episodes_retained": 30}, expected_revision=1)
+        second = SettingsService(self.root).read()
+        self.assertEqual(second["registry_revision"], 1)
+        self.assertEqual(second["model_registry"], first["model_registry"])
+        with StateStore.open(self.root / "state") as store:
+            raw = store.read_control("settings_public", "settings_snapshot")[1]
+        self.assertIn(b'"registry"', raw)
+
+    def test_reviewed_model_transition_is_internal_and_remains_runtime_blocked(self):
+        service = SettingsService(self.root)
+        service.save(VALID, expected_revision=0, initialization="fresh")
+        with self.assertRaises(SettingsValidationError):
+            service.record_model_approval({}, expected_revision=1)
+        self.assertEqual(service.read()["revision"], 1)
+
     def test_registry_approval_alone_does_not_claim_current_chat_adapter_ready(self):
         service = SettingsService(self.root)
         service.save(VALID, expected_revision=0, initialization="fresh")
-        approved = {**settings_module.MODEL_REGISTRY[0],
-                    "approval_status": "approved", "approval_ref": "review-fixture-1",
-                    "bindings": {key: "fixture-1" for key in settings_module.MODEL_BINDINGS}}
-        current = dict(approved["bindings"])
-        with patch.object(settings_module, "MODEL_REGISTRY", (approved,)), \
-             patch.object(settings_module, "CURRENT_MODEL_BINDINGS", current), \
-             patch.dict("os.environ", {"GEMINI_API_KEY": "fixture-secret"}):
-            result = service.read()
+        bindings = {key: "fixture-1" for key in settings_module.MODEL_BINDINGS}
+        for key in ("api_endpoint", "model_version", "budget_revision"):
+            bindings[key] = settings_module.CURRENT_MODEL_BINDINGS[key]
+        review = {key: {"verdict": "PASS", "artifact_sha256": "a" * 64,
+                        "reference": "fixture-pass-1"} for key in (
+            "real_article_pass_ref", "price_pass_ref", "capability_pass_ref",
+            "adapter_pass_ref", "budget_pass_ref", "grounding_pass_ref",
+            "citation_pass_ref", "pi_pass_ref")}
+        review.update({"decision": "approved", "reviewed_settings_revision": 1,
+                       "bindings": bindings, "approval_ref": "fixture-approved-1",
+                       "approval_event": {"review_stage": "TP44", "verdict": "PASS",
+                                          "reviewed_settings_revision": 1,
+                                          "approval_ref": "fixture-approved-1",
+                                          "report_sha256": "b" * 64}})
+        with self.assertRaises(SettingsValidationError):
+            service.record_model_approval({**review, "price_pass_ref": "mere string"},
+                                          expected_revision=1)
+        service.record_model_approval(review, expected_revision=1)
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "fixture-secret"}):
+            result = SettingsService(self.root).read()
         self.assertEqual(result["selected_model_status"], "approved")
+        self.assertEqual(result["registry_revision"], 2)
+        service.save({**VALID, "max_episodes_retained": 30}, expected_revision=2)
+        self.assertEqual(service.read()["selected_model_status"], "approved")
+        service.record_model_binding_change("price_revision", "fixture-price-2",
+                                            reason_ref="price-change-fixture",
+                                            expected_revision=3)
+        self.assertEqual(service.read()["selected_model_status"], "stale")
+        self.assertEqual(service.read()["registry_revision"], 3)
         self.assertFalse(result["approved_chat_available"])
         self.assertEqual(result["application_status"]["chat"],
                          "blocked_pending_model_and_adapter_gate")

@@ -426,7 +426,9 @@ class StateStore:
             revision = self._write_control(namespace, key, expected_revision, value)
             if (event.fields.get("outcome") != "committed"
                     or event.fields.get("control_key") != key
-                    or event.fields.get("control_revision") != revision):
+                    or event.fields.get("control_revision") != revision
+                    or (key == "settings_snapshot" and
+                        event.fields.get("evidence_digest") != hashlib.sha256(value).hexdigest())):
                 raise ValueError("settings audit result contradicts committed control")
             self._insert_required_event(event)
             return revision
@@ -439,6 +441,25 @@ class StateStore:
             (namespace, _id(key)),
         ).fetchone()
         return (row[0], row[1]) if row else None
+
+    def read_settings_control_verified(self, key):
+        """Reject a Settings revision without its exact required audit result."""
+        row = self.read_control("settings_public", key)
+        if row is None:
+            return None
+        revision, value = row
+        events = self.operation_events(f"settings-revision-{revision}")
+        if len(events) != 1:
+            raise StoreIntegrityError("Settings revision has no unique required audit")
+        event = events[0]
+        if (event["kind"] != "settings" or event["phase"] != "result"
+                or event["component"] != "settings"
+                or event["fields"].get("outcome") != "committed"
+                or event["fields"].get("control_key") != key
+                or event["fields"].get("control_revision") != revision
+                or event["fields"].get("evidence_digest") != hashlib.sha256(value).hexdigest()):
+            raise StoreIntegrityError("Settings revision audit does not bind retained value")
+        return row
 
     def has_retained_records(self):
         """Distinguish an unused initialized store from one holding evidence."""

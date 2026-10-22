@@ -273,9 +273,10 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
         with StateStore.open(self.root / "state") as store:
             events = store.operation_events("settings-revision-1")
         self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]["fields"], {
-            "control_key": "settings_snapshot", "control_revision": 1,
-            "outcome": "committed"})
+        self.assertEqual(events[0]["fields"]["control_key"], "settings_snapshot")
+        self.assertEqual(events[0]["fields"]["control_revision"], 1)
+        self.assertEqual(events[0]["fields"]["outcome"], "committed")
+        self.assertEqual(len(events[0]["fields"]["evidence_digest"]), 64)
         self.assertNotIn("SECRET_SENTINEL", json.dumps((rows, events, saved)))
 
     async def test_legacy_episode_read_is_unchanged(self):

@@ -59,11 +59,11 @@ async def run_asgi_tests():
         print(f"✓ /api/episodes/ep-142 returned: '{ep['title'][:35]}...'")
 
         # 4. Test /api/chat
-        r_chat = await client.post("/api/chat", json={"query": "Explain SPIFFE in banking", "episode_id": "ep-142"})
-        assert r_chat.status_code == 200, f"Chat API failed: {r_chat.status_code}"
-        chat_data = r_chat.json()
-        assert "response" in chat_data
-        print(f"✓ /api/chat returned grounded model response ({len(chat_data['response'])} bytes)")
+        with patch.object(app_main, "process_grounded_chat", new_callable=AsyncMock) as legacy_chat:
+            r_chat = await client.post("/api/chat", json={"query": "Explain SPIFFE in banking", "episode_id": "ep-142"})
+            assert r_chat.status_code == 503, f"Unapproved chat must be blocked: {r_chat.status_code}"
+            legacy_chat.assert_not_awaited()
+        print("✓ /api/chat blocks unapproved legacy model/provider calls")
 
         # 5. Test /api/export-vault and /api/export-markdown/{episode_id}
         r_export_json = await client.post("/api/export-vault", json={"episode_id": "ep-142"})

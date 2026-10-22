@@ -167,6 +167,48 @@ def test_authenticated_settings_expose_credential_status_without_values():
         assert "fixture-router-secret" not in response.text
 
 
+def test_authenticated_fresh_settings_expose_only_approved_defaults():
+    async def go(root):
+        with _env(TEST_KEY), patch.object(app_main, "STORAGE_DIR", root):
+            async with _client() as c:
+                return await c.get("/api/settings", headers={"X-API-Key": TEST_KEY})
+
+    with tempfile.TemporaryDirectory(prefix="techpulse-fresh-settings-") as root:
+        response = _run(go(root))
+        assert response.status_code == 409
+        assert response.json()["detail"] == {
+            "message": "Settings require explicit fresh initialization",
+            "initialization": "fresh",
+            "fresh_defaults": {"max_episodes_retained": 14,
+                               "timezone_id": "Asia/Singapore"}}
+        assert "cron_schedule" not in response.text
+    with tempfile.TemporaryDirectory(prefix="techpulse-migrate-settings-") as root:
+        with open(os.path.join(root, "config.json"), "w") as stream:
+            stream.write("{}")
+        response = _run(go(root))
+        assert response.status_code == 409
+        assert response.json()["detail"]["initialization"] == "migrate"
+        assert "fresh_defaults" not in response.json()["detail"]
+
+
+def test_saved_settings_survive_storage_stat_read_failure():
+    config = {"max_episodes_retained": 14, "cron_schedule": "0 7 * * *",
+              "timezone_id": "Asia/Singapore", "chat_provider": "gemini",
+              "chat_model": "gemini-3.6-flash"}
+    with tempfile.TemporaryDirectory(prefix="techpulse-stats-settings-") as root:
+        SettingsService(root).save(config, expected_revision=0, initialization="fresh")
+        async def go():
+            with _env(TEST_KEY), patch.object(app_main, "STORAGE_DIR", root), \
+                 patch.object(app_main, "get_storage_stats", side_effect=OSError("offline")):
+                async with _client() as c:
+                    return await c.get("/api/settings", headers={"X-API-Key": TEST_KEY})
+        response = _run(go())
+        assert response.status_code == 200
+        assert response.json()["revision"] == 1
+        assert response.json()["storage_status"] == "unavailable"
+        assert response.json()["storage"] is None
+
+
 def test_key_set_non_ascii_header_is_rejected_not_crashed():
     # hmac.compare_digest raises TypeError on non-ASCII str; the dependency must
     # compare bytes so a hostile header yields 401, not a 500.
@@ -220,6 +262,9 @@ def main():
         test_key_set_missing_header_is_rejected,
         test_key_set_wrong_header_is_rejected,
         test_key_set_correct_header_is_accepted_on_get_and_post,
+        test_authenticated_settings_expose_credential_status_without_values,
+        test_authenticated_fresh_settings_expose_only_approved_defaults,
+        test_saved_settings_survive_storage_stat_read_failure,
         test_key_set_non_ascii_header_is_rejected_not_crashed,
         test_healthz_open_in_both_modes,
         test_every_api_route_requires_auth,

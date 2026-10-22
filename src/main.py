@@ -938,19 +938,9 @@ async def read_episode_detail(episode_id: str, auth: bool = Depends(require_auth
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest, auth: bool = Depends(require_auth)):
-    ep_file = os.path.join(EPISODES_DIR, f"{req.episode_id}.json")
-    if not os.path.exists(ep_file):
-        seed_f = os.path.join(os.path.dirname(__file__), "..", "seed_data", "episodes", f"{req.episode_id}.json")
-        if os.path.exists(seed_f):
-            ep_file = seed_f
-        else:
-            ep_file = os.path.join(EPISODES_DIR, "ep-142.json")
-    
-    with open(ep_file, "r") as fp:
-        active_ep = json.load(fp)
-
-    result = await process_grounded_chat(req.query, active_ep)
-    return result
+    # TP19/TP44 must replace the legacy provider cascade with an approved,
+    # revision-bound adapter before this route can make a provider call.
+    raise HTTPException(status_code=503, detail="Chat model and adapter are not approved")
 
 @app.post("/api/refresh")
 @_audit_handler_failures("refresh")
@@ -1020,11 +1010,22 @@ async def get_refresh_status(auth: bool = Depends(require_auth)):
 
 @app.get("/api/settings")
 async def get_settings(auth: bool = Depends(require_auth)):
+    service = SettingsService(STORAGE_DIR)
     try:
-        current = SettingsService(STORAGE_DIR).read()
+        current = service.read()
     except SettingsIntegrityError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    current["storage"] = get_storage_stats(current["config"]["max_episodes_retained"])
+        kind = service.initialization_kind()
+        detail = {"message": str(exc), "initialization": kind}
+        if kind == "fresh":
+            detail["fresh_defaults"] = SettingsService.fresh_defaults()
+        raise HTTPException(status_code=409, detail=detail) from exc
+    try:
+        current["storage"] = get_storage_stats(current["config"]["max_episodes_retained"])
+        current["storage_status"] = "available"
+    except OSError as exc:
+        logger.warning("Settings readable; storage statistics unavailable: %s", type(exc).__name__)
+        current["storage"] = None
+        current["storage_status"] = "unavailable"
     return current
 
 class SettingsUpdate(BaseModel):
