@@ -15,6 +15,21 @@ from mutagen.mp3 import MP3
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("techpulse.tts")
 
+
+def _run_lock_pass_fds():
+    """Keep the coordinator's lease held until each FFmpeg child has exited."""
+    raw = os.environ.get("TECHPULSE_RUN_LOCK_FD")
+    if raw is None:
+        return ()
+    if not raw.isdecimal():
+        raise RuntimeError("run lock descriptor is invalid")
+    fd = int(raw)
+    try:
+        os.fstat(fd)
+    except OSError as exc:
+        raise RuntimeError("run lock descriptor is unavailable") from exc
+    return (fd,)
+
 # Multi-Host Voice Configuration
 VOICE_MAP = {
     "Host A": "en-US-GuyNeural",   # Enterprise Cloud Architect (Clear, authoritative male)
@@ -221,6 +236,9 @@ async def generate_episode_podcast_audio(episode_data: Dict[str, Any], output_di
         staged_path = os.path.join(temp_dir, "episode.mp3")
         # Concatenate segment files into final MP3 using ffmpeg or binary concat
         if segment_files:
+            # A worker with a declared lease must never enter the legacy
+            # binary-copy fallback if the descriptor is already unavailable.
+            run_lock_fds = _run_lock_pass_fds()
             try:
                 concat_list_path = os.path.join(temp_dir, "concat_list.txt")
                 with open(concat_list_path, "w") as f:
@@ -230,7 +248,8 @@ async def generate_episode_podcast_audio(episode_data: Dict[str, Any], output_di
                 proc = await asyncio.create_subprocess_exec(
                     "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_list_path, "-c", "copy", staged_path,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    pass_fds=run_lock_fds
                 )
                 await proc.communicate()
                 if proc.returncode != 0:
@@ -352,7 +371,8 @@ async def _concat_mp3(segment_paths: list[str], output_path: str, deadline: floa
         spawn = asyncio.create_task(asyncio.create_subprocess_exec(
             'ffmpeg', '-y', '-f', 'concat', '-safe', '1', '-i', Path(list_path).name,
             '-c', 'copy', output.name, cwd=str(staging),
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL))
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            pass_fds=_run_lock_pass_fds()))
         process = await _await_audio_task(spawn, work_deadline)
         communication = asyncio.create_task(process.communicate())
         await _await_audio_task(communication, work_deadline)

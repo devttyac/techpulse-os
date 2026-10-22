@@ -1,7 +1,7 @@
-"""TP23 nonsecret Settings snapshots and disabled model admission.
+"""Versioned nonsecret Settings snapshots and disabled model admission.
 
-The current scheduler, chat adapter, key custody and cleanup consumers have
-separate owners. This module reports their pending integration explicitly.
+TP05 binds the saved schedule to retained timezone rules. Chat adapter, key
+custody and cleanup consumers have separate owners.
 """
 
 import json
@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from apscheduler.triggers.cron import CronTrigger
 
 from src.operations import OperationEvent
+from src.run_coordinator import capture_zone_rules
 from src.state_store import StateStore, StoreIntegrityError
 
 
@@ -302,7 +303,7 @@ class SettingsService:
             "application_status": {
                 "storage": "committed",
                 "chat": "blocked_pending_model_and_adapter_gate",
-                "schedule": "pending_tp05_scheduler_integration",
+                "schedule": "committed_pending_scheduler_observation",
                 "retention": "pending_next_tp26_cleanup",
             },
         }
@@ -354,6 +355,10 @@ class SettingsService:
             return self._commit(store, config, registry, expected_revision)
 
     def _commit(self, store, config, registry, expected_revision):
+        try:
+            rules = capture_zone_rules(config["timezone_id"])
+        except ValueError as exc:
+            raise SettingsValidationError({"timezone_id": "rule_bytes_unavailable"}) from exc
         encoded = json.dumps({"schema_version": 2, "config": config,
                               "registry": registry},
                              sort_keys=True, separators=(",", ":")).encode()
@@ -365,7 +370,12 @@ class SettingsService:
         result = self._present(expected_revision + 1, config, registry)
         try:
             store.write_control_audited("settings_public", CONTROL_KEY,
-                                        expected_revision, encoded, event)
+                                        expected_revision, encoded, event,
+                                        schedule={"cron": config["cron_schedule"],
+                                                  "timezone_id": rules.zone_id,
+                                                  "rule_bytes": rules.data,
+                                                  "rule_sha256": rules.sha256,
+                                                  "rule_provider": rules.provider})
         except ValueError as exc:
             if "stale control revision" in str(exc):
                 raise SettingsConflict("stale Settings revision") from exc

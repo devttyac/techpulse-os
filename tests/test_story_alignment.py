@@ -981,6 +981,48 @@ class AudioTests(unittest.IsolatedAsyncioTestCase):
                 await self.tts._concat_mp3(paths, str(Path(out) / 'assembled.mp3'), asyncio.get_running_loop().time() + 60)
             self.assertEqual(sorted(p.name for p in Path(out).iterdir()), ['assembled.mp3', 'segment-000.mp3', 'segment-001.mp3'])
 
+    async def test_concat_inherits_active_run_lock_without_new_process_group(self):
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as out:
+            fd = os.open(Path(out) / 'run.lock', os.O_CREAT | os.O_RDWR, 0o600)
+            self.addCleanup(os.close, fd)
+            segment = Path(out) / 'segment-000.mp3'
+            segment.write_bytes(b'segment')
+            async def spawn(*args, **kwargs):
+                self.assertEqual(kwargs['pass_fds'], (fd,))
+                self.assertFalse(kwargs.get('start_new_session', False))
+                (Path(out) / 'assembled.mp3').write_bytes(b'assembled')
+                return SimpleNamespace(returncode=0, communicate=self.done, wait=self.done)
+            with patch.dict(os.environ, {'TECHPULSE_RUN_LOCK_FD': str(fd)}), patch.object(
+                    self.tts.asyncio, 'create_subprocess_exec', spawn):
+                await self.tts._concat_mp3([str(segment)], str(Path(out) / 'assembled.mp3'),
+                                           asyncio.get_running_loop().time() + 60)
+
+    async def test_legacy_concat_inherits_active_run_lock(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as out:
+            fd = os.open(Path(out) / 'run.lock', os.O_CREAT | os.O_RDWR, 0o600)
+            self.addCleanup(os.close, fd)
+            episode = {'id': 'ep-950', 'script_segments': [{'speaker': 'Host A', 'text': 'Fixture'}],
+                       'chapters': []}
+
+            async def render(text, voice, path):
+                Path(path).write_bytes(b'segment' * 300)
+
+            async def spawn(*args, **kwargs):
+                self.assertEqual(kwargs['pass_fds'], (fd,))
+                self.assertFalse(kwargs.get('start_new_session', False))
+                Path(args[-1]).write_bytes(b'assembled' * 300)
+                return SimpleNamespace(returncode=0, communicate=self.done)
+
+            with patch.dict(os.environ, {'TECHPULSE_RUN_LOCK_FD': str(fd)}), patch.object(
+                    self.tts, 'generate_segment_audio', render), patch.object(
+                    self.tts, 'get_audio_duration_seconds', return_value=1.5), patch.object(
+                    self.tts.asyncio, 'create_subprocess_exec', spawn):
+                path, _, _, _ = await self.tts.generate_episode_podcast_audio(episode, out)
+            self.assertEqual(path, str(Path(out) / 'ep-950.mp3'))
+
     async def done(self):
         return b'', b''
 

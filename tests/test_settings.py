@@ -43,6 +43,24 @@ class SettingsServiceTests(unittest.TestCase):
                          "3.6-flash-07-2026")
         self.assertIsNone(result["model_registry"][0]["current_bindings"]["price_revision"])
         self.assertEqual(SettingsService(self.root).read()["config"], VALID)
+        with StateStore.open(self.root / "state") as store:
+            schedules = store.schedule_revisions()
+            self.assertEqual(len(schedules), 1)
+            self.assertEqual(schedules[0]["revision"], 1)
+            self.assertEqual(schedules[0]["timezone_id"], "Asia/Singapore")
+            self.assertEqual(schedules[0]["cron"], "0 7 * * *")
+            self.assertTrue(schedules[0]["rule_bytes"].startswith(b"TZif"))
+
+    def test_timezone_save_retains_previous_schedule_and_changes_future_only(self):
+        service = SettingsService(self.root)
+        service.save(VALID, expected_revision=0, initialization="fresh")
+        service.save({**VALID, "timezone_id": "America/New_York"}, expected_revision=1)
+        with StateStore.open(self.root / "state") as store:
+            old, current = store.schedule_revisions()
+            self.assertEqual((old["revision"], old["timezone_id"]), (1, "Asia/Singapore"))
+            self.assertEqual((current["revision"], current["timezone_id"]), (2, "America/New_York"))
+            self.assertGreaterEqual(current["effective_from_utc"], old["effective_from_utc"])
+            self.assertEqual(current["cursor_utc"], current["effective_from_utc"])
 
     def test_unaudited_settings_row_is_not_read_or_advanced(self):
         with StateStore.create(self.root / "state") as store:

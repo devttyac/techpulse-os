@@ -96,7 +96,7 @@ async def run_asgi_tests():
         assert saved.status_code == 200, saved.text
         assert saved.json()["revision"] == 1
         assert saved.json()["selected_model_status"] == "disabled"
-        assert saved.json()["application_status"]["schedule"] == "pending_tp05_scheduler_integration"
+        assert saved.json()["application_status"]["schedule"] == "committed_pending_scheduler_observation"
         assert {p: p.read_bytes() for p in Path(app_main.EPISODES_DIR).glob("ep-*.json")} == retained_before
         assert (await client.get("/api/settings")).json()["revision"] == 1
         stale = await client.post("/api/settings", json={
@@ -111,6 +111,19 @@ async def run_asgi_tests():
         assert saved_without_stats.json()["storage"] is None
         assert saved_without_stats.json()["storage_status"] == "unavailable"
         assert (await client.get("/api/settings")).json()["revision"] == 2
+        with patch.object(app_main, "scheduler", MagicMock(running=True)), patch.dict(
+                app_main.scheduler_status, {"status": "ready", "bound_revision": 2}):
+            assert (await client.get("/api/settings")).json()["application_status"]["schedule"] == "applied"
+        with patch.object(app_main, "scheduler", MagicMock(running=True)), patch.dict(
+                app_main.scheduler_status, {"status": "blocked", "bound_revision": None}):
+            assert (await client.get("/api/settings")).json()["application_status"]["schedule"] == "unavailable"
+
+        with patch.object(app_main.run_coordinator, "start_manual",
+                          return_value={"status": "busy", "reason": "active_worker_lock"}) as start:
+            overlap = await client.post("/api/refresh")
+            assert overlap.status_code == 200
+            assert overlap.json()["status"] == "busy"
+            start.assert_called_once_with()
 
         r_status = await client.get("/api/refresh/status")
         assert r_status.status_code == 200, f"Refresh status API failed: {r_status.status_code}"

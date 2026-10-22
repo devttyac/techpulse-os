@@ -149,17 +149,22 @@ class SourceHealthTests(unittest.IsolatedAsyncioTestCase):
             return {d:[] for d in DOMAIN_FEEDS}
         with patch.object(main,"ingest_all_domains",ingest): await main.run_daily_pipeline()
         self.assertEqual((await main.get_refresh_status())["source_health"]["latest_run"]["status"],"no_content")
-    async def test_pre_entry_cancellation_preserves_completed_check(self):
+    async def test_coordinated_admission_and_stop_preserve_prior_source_check(self):
         first=await self.run_empty()
-        await main.manual_refresh()
-        task=main.current_pipeline_task
-        task.cancel()
-        with self.assertRaises(asyncio.CancelledError): await task
-        await asyncio.sleep(0)
+        with patch.object(main.run_coordinator,"start_manual",return_value={
+                "status":"started","run_id":"run-pending-fixture"}),patch.object(
+                main.run_coordinator,"cancel_owned",return_value={
+                    "status":"stopped_pending_reconciliation","run_id":"run-pending-fixture"}):
+            admitted=await main.manual_refresh()
+            self.assertEqual(admitted["state"]["provenance_status"],"pending")
+            self.assertIsNone(main.current_pipeline_task)
+            stopped=await main.cancel_refresh()
+            self.assertEqual(stopped["status"],"stopped_pending_reconciliation")
         health=(await main.get_refresh_status())["source_health"]
-        self.assertEqual(health["status"],"cancelled")
+        self.assertEqual(health["status"],first["status"])
         self.assertEqual(health["checked_at"],first["checked_at"])
-        self.assertEqual(health["latest_run"]["status"],"cancelled")
+        self.assertEqual(health["latest_run"],first["latest_run"])
+        self.assertEqual(availability.load_source_health(str(self.root)),first)
 
     async def test_missing_source_details_cannot_recover_as_healthy(self):
         health=await self.run_empty()

@@ -201,7 +201,9 @@ class OperationEvent:
         if (not isinstance(safe["timezone"], str) or
                 not re.fullmatch(r"[A-Za-z_+-]+(?:/[A-Za-z_+0-9-]+)*", safe["timezone"])):
             raise ValueError("invalid timezone identifier")
-        if not isinstance(safe["rule_revision"], str) or not re.fullmatch(r"[0-9]{4}[a-z]", safe["rule_revision"]):
+        if (not isinstance(safe["rule_revision"], str) or not
+                (re.fullmatch(r"[0-9a-f]{64}", safe["rule_revision"])
+                 or re.fullmatch(r"[0-9]{4}[a-z]", safe["rule_revision"]))):
             raise ValueError("invalid timezone rule revision")
         if safe["disposition"] not in _WINDOW_DISPOSITIONS:
             raise ValueError("invalid window disposition")
