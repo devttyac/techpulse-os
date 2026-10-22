@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import tempfile
+from unittest.mock import patch
 
 import httpx
 
@@ -18,6 +19,7 @@ os.environ["STORAGE_DIR"] = _TMP_STORAGE
 os.environ.pop("API_SECRET_KEY", None)
 
 from src import main as app_main  # noqa: E402
+from src.settings import SettingsService
 
 TEST_KEY = "test-secret-not-a-real-credential"
 HOSTILE_SETTINGS = {"max_episodes_retained": 1}
@@ -137,8 +139,32 @@ def test_key_set_correct_header_is_accepted_on_get_and_post():
                 r = await c.get("/api/episodes", headers=h)
                 assert r.status_code == 200, f"GET: expected 200, got {r.status_code}"
                 r = await c.post("/api/settings", headers=h, json={})
-                assert r.status_code == 200, f"POST: expected 200, got {r.status_code}"
+                assert r.status_code == 422, f"incomplete Settings must fail, got {r.status_code}"
     _run(go())
+
+
+def test_authenticated_settings_expose_credential_status_without_values():
+    config = {"max_episodes_retained": 14, "cron_schedule": "0 7 * * *",
+              "timezone_id": "Asia/Singapore", "chat_provider": "gemini",
+              "chat_model": "gemini-3.6-flash"}
+    with tempfile.TemporaryDirectory(prefix="techpulse-auth-settings-") as root:
+        SettingsService(root).save(config, expected_revision=0, initialization="fresh")
+
+        async def go():
+            with _env(TEST_KEY), patch.object(app_main, "STORAGE_DIR", root), patch.dict(
+                os.environ, {"GEMINI_API_KEY": "fixture-gemini-secret",
+                             "OPENROUTER_API_KEY": "fixture-router-secret"}):
+                async with _client() as c:
+                    return await c.get("/api/settings", headers={"X-API-Key": TEST_KEY})
+
+        response = _run(go())
+        assert response.status_code == 200, response.text
+        assert response.json()["provider_credentials"]["gemini"] == {
+            "source": "environment", "status": "present_unverified"}
+        assert response.json()["provider_credentials"]["openrouter"] == {
+            "source": "environment", "status": "present_unverified"}
+        assert "fixture-gemini-secret" not in response.text
+        assert "fixture-router-secret" not in response.text
 
 
 def test_key_set_non_ascii_header_is_rejected_not_crashed():

@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Header, De
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -40,6 +40,8 @@ from functools import wraps
 from mutagen.mp3 import MP3
 from mutagen import MutagenError
 from src.legacy_reader import project_retained_episode
+from src.settings import (SettingsConflict, SettingsIntegrityError, SettingsService,
+                          SettingsValidationError)
 
 load_dotenv()
 
@@ -359,7 +361,7 @@ def enforce_retention_policy(custom_limit: Optional[int] = None) -> Dict[str, An
 
     return {"purged_episodes": purged_count, "freed_bytes": freed_bytes}
 
-def get_storage_stats() -> Dict[str, Any]:
+def get_storage_stats(retention_limit: Optional[int] = None) -> Dict[str, Any]:
     episodes_count = 0
     audio_count = 0
     total_bytes = 0
@@ -376,7 +378,7 @@ def get_storage_stats() -> Dict[str, Any]:
                 audio_count += 1
                 total_bytes += os.path.getsize(os.path.join(AUDIO_DIR, f))
 
-    cfg = load_config()
+    cfg = load_config() if retention_limit is None else {"max_episodes_retained": retention_limit}
     return {
         "total_episodes": episodes_count,
         "total_audio": audio_count,
@@ -1018,42 +1020,42 @@ async def get_refresh_status(auth: bool = Depends(require_auth)):
 
 @app.get("/api/settings")
 async def get_settings(auth: bool = Depends(require_auth)):
-    cfg = load_config()
-    stats = get_storage_stats()
-    return {
-        "config": cfg,
-        "storage": stats
-    }
+    try:
+        current = SettingsService(STORAGE_DIR).read()
+    except SettingsIntegrityError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    current["storage"] = get_storage_stats(current["config"]["max_episodes_retained"])
+    return current
 
 class SettingsUpdate(BaseModel):
-    max_episodes_retained: Optional[int] = None
-    chapters_per_episode: Optional[int] = None
-    gemini_model: Optional[str] = None
-    cron_schedule: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+    config: Dict[str, Any]
+    expected_revision: int = Field(strict=True, ge=0)
+    initialization: Optional[str] = None
 
 @app.post("/api/settings")
-@_audit_handler_failures("settings_update")
 async def update_settings(payload: SettingsUpdate, auth: bool = Depends(require_auth)):
-    cfg = load_config()
-    if payload.max_episodes_retained is not None:
-        cfg["max_episodes_retained"] = payload.max_episodes_retained
-    if payload.chapters_per_episode is not None:
-        cfg["chapters_per_episode"] = payload.chapters_per_episode
-    if payload.gemini_model is not None:
-        cfg["gemini_model"] = payload.gemini_model
-    if payload.cron_schedule is not None:
-        cfg["cron_schedule"] = payload.cron_schedule
-
-    save_config(cfg)
-    cleanup_res = enforce_retention_policy()
-    stats = get_storage_stats()
-    _audit_action("settings_update", "handler_returned", changed_fields=payload.model_fields_set)
-    return {
-        "status": "success",
-        "config": cfg,
-        "storage": stats,
-        "cleanup": cleanup_res
-    }
+    try:
+        result = SettingsService(STORAGE_DIR).save(
+            payload.config, expected_revision=payload.expected_revision,
+            initialization=payload.initialization)
+    except SettingsValidationError as exc:
+        raise HTTPException(status_code=422, detail={"fields": exc.fields}) from exc
+    except SettingsConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SettingsIntegrityError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("Required Settings commit or audit failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Settings could not be committed and audited") from exc
+    try:
+        result["storage"] = get_storage_stats(result["config"]["max_episodes_retained"])
+        result["storage_status"] = "available"
+    except OSError as exc:
+        logger.warning("Settings committed; storage statistics unavailable: %s", type(exc).__name__)
+        result["storage"] = None
+        result["storage_status"] = "unavailable"
+    return result
 
 @app.post("/api/settings/cleanup")
 @_audit_handler_failures("settings_cleanup")

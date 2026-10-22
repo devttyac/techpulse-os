@@ -391,6 +391,8 @@ class StateStore:
         if namespace not in ("settings_public", "restoration"):
             raise ValueError("unsupported control namespace")
         key = _id(key)
+        if namespace == "settings_public" and key == "settings_snapshot":
+            raise ValueError("Settings snapshots require bound required audit")
         if type(expected_revision) is not int or expected_revision < 0 or not isinstance(value, bytes):
             raise ValueError("invalid control revision or value")
         with self._transaction():
@@ -437,6 +439,11 @@ class StateStore:
             (namespace, _id(key)),
         ).fetchone()
         return (row[0], row[1]) if row else None
+
+    def has_retained_records(self):
+        """Distinguish an unused initialized store from one holding evidence."""
+        return any(self._db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
+                   for table in _TABLES_V2)
 
     def begin_operation(self, operation_id, kind, metadata):
         if kind not in ("publication", "restoration"):
