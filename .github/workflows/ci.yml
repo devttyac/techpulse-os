@@ -91,5 +91,8 @@ jobs:
       - name: Run Frontend Empty Domain Tests
         run: node --test tests/test_frontend_empty_domains.mjs
 
+      - name: Run Frontend Settings Tests
+        run: node --test tests/test_frontend_settings.mjs
+
       - name: Build Docker Image
         run: docker build --tag techpulse-ci:${{ github.sha }} .

@@ -96,15 +96,18 @@ class SettingsConflict(ValueError):
     """The supplied revision is no longer current."""
 
 
-def assess_model(entry, current_bindings):
+def assess_model(entry, current_bindings, runtime_bindings=None):
     """Assess trusted registry evidence against only model-relevant inputs.
 
     The Settings API has no approval-writing route. TP44 must supply reviewed
     evidence and a separately controlled registry transition before enablement.
     """
+    runtime_bindings = current_bindings if runtime_bindings is None else runtime_bindings
     if (entry.get("provider") != "gemini" or entry.get("model") != "gemini-3.6-flash"
             or not isinstance(current_bindings, dict)
-            or set(current_bindings) != MODEL_BINDINGS):
+            or set(current_bindings) != MODEL_BINDINGS
+            or not isinstance(runtime_bindings, dict)
+            or set(runtime_bindings) != MODEL_BINDINGS):
         return {"status": "disabled", "reason": "unsupported_registry_entry"}
     evidence = entry.get("bindings")
     if not isinstance(evidence, dict) or set(evidence) != MODEL_BINDINGS:
@@ -116,7 +119,8 @@ def assess_model(entry, current_bindings):
     if any(not isinstance(evidence[key], str) or not evidence[key]
            for key in MODEL_BINDINGS):
         return {"status": "disabled", "reason": "incomplete_evidence"}
-    if any(current_bindings[key] != evidence[key] for key in MODEL_BINDINGS):
+    if any(current_bindings[key] != evidence[key] or runtime_bindings[key] != evidence[key]
+           for key in MODEL_BINDINGS):
         return {"status": "stale", "reason": "relevant_binding_changed"}
     return {"status": "approved", "reason": "current_reviewed_evidence"}
 
@@ -273,7 +277,8 @@ class SettingsService:
             }
         registry = []
         for entry in retained_registry["entries"]:
-            result = assess_model(entry, retained_registry["current_bindings"])
+            result = assess_model(entry, retained_registry["current_bindings"],
+                                  CURRENT_MODEL_BINDINGS)
             registry.append({"provider": entry["provider"], "model": entry["model"],
                              "evaluation_reference": entry["evaluation_reference"],
                              "approval_status": entry["approval_status"],
@@ -281,6 +286,7 @@ class SettingsService:
                              "review_evidence": entry["review_evidence"],
                              "evidence_bindings": dict(entry["bindings"]),
                              "current_bindings": dict(retained_registry["current_bindings"]),
+                             "runtime_bindings": dict(CURRENT_MODEL_BINDINGS),
                              "budget": dict(entry["budget"]), **result})
         selected = registry[0]
         return {
@@ -406,9 +412,7 @@ class SettingsService:
                 or set(review["bindings"]) != MODEL_BINDINGS
                 or any(not isinstance(value, str) or not value
                        for value in review["bindings"].values())
-                or review["bindings"]["api_endpoint"] != CURRENT_MODEL_BINDINGS["api_endpoint"]
-                or review["bindings"]["model_version"] != CURRENT_MODEL_BINDINGS["model_version"]
-                or review["bindings"]["budget_revision"] != CURRENT_MODEL_BINDINGS["budget_revision"]):
+                or review["bindings"] != CURRENT_MODEL_BINDINGS):
             raise SettingsValidationError({"model_review": "complete_current_review_required"})
         with self._open() as store:
             try:

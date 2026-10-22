@@ -53,6 +53,28 @@ class SettingsServiceTests(unittest.TestCase):
         with self.assertRaises(SettingsIntegrityError):
             service.save(VALID, expected_revision=1)
 
+    def test_valid_shape_tampered_settings_bytes_fail_audit_on_read_and_save(self):
+        service = SettingsService(self.root)
+        service.save(VALID, expected_revision=0, initialization="fresh")
+        with StateStore.open(self.root / "state") as store:
+            revision, raw = store.read_control("settings_public", "settings_snapshot")
+            tampered = json.loads(raw)
+            tampered["config"]["max_episodes_retained"] = 30
+            encoded = json.dumps(tampered, sort_keys=True, separators=(",", ":")).encode()
+            store._db.execute(
+                "UPDATE control_revisions SET value = ? WHERE namespace = ? AND control_key = ?",
+                (encoded, "settings_public", "settings_snapshot"))
+            store._db.commit()
+        self.assertEqual(revision, 1)
+        with self.assertRaises(SettingsIntegrityError):
+            service.read()
+        with self.assertRaises(SettingsIntegrityError):
+            service.save({**VALID, "max_episodes_retained": 60}, expected_revision=1)
+        with StateStore.open(self.root / "state") as store:
+            self.assertEqual(store.read_control("settings_public", "settings_snapshot"),
+                             (1, encoded))
+            self.assertEqual(store.operation_events("settings-revision-2"), [])
+
     def test_fresh_defaults_do_not_invent_schedule_or_approved_model(self):
         self.assertEqual(SettingsService.fresh_defaults(), {
             "max_episodes_retained": 14, "timezone_id": "Asia/Singapore"})
@@ -247,13 +269,22 @@ class SettingsServiceTests(unittest.TestCase):
         with self.assertRaises(SettingsValidationError):
             service.record_model_approval({**review, "price_pass_ref": "mere string"},
                                           expected_revision=1)
-        service.record_model_approval(review, expected_revision=1)
-        with patch.dict("os.environ", {"GEMINI_API_KEY": "fixture-secret"}):
-            result = SettingsService(self.root).read()
+        with patch.object(settings_module, "CURRENT_MODEL_BINDINGS", bindings):
+            service.record_model_approval(review, expected_revision=1)
+            with patch.dict("os.environ", {"GEMINI_API_KEY": "fixture-secret"}):
+                result = SettingsService(self.root).read()
+            service.save({**VALID, "max_episodes_retained": 30,
+                          "timezone_id": "UTC"}, expected_revision=2)
+            self.assertEqual(service.read()["selected_model_status"], "approved")
         self.assertEqual(result["selected_model_status"], "approved")
         self.assertEqual(result["registry_revision"], 2)
-        service.save({**VALID, "max_episodes_retained": 30}, expected_revision=2)
-        self.assertEqual(service.read()["selected_model_status"], "approved")
+        with patch.object(settings_module, "CURRENT_MODEL_BINDINGS",
+                          {**bindings, "price_revision": "fixture-price-2"}):
+            self.assertEqual(service.read()["selected_model_status"], "stale")
+        with patch.object(settings_module, "CURRENT_MODEL_BINDINGS",
+                          {**bindings, "model_version": "3.6-flash-next"}):
+            self.assertEqual(service.read()["selected_model_status"], "stale")
+        self.assertNotEqual(service.read()["selected_model_status"], "approved")
         service.record_model_binding_change("price_revision", "fixture-price-2",
                                             reason_ref="price-change-fixture",
                                             expected_revision=3)
