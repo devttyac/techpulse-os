@@ -1,5 +1,6 @@
 """TP02: durable store contract, using only disposable local directories."""
 
+import hashlib
 import os
 from pathlib import Path
 import sqlite3
@@ -11,6 +12,29 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.state_store import StateStore, StoreIntegrityError
+from src.operations import OperationEvent
+
+
+def create_v1_store(root):
+    """Build an exact pre-TP28 fixture without calling the current creator."""
+    root.mkdir()
+    (root / "objects").mkdir()
+    (root / "staging").mkdir()
+    db = sqlite3.connect(root / "state.sqlite3")
+    schema = (Path(__file__).resolve().parents[1] / "src/storage/schema_v1.sql").read_text()
+    db.executescript(schema)
+    db.execute("PRAGMA application_id = 1414549331")
+    db.execute("PRAGMA user_version = 1")
+    body = b"retained v1 article body"
+    digest = hashlib.sha256(body).hexdigest()
+    (root / "objects" / digest).write_bytes(body)
+    db.execute("INSERT INTO artifacts VALUES (?, ?, ?, ?, ?)",
+               ("article-v1", "article", digest, len(body), '{"source":"historical"}'))
+    db.execute("INSERT INTO control_revisions VALUES ('settings_public', 'schedule', 1, ?)", (b"06:00",))
+    db.execute("INSERT INTO operation_journal VALUES ('restore-198', 'restoration', 'pending', ?)",
+               ('{"episode_id":"ep-198"}',))
+    db.commit()
+    db.close()
 
 
 class StateStoreTests(unittest.TestCase):
@@ -139,6 +163,85 @@ class StateStoreTests(unittest.TestCase):
                 store.list_artifact_ids()
             with self.assertRaises(StoreIntegrityError):
                 store.coverage_owner("fact-1")
+
+    def test_v1_migrates_without_rewriting_control_or_old_pending_journal(self):
+        create_v1_store(self.root)
+        before = (self.root / "state.sqlite3").stat().st_size
+        with StateStore.open(self.root) as store:
+            self.assertEqual(store.read_control("settings_public", "schedule"), (1, b"06:00"))
+            self.assertEqual(store.read_artifact("article-v1"), (b"retained v1 article body", {"source": "historical"}))
+            self.assertEqual(store.pending_operations(), [
+                {"id": "restore-198", "kind": "restoration", "metadata": {"episode_id": "ep-198"}}
+            ])
+            self.assertEqual(store._db.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(store.operation_events("restore-198"), [])
+        self.assertGreaterEqual((self.root / "state.sqlite3").stat().st_size, before)
+        with StateStore.open(self.root) as store:
+            self.assertEqual(store.pending_operations()[0]["id"], "restore-198")
+
+    def test_unknown_or_partial_schema_fails_closed_without_migration(self):
+        create_v1_store(self.root)
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            db.execute("PRAGMA user_version = 3")
+        with self.assertRaises(StoreIntegrityError):
+            StateStore.open(self.root)
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
+            db.execute("PRAGMA user_version = 2")
+        with self.assertRaises(StoreIntegrityError):
+            StateStore.open(self.root)
+
+    def test_v2_table_shape_corruption_fails_closed(self):
+        with StateStore.create(self.root):
+            pass
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            db.execute("DROP TABLE diagnostic_events")
+            db.execute("CREATE TABLE diagnostic_events (sequence INTEGER PRIMARY KEY)")
+        with self.assertRaises(StoreIntegrityError):
+            StateStore.open(self.root)
+
+    def test_failed_v1_migration_rolls_back_new_tables_and_preserves_v1(self):
+        create_v1_store(self.root)
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            db.execute("CREATE TABLE operation_events (obstruction TEXT)")
+        with self.assertRaises(StoreIntegrityError):
+            StateStore.open(self.root)
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT value FROM control_revisions WHERE control_key = 'schedule'").fetchone()[0], b"06:00")
+            self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name = 'effect_intents'").fetchone())
+
+    def test_resolved_effect_without_matching_result_fails_closed_on_open(self):
+        with StateStore.create(self.root) as store:
+            store.begin_effect("delete-1", "deletion",
+                OperationEvent.build("deletion", "delete-1", "intent", {"artifact_id": "article-1"},
+                                     component="lifecycle"))
+            store.record_effect_result("delete-1", "verified_removed",
+                OperationEvent.build("deletion", "delete-1", "result",
+                                     {"artifact_id": "article-1", "outcome": "verified_removed"},
+                                     component="lifecycle"))
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            db.execute("UPDATE effect_intents SET resolution_event_id = NULL WHERE operation_id = 'delete-1'")
+        with self.assertRaises(StoreIntegrityError):
+            StateStore.open(self.root)
+
+    def test_resolved_effect_pointing_at_other_operation_result_fails_closed(self):
+        with StateStore.create(self.root) as store:
+            for index in (1, 2):
+                operation_id = f"delete-{index}"
+                artifact_id = f"article-{index}"
+                store.begin_effect(operation_id, "deletion",
+                    OperationEvent.build("deletion", operation_id, "intent",
+                                         {"artifact_id": artifact_id}, component="lifecycle"))
+                store.record_effect_result(operation_id, "verified_removed",
+                    OperationEvent.build("deletion", operation_id, "result",
+                                         {"artifact_id": artifact_id, "outcome": "verified_removed"},
+                                         component="lifecycle"))
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            wrong = db.execute("SELECT resolution_event_id FROM effect_intents WHERE operation_id = 'delete-2'").fetchone()[0]
+            db.execute("UPDATE effect_intents SET resolution_event_id = ? WHERE operation_id = 'delete-1'", (wrong,))
+        with self.assertRaises(StoreIntegrityError):
+            StateStore.open(self.root)
 
 
 if __name__ == "__main__":

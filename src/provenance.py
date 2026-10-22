@@ -171,6 +171,43 @@ def append_record(storage_dir, filename, record):
             os.close(fd)
 
 
+def read_operation_history(storage_dir, store, operation_id, *, max_legacy_records=100000):
+    """Bridge retained JSONL to v2 readers without rewriting or upgrading it.
+
+    Legacy entries are hash-addressed historical references only. Their old
+    action names and outcomes cannot satisfy a v2 required effect/result gate.
+    """
+    from src.state_store import StoreIntegrityError
+
+    current = store.operation_events(operation_id)
+    legacy = []
+    for filename in ("runs.jsonl", "audit.jsonl"):
+        path = Path(storage_dir) / filename
+        if path.is_symlink():
+            raise StoreIntegrityError("legacy operation stream is not a regular file")
+        if not path.exists():
+            continue
+        if not path.is_file():
+            raise StoreIntegrityError("legacy operation stream is not a regular file")
+        with path.open("rb") as fp:
+            for line_number, raw in enumerate(fp, 1):
+                if line_number > max_legacy_records or len(raw) > 256 * 1024 or not raw.endswith(b"\n"):
+                    raise StoreIntegrityError("legacy operation stream exceeds safe read bound")
+                try:
+                    value = json.loads(raw)
+                except (UnicodeError, ValueError) as exc:
+                    raise StoreIntegrityError("legacy operation stream contains invalid JSON") from exc
+                if not isinstance(value, dict):
+                    raise StoreIntegrityError("legacy operation stream contains invalid record")
+                if operation_id in (value.get("run_id"), value.get("event_id")):
+                    # Only expose a digest and location: older records may
+                    # contain unrestricted prose or URLs. No success inferred.
+                    legacy.append({"stream": filename, "line": line_number,
+                                   "sha256": hashlib.sha256(raw).hexdigest(),
+                                   "classification": "historical_unverified"})
+    return {"current_required": current, "legacy_references": legacy}
+
+
 def attach_episode_record(path, episode, record):
     episode["pipeline_run"] = record
     temporary = None
