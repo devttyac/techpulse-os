@@ -45,6 +45,41 @@ class StateStoreTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_v3_run_tables_and_schedule_history_survive_restart(self):
+        with StateStore.create(self.root) as store:
+            self.assertEqual(store.schema_version(), 3)
+            self.assertEqual(store.schedule_revisions(), [])
+        with StateStore.open(self.root) as store:
+            self.assertEqual(store.schema_version(), 3)
+            self.assertEqual(store.schedule_revisions(), [])
+
+    def test_singleton_run_claim_is_durable_and_compare_and_set(self):
+        context = {"settings_revision": 1, "timezone_id": "Asia/Singapore",
+                   "rule_sha256": "a" * 64, "started_utc": "2026-10-22T00:00:00+00:00",
+                   "lower_utc": "2026-10-16T16:00:00+00:00"}
+        with StateStore.create(self.root) as store:
+            self.assertTrue(store.claim_run("run-a", "nonce-a", "boot-a", 123,
+                                            "start-a", context, intent_event=OperationEvent.build(
+                                                "run", "run-a", "intent",
+                                                {"run_id": "run-a", "trigger": "manual"},
+                                                component="scheduler")))
+            self.assertFalse(store.claim_run("run-b", "nonce-b", "boot-a", 123,
+                                             "start-b", context, intent_event=OperationEvent.build(
+                                                 "run", "run-b", "intent",
+                                                 {"run_id": "run-b", "trigger": "manual"},
+                                                 component="scheduler")))
+        with StateStore.open(self.root) as store:
+            self.assertEqual(store.active_run()["run_id"], "run-a")
+            self.assertTrue(store.finish_run("run-a", "nonce-a", "completed",
+                result_event=OperationEvent.build("run", "run-a", "result",
+                    {"run_id": "run-a", "trigger": "manual", "outcome": "completed"},
+                    component="pipeline")))
+            self.assertTrue(store.claim_run("run-b", "nonce-b", "boot-a", 123,
+                                            "start-b", context, intent_event=OperationEvent.build(
+                                                "run", "run-b", "intent",
+                                                {"run_id": "run-b", "trigger": "manual"},
+                                                component="scheduler")))
+
     def test_settings_snapshot_cannot_use_unaudited_control_writer(self):
         with StateStore.create(self.root) as store:
             with self.assertRaises(ValueError):
@@ -185,7 +220,7 @@ class StateStoreTests(unittest.TestCase):
             self.assertEqual(store.pending_operations(), [
                 {"id": "restore-198", "kind": "restoration", "metadata": {"episode_id": "ep-198"}}
             ])
-            self.assertEqual(store._db.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(store._db.execute("PRAGMA user_version").fetchone()[0], 3)
             self.assertEqual(store.operation_events("restore-198"), [])
         self.assertGreaterEqual((self.root / "state.sqlite3").stat().st_size, before)
         with StateStore.open(self.root) as store:

@@ -202,17 +202,14 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.rows()), 1)
         self.assertEqual(self.rows()[0]["status"], "cancelled")
 
-    async def test_cancel_before_coroutine_entry_still_records_accepted_run(self):
-        result = await main.manual_refresh()
-        task = main.current_pipeline_task
-        task.cancel()
-        with self.assertRaises(asyncio.CancelledError):
-            await task
-        await asyncio.sleep(0)
+    async def test_manual_acceptance_is_delegated_to_durable_coordinator(self):
+        with patch.object(main.run_coordinator, "start_manual", return_value={
+                "status": "started", "run_id": "run-coordinated"}) as start:
+            result = await main.manual_refresh()
+        start.assert_called_once_with()
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(len(self.rows()), 1)
-        self.assertEqual(self.rows()[0]["status"], "cancelled")
-        self.assertEqual(self.rows()[0]["trigger"], "manual")
+        self.assertEqual(result["state"]["run_id"], "run-coordinated")
+        self.assertIsNone(main.current_pipeline_task)
 
     async def test_retention_does_not_delete_cross_run_history(self):
         await main.run_daily_pipeline()
@@ -266,7 +263,8 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
             config=config, expected_revision=0, initialization="fresh"))
         self.assertEqual(saved["revision"], 1)
         self.assertEqual(saved["selected_model_status"], "disabled")
-        await main.cancel_refresh()
+        with patch.object(main.run_coordinator, "cancel_owned", return_value={"status": "no_active_task"}):
+            await main.cancel_refresh()
         rows = self.rows("audit.jsonl")
         self.assertEqual([r["action"] for r in rows], ["refresh_cancel"])
         self.assertEqual(rows[0]["outcome"], "no_active_task")
@@ -515,19 +513,19 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_manual_acceptance_exposes_new_pending_run_before_task_entry(self):
         main.pipeline_state.update(run_id="prior-run", provenance_status="recorded")
-        result = await main.manual_refresh()
-        task = main.current_pipeline_task
+        with patch.object(main.run_coordinator, "start_manual", return_value={
+                "status": "started", "run_id": "run-new"}):
+            result = await main.manual_refresh()
         self.assertNotEqual(result["state"]["run_id"], "prior-run")
         self.assertEqual(result["state"]["provenance_status"], "pending")
-        task.cancel()
-        with self.assertRaises(asyncio.CancelledError):
-            await task
-        await asyncio.sleep(0)
+        self.assertIsNone(main.current_pipeline_task)
 
     async def test_action_audit_failure_survives_successful_run_finalization(self):
         (self.root / "audit.jsonl").mkdir()
-        await main.manual_refresh()
-        await main.current_pipeline_task
+        with patch.object(main.run_coordinator, "start_manual", return_value={
+                "status": "started", "run_id": "run-audited"}):
+            await main.manual_refresh()
+        await main.run_daily_pipeline()
         self.assertEqual(main.pipeline_state.get("action_audit_status"), "write_failed")
         self.assertEqual(main.pipeline_state["provenance_status"], "recorded")
 

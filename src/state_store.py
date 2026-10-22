@@ -17,7 +17,7 @@ from urllib.parse import quote
 from src.operations import OperationEvent, OperationPolicy, membership_digest
 
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _APPLICATION_ID = 0x54504F53
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _TABLES = frozenset({
@@ -25,6 +25,7 @@ _TABLES = frozenset({
     "control_revisions", "operation_journal",
 })
 _TABLES_V2 = _TABLES | frozenset({"operation_events", "effect_intents", "diagnostic_events"})
+_TABLES_V3 = _TABLES_V2 | frozenset({"schedule_revisions", "schedule_slots", "run_claims"})
 _EXPECTED_COLUMNS = {
     "artifacts": ("artifact_id", "kind", "content_sha256", "byte_length", "metadata_json"),
     "episodes": ("episode_id", "metadata_json"),
@@ -36,6 +37,12 @@ _EXPECTED_COLUMNS = {
                          "observed_at", "fields_json", "context_json"),
     "effect_intents": ("operation_id", "kind", "status", "effect_status", "intent_event_id", "resolution_event_id"),
     "diagnostic_events": ("sequence", "event_id", "observed_at", "event_json", "byte_length"),
+    "schedule_revisions": ("revision", "cron", "timezone_id", "rule_bytes", "rule_sha256",
+                           "rule_provider", "effective_from_utc", "cursor_utc", "history_known"),
+    "schedule_slots": ("schedule_revision", "nominal_local", "resolved_utc", "disposition",
+                       "status", "run_id"),
+    "run_claims": ("run_id", "nonce", "boot_id", "process_id", "process_start",
+                   "context_json", "status", "claimed_utc", "finished_utc"),
 }
 
 
@@ -104,6 +111,8 @@ class StateStore:
             db.executescript(schema)
             schema_v2 = (Path(__file__).parent / "storage" / "schema_v2.sql").read_text(encoding="utf-8")
             db.executescript(schema_v2)
+            schema_v3 = (Path(__file__).parent / "storage" / "schema_v3.sql").read_text(encoding="utf-8")
+            db.executescript(schema_v3)
             db.execute(f"PRAGMA application_id = {_APPLICATION_ID}")
             db.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             db.commit()
@@ -131,6 +140,9 @@ class StateStore:
             if db.execute("PRAGMA user_version").fetchone()[0] == 1:
                 store._migrate_v1()
                 store._verify()
+            if db.execute("PRAGMA user_version").fetchone()[0] == 2:
+                store._migrate_v2()
+                store._verify()
             return store
         except sqlite3.Error as exc:
             raise StoreIntegrityError("retained database is unreadable") from exc
@@ -154,7 +166,7 @@ class StateStore:
             app_id = self._db.execute("PRAGMA application_id").fetchone()[0]
             tables = {row[0] for row in self._db.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'")}
-            expected = _TABLES if version == 1 else _TABLES_V2 if version == 2 else None
+            expected = _TABLES if version == 1 else _TABLES_V2 if version == 2 else _TABLES_V3 if version == 3 else None
             if expected is None or app_id != _APPLICATION_ID or not expected <= tables:
                 raise StoreIntegrityError("retained schema is missing or incompatible")
             for table in expected:
@@ -163,8 +175,10 @@ class StateStore:
                     raise StoreIntegrityError("retained schema shape is incompatible")
             if self._db.execute("PRAGMA foreign_key_check").fetchone() is not None:
                 raise StoreIntegrityError("retained database has broken references")
-            if version == 2:
+            if version >= 2:
                 self._verify_effects()
+            if version == 3:
+                self._verify_schedule()
         except sqlite3.Error as exc:
             raise StoreIntegrityError("retained database failed integrity check") from exc
 
@@ -219,6 +233,29 @@ class StateStore:
         except sqlite3.Error as exc:
             self._db.rollback()
             raise StoreIntegrityError("retained migration failed") from exc
+
+    def _migrate_v2(self):
+        """Add scheduling state atomically without changing v1/v2 records."""
+        schema = (Path(__file__).parent / "storage" / "schema_v3.sql").read_text(encoding="utf-8")
+        try:
+            self._db.executescript("BEGIN IMMEDIATE;\n" + schema +
+                                   "\nPRAGMA user_version = 3;\nCOMMIT;")
+        except sqlite3.Error as exc:
+            self._db.rollback()
+            raise StoreIntegrityError("retained schedule migration failed") from exc
+
+    def schema_version(self):
+        return self._db.execute("PRAGMA user_version").fetchone()[0]
+
+    def _verify_schedule(self):
+        import hashlib
+        for revision, data, digest in self._db.execute(
+                "SELECT revision, rule_bytes, rule_sha256 FROM schedule_revisions"):
+            if (type(revision) is not int or revision < 1 or not isinstance(data, bytes)
+                    or not data.startswith(b"TZif") or hashlib.sha256(data).hexdigest() != digest):
+                raise StoreIntegrityError("retained timezone rules are invalid")
+        for raw in self._db.execute("SELECT context_json FROM run_claims"):
+            _read_json_object(raw[0])
 
     def close(self):
         self._db.close()
@@ -414,7 +451,7 @@ class StateStore:
         )
         return revision
 
-    def write_control_audited(self, namespace, key, expected_revision, value, event):
+    def write_control_audited(self, namespace, key, expected_revision, value, event, *, schedule=None):
         """Atomically write public control bytes and their required audit."""
         self._require_event(event, "settings", "result")
         if namespace != "settings_public":
@@ -431,6 +468,22 @@ class StateStore:
                         event.fields.get("evidence_digest") != hashlib.sha256(value).hexdigest())):
                 raise ValueError("settings audit result contradicts committed control")
             self._insert_required_event(event)
+            if schedule is not None:
+                from datetime import datetime, timezone
+                if key != "settings_snapshot" or not isinstance(schedule, dict):
+                    raise ValueError("schedule must bind the Settings snapshot")
+                required = {"cron", "timezone_id", "rule_bytes", "rule_sha256", "rule_provider"}
+                if set(schedule) != required or not isinstance(schedule["rule_bytes"], bytes):
+                    raise ValueError("invalid schedule rule binding")
+                if (not schedule["rule_bytes"].startswith(b"TZif")
+                        or hashlib.sha256(schedule["rule_bytes"]).hexdigest() != schedule["rule_sha256"]):
+                    raise ValueError("invalid timezone rule bytes")
+                effective = datetime.now(timezone.utc).isoformat()
+                self._db.execute(
+                    "INSERT INTO schedule_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                    (revision, schedule["cron"], schedule["timezone_id"],
+                     schedule["rule_bytes"], schedule["rule_sha256"],
+                     schedule["rule_provider"], effective, effective))
             return revision
 
     def read_control(self, namespace, key):
@@ -464,7 +517,200 @@ class StateStore:
     def has_retained_records(self):
         """Distinguish an unused initialized store from one holding evidence."""
         return any(self._db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
-                   for table in _TABLES_V2)
+                   for table in _TABLES_V3)
+
+    def schedule_revisions(self):
+        rows = self._db.execute(
+            "SELECT revision, cron, timezone_id, rule_bytes, rule_sha256, rule_provider, "
+            "effective_from_utc, cursor_utc, history_known FROM schedule_revisions ORDER BY revision")
+        return [{"revision": r[0], "cron": r[1], "timezone_id": r[2],
+                 "rule_bytes": r[3], "rule_sha256": r[4], "rule_provider": r[5],
+                 "effective_from_utc": r[6], "cursor_utc": r[7],
+                 "history_known": bool(r[8])} for r in rows]
+
+    def bootstrap_schedule_binding(self, revision, snapshot_digest, schedule, event):
+        """Begin future-only TP05 history for a verified pre-TP05 Settings row."""
+        from datetime import datetime, timezone
+        self._require_event(event, "run", "result")
+        if (event.fields.get("outcome") != "checked"
+                or event.fields.get("trigger") != "recovery"):
+            raise ValueError("schedule bootstrap requires a bound required record")
+        with self._transaction():
+            row = self.read_settings_control_verified("settings_snapshot")
+            if row is None or row[0] != revision or hashlib.sha256(row[1]).hexdigest() != snapshot_digest:
+                raise StoreIntegrityError("Settings changed before schedule bootstrap")
+            payload = _read_json_object(row[1])
+            config = payload.get("config")
+            if (not isinstance(config, dict) or config.get("cron_schedule") != schedule["cron"]
+                    or config.get("timezone_id") != schedule["timezone_id"]
+                    or not isinstance(schedule.get("rule_bytes"), bytes)
+                    or hashlib.sha256(schedule["rule_bytes"]).hexdigest() != schedule.get("rule_sha256")):
+                raise StoreIntegrityError("schedule binding differs from Settings")
+            if self._db.execute("SELECT 1 FROM schedule_revisions LIMIT 1").fetchone():
+                return False
+            effective = datetime.now(timezone.utc).isoformat()
+            self._db.execute(
+                "INSERT INTO schedule_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
+                (revision, schedule["cron"], schedule["timezone_id"], schedule["rule_bytes"],
+                 schedule["rule_sha256"], schedule["rule_provider"], effective, effective))
+            self._insert_required_event(event)
+            return True
+
+    def schedule_slots(self, *, status=None):
+        query = ("SELECT schedule_revision, nominal_local, resolved_utc, disposition, status, run_id "
+                 "FROM schedule_slots")
+        rows = self._db.execute(query + (" WHERE status = ?" if status else "") +
+                                " ORDER BY resolved_utc, schedule_revision, nominal_local",
+                                (status,) if status else ())
+        return [{"schedule_revision": row[0], "nominal_local": row[1],
+                 "resolved_utc": row[2], "disposition": row[3], "status": row[4],
+                 "run_id": row[5]} for row in rows]
+
+    def record_schedule_slot(self, revision, nominal, resolved, disposition, status, *, event=None):
+        """Persist one intended wall slot; another fold offset is not another run."""
+        from datetime import datetime
+        if (type(revision) is not int or revision < 1
+                or disposition not in ("on_time", "gap", "fold_first")
+                or status not in ("due", "missed", "skipped_active")):
+            raise ValueError("invalid scheduled slot")
+        if status == "skipped_active":
+            self._require_event(event, "run", "result")
+            if (event.fields.get("outcome") != "skipped"
+                    or event.fields.get("trigger") != "scheduled"):
+                raise ValueError("active skip requires required schedule audit")
+        intended = datetime.fromisoformat(nominal)
+        actual = datetime.fromisoformat(resolved)
+        if intended.tzinfo is not None or actual.utcoffset() is None:
+            raise ValueError("invalid scheduled slot times")
+        with self._transaction():
+            row = self._db.execute(
+                "SELECT effective_from_utc FROM schedule_revisions WHERE revision = ?",
+                (revision,)).fetchone()
+            if row is None or actual < datetime.fromisoformat(row[0]):
+                raise ValueError("slot is outside its schedule revision")
+            later = self._db.execute(
+                "SELECT MIN(effective_from_utc) FROM schedule_revisions WHERE revision > ?",
+                (revision,)).fetchone()[0]
+            if later is not None and actual >= datetime.fromisoformat(later):
+                raise ValueError("stale schedule revision cannot create future slot")
+            cursor = self._db.execute(
+                "INSERT OR IGNORE INTO schedule_slots VALUES (?, ?, ?, ?, ?, NULL)",
+                (revision, nominal, resolved, disposition, status))
+            if cursor.rowcount == 1 and event is not None:
+                self._insert_required_event(event)
+            return cursor.rowcount == 1
+
+    def set_schedule_slot_status(self, revision, nominal, expected, status, *, run_id=None,
+                                 event=None):
+        if (expected not in ("due", "missed")
+                or status not in ("handled", "skipped_active", "superseded", "missed")
+                or (status == "missed" and expected != "due")
+                or (status == "handled" and run_id is None)
+                or (run_id is not None and status != "handled")):
+            raise ValueError("invalid slot transition")
+        if run_id is not None:
+            _id(run_id)
+        if event is not None:
+            self._require_event(event, "run", "result")
+            if status != "skipped_active" or event.fields.get("outcome") != "skipped":
+                raise ValueError("slot transition audit does not match skip")
+        with self._transaction():
+            cursor = self._db.execute(
+                "UPDATE schedule_slots SET status = ?, run_id = ? "
+                "WHERE schedule_revision = ? AND nominal_local = ? AND status = ?",
+                (status, run_id, revision, nominal, expected))
+            if cursor.rowcount == 1 and event is not None:
+                self._insert_required_event(event)
+            return cursor.rowcount == 1
+
+    def advance_schedule_cursor(self, revision, expected, updated):
+        from datetime import datetime
+        if datetime.fromisoformat(updated) < datetime.fromisoformat(expected):
+            raise ValueError("schedule cursor cannot move backward")
+        with self._transaction():
+            cursor = self._db.execute(
+                "UPDATE schedule_revisions SET cursor_utc = ? WHERE revision = ? AND cursor_utc = ?",
+                (updated, revision, expected))
+            return cursor.rowcount == 1
+
+    def active_run(self):
+        row = self._db.execute(
+            "SELECT run_id, nonce, boot_id, process_id, process_start, context_json, "
+            "claimed_utc FROM run_claims WHERE status = 'active'").fetchone()
+        if row is None:
+            return None
+        return {"run_id": row[0], "nonce": row[1], "boot_id": row[2],
+                "process_id": row[3], "process_start": row[4],
+                "context": _read_json_object(row[5]), "claimed_utc": row[6]}
+
+    def latest_run(self):
+        row = self._db.execute(
+            "SELECT run_id, status, claimed_utc, finished_utc FROM run_claims "
+            "ORDER BY claimed_utc DESC, rowid DESC LIMIT 1").fetchone()
+        return ({"run_id": row[0], "status": row[1], "claimed_utc": row[2],
+                 "finished_utc": row[3]} if row else None)
+
+    def claim_run(self, run_id, nonce, boot_id, process_id, process_start, context,
+                  *, intent_event, schedule_slot=None, missed_slots=()):
+        """Claim exactly one active run, preserving all terminal history."""
+        from datetime import datetime, timezone
+        if type(process_id) is not int or process_id < 1:
+            raise ValueError("invalid process identity")
+        for value in (run_id, nonce, boot_id, process_start):
+            _id(value)
+        encoded = _json_object(context)
+        self._require_event(intent_event, "run", "intent")
+        if intent_event.operation_id != run_id:
+            raise ValueError("run intent identity mismatch")
+        with self._transaction():
+            if self.active_run() is not None:
+                return False
+            if schedule_slot is not None:
+                revision, nominal, expected_status = schedule_slot
+                row = self._db.execute(
+                    "SELECT status FROM schedule_slots WHERE schedule_revision = ? AND nominal_local = ?",
+                    (revision, nominal)).fetchone()
+                if row is None or row[0] != expected_status:
+                    raise ValueError("scheduled slot was already handled")
+            for revision, nominal in missed_slots:
+                row = self._db.execute(
+                    "SELECT status FROM schedule_slots WHERE schedule_revision = ? AND nominal_local = ?",
+                    (revision, nominal)).fetchone()
+                if row != ("missed",):
+                    raise ValueError("confirmed missed slot changed during claim")
+            self._db.execute(
+                "INSERT INTO run_claims VALUES (?, ?, ?, ?, ?, ?, 'active', ?, NULL)",
+                (run_id, nonce, boot_id, process_id, process_start, encoded,
+                 datetime.now(timezone.utc).isoformat()))
+            if schedule_slot is not None:
+                revision, nominal, expected_status = schedule_slot
+                self._db.execute(
+                    "UPDATE schedule_slots SET status = 'handled', run_id = ? "
+                    "WHERE schedule_revision = ? AND nominal_local = ? AND status = ?",
+                    (run_id, revision, nominal, expected_status))
+            for revision, nominal in missed_slots:
+                self._db.execute(
+                    "UPDATE schedule_slots SET status = 'handled', run_id = ? "
+                    "WHERE schedule_revision = ? AND nominal_local = ? AND status = 'missed'",
+                    (run_id, revision, nominal))
+            self._insert_required_event(intent_event)
+            return True
+
+    def finish_run(self, run_id, nonce, status, *, result_event):
+        from datetime import datetime, timezone
+        if status not in ("completed", "failed", "interrupted", "cancelled"):
+            raise ValueError("invalid run completion")
+        self._require_event(result_event, "run", "result")
+        if result_event.operation_id != run_id:
+            raise ValueError("run result identity mismatch")
+        with self._transaction():
+            cursor = self._db.execute(
+                "UPDATE run_claims SET status = ?, finished_utc = ? "
+                "WHERE run_id = ? AND nonce = ? AND status = 'active'",
+                (status, datetime.now(timezone.utc).isoformat(), _id(run_id), _id(nonce)))
+            if cursor.rowcount == 1:
+                self._insert_required_event(result_event)
+            return cursor.rowcount == 1
 
     def begin_operation(self, operation_id, kind, metadata):
         if kind not in ("publication", "restoration"):

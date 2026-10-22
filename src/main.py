@@ -22,7 +22,6 @@ from fastapi.responses import HTMLResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 
 from src.ingestion import ingest_all_domains, DOMAIN_FEEDS
 from src.content_availability import (DOMAIN_ORDER, SOURCE_FAILURES, build_content_availability,
@@ -42,6 +41,8 @@ from mutagen import MutagenError
 from src.legacy_reader import project_retained_episode
 from src.settings import (SettingsConflict, SettingsIntegrityError, SettingsService,
                           SettingsValidationError)
+from src.run_coordinator import RunCoordinator
+from src.state_store import StateStore, StoreIntegrityError
 
 load_dotenv()
 
@@ -88,6 +89,23 @@ def save_config(cfg: Dict[str, Any]) -> None:
         logger.error(f"Error saving config: {e}")
 
 scheduler = AsyncIOScheduler()
+run_coordinator = RunCoordinator(STORAGE_DIR)
+scheduler_status = {"status": "not_started", "bound_revision": None}
+
+
+def _scheduled_tick():
+    """APScheduler wakes the owned ledger; it never invokes generation."""
+    result = run_coordinator.tick(live_tick=True)
+    scheduler_status["status"] = result["status"]
+    if result["status"] in ("ready", "busy", "started"):
+        try:
+            scheduler_status["bound_revision"] = SettingsService(STORAGE_DIR).read()["revision"]
+        except SettingsIntegrityError:
+            scheduler_status["bound_revision"] = None
+    else:
+        scheduler_status["bound_revision"] = None
+    if result["status"] == "blocked":
+        logger.warning("Scheduler blocked (%s)", result.get("reason", "unknown"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -95,19 +113,17 @@ async def lifespan(app: FastAPI):
         logger.info("API authentication is enabled: /api/* requires a valid X-API-Key header")
     else:
         logger.warning("API is in READ-ONLY mode: API_SECRET_KEY is unset, so all non-GET /api/* requests are rejected")
-    global source_health
+    global source_health, run_coordinator
     source_health = load_source_health(STORAGE_DIR)
-    cfg = load_config()
-    cron_expr = cfg.get("cron_schedule", os.getenv("CRON_SCHEDULE", "0 7 * * *"))
-    try:
-        parts = cron_expr.split()
-        if len(parts) == 5:
-            trigger = CronTrigger(minute=parts[0], hour=parts[1], day=parts[2], month=parts[3], day_of_week=parts[4], timezone="Asia/Singapore")
-            scheduler.add_job(run_daily_pipeline, trigger)
-            scheduler.start()
-            logger.info(f"Scheduled daily pipeline with cron [{cron_expr}] SGT")
-    except Exception as e:
-        logger.warning(f"Could not parse cron expression: {e}")
+    run_coordinator = RunCoordinator(STORAGE_DIR)
+    # The first scan classifies provable downtime misses. Subsequent wakeups
+    # admit an on-time slot only after the bound durable ledger records it.
+    initial = run_coordinator.tick(live_tick=False)
+    scheduler_status["status"] = initial["status"]
+    scheduler_status["bound_revision"] = None
+    scheduler.add_job(_scheduled_tick, "interval", seconds=1, max_instances=1,
+                      coalesce=False, misfire_grace_time=1)
+    scheduler.start()
 
     # Historical records are never migrated, deduplicated or retired at startup.
     # TP26 owns reference-aware retirement after its separate acceptance gate.
@@ -885,6 +901,7 @@ async def health_check():
         "gemini_api_key_configured": key_configured,
         "episodes_count": ep_count,
         "scheduler_running": scheduler.running,
+        "scheduler_status": dict(scheduler_status),
         "pipeline_status": pipeline_state,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
@@ -945,68 +962,66 @@ async def chat_endpoint(req: ChatRequest, auth: bool = Depends(require_auth)):
 @app.post("/api/refresh")
 @_audit_handler_failures("refresh")
 async def manual_refresh(auth: bool = Depends(require_auth)):
-    global current_pipeline_task
-    if pipeline_state.get("running") and current_pipeline_task and not current_pipeline_task.done():
+    result = run_coordinator.start_manual()
+    if result["status"] == "busy":
         _audit_action("refresh", "busy")
         return {"status": "busy", "message": "Ingestion pipeline is already actively running.", "state": pipeline_state}
-    
-    pipeline_state["running"] = True
-    pipeline_state["stage"] = "checking"
-    pipeline_state["progress"] = 10
-    pipeline_state["message"] = "Checking configured RSS sources for available articles..."
-    pipeline_state["error"] = None
-
-    run = RunRecord("manual")
-    pipeline_state.update(run_id=run.data["run_id"], provenance_status="pending", provenance_error=None)
-    current_pipeline_task = asyncio.create_task(run_daily_pipeline(run_record=run))
-    current_pipeline_task.pipeline_run_record = run
-    def record_pre_entry_cancellation(task):
-        if task.cancelled():
-            _finalize_pipeline_run(run, "cancelled", "cancelled")
-    current_pipeline_task.add_done_callback(record_pre_entry_cancellation)
-    _audit_action("refresh", "request_accepted", run_id=run.data["run_id"])
+    if result["status"] != "started":
+        raise HTTPException(status_code=503, detail={"status": "blocked", "reason": result.get("reason")})
+    pipeline_state.update(running=True, stage="processing", progress=0,
+                          message="Coordinated worker accepted; read durable run status for completion.",
+                          error=None, run_id=result["run_id"], provenance_status="pending",
+                          provenance_error=None)
+    _audit_action("refresh", "request_accepted", run_id=result["run_id"])
     return {"status": "ok", "message": "Ingestion and synthesis pipeline triggered in background.", "state": pipeline_state}
 
 @app.post("/api/refresh/cancel")
 @_audit_handler_failures("refresh_cancel")
 async def cancel_refresh(auth: bool = Depends(require_auth)):
-    global current_pipeline_task
-    active = bool(current_pipeline_task and not current_pipeline_task.done())
-    run = getattr(current_pipeline_task, "pipeline_run_record", None)
-    if active:
-        current_pipeline_task.cancel()
-        current_pipeline_task = None
-    pipeline_state["running"] = False
-    pipeline_state["stage"] = "idle"
-    pipeline_state["progress"] = 0
-    pipeline_state["message"] = "Pipeline stopped by user."
-    pipeline_state["error"] = None
-    logger.info("Pipeline explicitly cancelled via /api/refresh/cancel")
-    _audit_action("refresh_cancel", "request_accepted" if active else "no_active_task",
-                  run_id=run.data["run_id"] if run else None)
-    return {"status": "cancelled", "message": "Pipeline cancelled successfully.", "state": pipeline_state}
+    result = run_coordinator.cancel_owned()
+    if result["status"] == "no_active_task":
+        _audit_action("refresh_cancel", "no_active_task")
+        return {"status": "no_active_task", "message": "No coordinated worker is active.",
+                "state": pipeline_state}
+    _audit_action("refresh_cancel", "request_accepted", run_id=result.get("run_id"))
+    if result["status"] != "stopped_pending_reconciliation":
+        raise HTTPException(status_code=409, detail=result)
+    pipeline_state.update(running=False, stage="blocked", progress=0,
+                          message="Worker stopped; retained publication requires reconciliation.",
+                          error="pending_reconciliation")
+    return {"status": "stopped_pending_reconciliation", "state": pipeline_state}
 
 @app.post("/api/refresh/reset")
 @_audit_handler_failures("refresh_reset")
 async def reset_refresh(auth: bool = Depends(require_auth)):
-    global current_pipeline_task
-    active = bool(current_pipeline_task and not current_pipeline_task.done())
-    run = getattr(current_pipeline_task, "pipeline_run_record", None)
-    if active:
-        current_pipeline_task.cancel()
-        current_pipeline_task = None
-    pipeline_state["running"] = False
-    pipeline_state["stage"] = "idle"
-    pipeline_state["progress"] = 0
-    pipeline_state["message"] = "Ready"
-    pipeline_state["error"] = None
-    logger.info("Pipeline state explicitly reset via /api/refresh/reset")
-    _audit_action("refresh_reset", "request_accepted", run_id=run.data["run_id"] if run else None)
-    return {"status": "reset", "message": "Pipeline state reset to ready.", "state": pipeline_state}
+    result = run_coordinator.cancel_owned()
+    if result["status"] != "no_active_task":
+        _audit_action("refresh_reset", "handler_failed", run_id=result.get("run_id"))
+        raise HTTPException(status_code=409, detail={"status": "blocked",
+            "reason": "run_or_publication_reconciliation_required"})
+    pipeline_state.update(running=False, stage="idle", progress=0,
+                          message="Ready", error=None)
+    _audit_action("refresh_reset", "no_active_task")
+    return {"status": "reset", "message": "No active run was reset.", "state": pipeline_state}
 
 @app.get("/api/refresh/status")
 async def get_refresh_status(auth: bool = Depends(require_auth)):
-    return {**pipeline_state, "source_health": source_health}
+    coordinated = run_coordinator.status()
+    current_source_health = (load_source_health(STORAGE_DIR)
+                             if coordinated.get("run_id") else source_health)
+    state = {**pipeline_state, "source_health": current_source_health,
+             "coordinated_run": coordinated}
+    if coordinated.get("run_id") is not None:
+        state["run_id"] = coordinated["run_id"]
+        state["running"] = coordinated["status"] == "running"
+        state["stage"] = coordinated["status"]
+        if coordinated["status"] == "completed":
+            state["progress"] = 100
+        elif coordinated["status"] == "blocked":
+            state["error"] = coordinated.get("reason")
+    elif coordinated["status"] == "blocked":
+        state.update(running=False, stage="blocked", error=coordinated.get("reason"))
+    return state
 
 @app.get("/api/settings")
 async def get_settings(auth: bool = Depends(require_auth)):
@@ -1026,6 +1041,12 @@ async def get_settings(auth: bool = Depends(require_auth)):
         logger.warning("Settings readable; storage statistics unavailable: %s", type(exc).__name__)
         current["storage"] = None
         current["storage_status"] = "unavailable"
+    if scheduler.running:
+        if (scheduler_status["bound_revision"] == current["revision"]
+                and scheduler_status["status"] in ("ready", "busy", "started")):
+            current["application_status"]["schedule"] = "applied"
+        elif scheduler_status["status"] == "blocked":
+            current["application_status"]["schedule"] = "unavailable"
     return current
 
 class SettingsUpdate(BaseModel):
