@@ -19,6 +19,9 @@ from apscheduler.triggers.cron import CronTrigger
 
 
 _ZONE_ID = re.compile(r"[A-Za-z_+-]+(?:/[A-Za-z_+0-9-]+)*\Z")
+_SCAN_SPAN = timedelta(days=1)
+_MAX_RULE_SHIFT = timedelta(hours=26)
+_SCAN_FRESHNESS = timedelta(seconds=2)
 
 
 class RunBusy(RuntimeError):
@@ -185,11 +188,16 @@ def enumerate_nominal(cron, start_local, end_local, *, max_slots=100000):
     return result
 
 
-def scan_due(store, now_utc, *, live_tick=False, active_worker=False):
+def scan_due(store, now_utc, *, live_tick=False, active_worker=False,
+             active_started_utc=None):
     """Materialize provable elapsed slots before moving each durable cursor."""
     if now_utc.tzinfo is None:
         raise ValueError("schedule scan requires an actual UTC instant")
     now = now_utc.astimezone(timezone.utc)
+    if active_worker:
+        if active_started_utc is None or active_started_utc.tzinfo is None:
+            raise ValueError("active worker requires a proven claim start")
+        active_started_utc = active_started_utc.astimezone(timezone.utc)
     revisions = store.schedule_revisions()
     added = []
     for index, item in enumerate(revisions):
@@ -197,22 +205,29 @@ def scan_due(store, now_utc, *, live_tick=False, active_worker=False):
         cursor = datetime.fromisoformat(item["cursor_utc"])
         next_effective = (datetime.fromisoformat(revisions[index + 1]["effective_from_utc"])
                           if index + 1 < len(revisions) else None)
-        end = min(now, next_effective) if next_effective else now
-        if end <= cursor:
+        target = min(now, next_effective) if next_effective else now
+        if target <= cursor:
             continue
+        end = min(target, cursor + _SCAN_SPAN)
         rules = ZoneRules(item["timezone_id"], item["rule_bytes"],
                           item["rule_sha256"], item["rule_provider"])
         zone = rules.zone()
-        start_local = (cursor.astimezone(zone).replace(tzinfo=None) - timedelta(days=2))
-        end_local = (end.astimezone(zone).replace(tzinfo=None) + timedelta(days=2))
+        cursor_local = cursor.astimezone(zone)
+        end_local_value = end.astimezone(zone)
+        offset_shift = abs(end_local_value.utcoffset() - cursor_local.utcoffset())
+        padding = min(_MAX_RULE_SHIFT, end - cursor + offset_shift)
+        start_local = cursor_local.replace(tzinfo=None) - padding
+        end_local = end_local_value.replace(tzinfo=None) + padding
         for nominal in enumerate_nominal(item["cron"], start_local, end_local):
             result = resolve_wall(nominal, rules)
             if (not (effective <= result.instant and cursor < result.instant <= end)
                     or (next_effective is not None and result.instant >= next_effective)):
                 continue
-            status = ("skipped_active" if active_worker else
+            status = ("skipped_active" if active_worker
+                      and result.instant >= active_started_utc else
                       "due" if live_tick and index == len(revisions) - 1
-                      and (now - result.instant).total_seconds() <= 2 else "missed")
+                      and end == now and (now - result.instant).total_seconds() <= 2
+                      and not active_worker else "missed")
             slot = {"schedule_revision": item["revision"],
                     "nominal_local": nominal.isoformat(),
                     "resolved_utc": result.instant.isoformat(),
@@ -240,6 +255,19 @@ def scan_due(store, now_utc, *, live_tick=False, active_worker=False):
         if not store.advance_schedule_cursor(item["revision"], item["cursor_utc"], end.isoformat()):
             raise RunOwnershipUnknown("schedule cursor changed during scan")
     return added
+
+
+def scan_backlog_remaining(store, now_utc):
+    """Do not claim one catch-up until all older revision intervals are scanned."""
+    now = now_utc.astimezone(timezone.utc)
+    revisions = store.schedule_revisions()
+    for index, item in enumerate(revisions):
+        next_effective = (datetime.fromisoformat(revisions[index + 1]["effective_from_utc"])
+                          if index + 1 < len(revisions) else None)
+        target = min(now, next_effective) if next_effective else now
+        if datetime.fromisoformat(item["cursor_utc"]) < target:
+            return True
+    return False
 
 
 def ensure_schedule_binding(storage_root):
@@ -346,7 +374,10 @@ class RunCoordinator:
                             or (not worker_active and active is not None)):
                         return {"status": "blocked", "reason": "uncertain_worker_or_publication"}
                     scan_due(store, now, live_tick=live_tick,
-                             active_worker=worker_active)
+                             active_worker=worker_active,
+                             active_started_utc=(datetime.fromisoformat(active["claimed_utc"])
+                                                 if worker_active else None))
+                    backlog = scan_backlog_remaining(store, now)
                     revisions = {item["revision"]: item for item in store.schedule_revisions()}
                     due = []
                     for row in store.schedule_slots(status="due"):
@@ -362,17 +393,21 @@ class RunCoordinator:
                                 "missed" if resolved < later_effective else "superseded")
                             continue
                         if worker_active:
-                            revision = revisions[row["schedule_revision"]]
-                            slot = {**row, "timezone_id": revision["timezone_id"],
-                                    "rule_sha256": revision["rule_sha256"]}
-                            skip_id = "run-skip-" + uuid.uuid4().hex
-                            context = self._event_context(slot)
-                            context["disposition"] = "skipped"
-                            event = OperationEvent.build("run", skip_id, "result",
-                                {"run_id": skip_id, "trigger": "scheduled", "outcome": "skipped"},
-                                component="scheduler", context=context)
-                            store.set_schedule_slot_status(row["schedule_revision"],
-                                row["nominal_local"], "due", "skipped_active", event=event)
+                            if resolved < datetime.fromisoformat(active["claimed_utc"]):
+                                store.set_schedule_slot_status(row["schedule_revision"],
+                                    row["nominal_local"], "due", "missed")
+                            else:
+                                revision = revisions[row["schedule_revision"]]
+                                slot = {**row, "timezone_id": revision["timezone_id"],
+                                        "rule_sha256": revision["rule_sha256"]}
+                                skip_id = "run-skip-" + uuid.uuid4().hex
+                                context = self._event_context(slot)
+                                context["disposition"] = "skipped"
+                                event = OperationEvent.build("run", skip_id, "result",
+                                    {"run_id": skip_id, "trigger": "scheduled", "outcome": "skipped"},
+                                    component="scheduler", context=context)
+                                store.set_schedule_slot_status(row["schedule_revision"],
+                                    row["nominal_local"], "due", "skipped_active", event=event)
                         elif not live_tick or (now - resolved).total_seconds() > 2:
                             store.set_schedule_slot_status(row["schedule_revision"],
                                 row["nominal_local"], "due", "missed")
@@ -386,6 +421,8 @@ class RunCoordinator:
                     lease.close()
             if worker_active:
                 return {"status": "busy", "reason": "active_worker_lock"}
+            if backlog:
+                return {"status": "scanning_backlog", "reason": "confirmed_history_in_progress"}
             if due:
                 slot = due[0]
                 result = self.start_scheduled(slot)
@@ -446,6 +483,9 @@ class RunCoordinator:
                 if catch_up is not None and (not catch_up or any(
                         item["status"] != "missed" for item in catch_up)):
                     return {"status": "blocked", "reason": "unconfirmed_miss_history"}
+                if catch_up is not None and scan_backlog_remaining(
+                        store, datetime.now(timezone.utc) - _SCAN_FRESHNESS):
+                    return {"status": "blocked", "reason": "confirmed_history_in_progress"}
                 context = {
                     "trigger": trigger, "settings_revision": settings["revision"],
                     "settings": settings["config"], "schedule_revision": schedule["revision"],

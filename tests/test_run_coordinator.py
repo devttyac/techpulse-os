@@ -124,13 +124,119 @@ class DueLedgerTests(unittest.TestCase):
                                         expected_revision=1)
         with StateStore.open(self.root / "state") as store:
             original = datetime.fromisoformat(store.schedule_revisions()[-1]["cursor_utc"])
-            added = scan_due(store, original + timedelta(minutes=2), active_worker=True)
+            added = scan_due(store, original + timedelta(minutes=2),
+                             active_worker=True, active_started_utc=original)
             self.assertTrue(added)
             self.assertTrue(all(row["status"] == "skipped_active" for row in added))
             self.assertEqual(store.schedule_slots(status="missed"), [])
             self.assertEqual(len(store.operation_events(store._db.execute(
                 "SELECT operation_id FROM operation_events WHERE kind = 'run' "
                 "AND component = 'scheduler' ORDER BY rowid DESC LIMIT 1").fetchone()[0])), 1)
+
+    def test_active_worker_preserves_prior_downtime_miss(self):
+        SettingsService(self.root).save({**SETTINGS, "cron_schedule": "* * * * *"},
+                                        expected_revision=1)
+        with StateStore.open(self.root / "state") as store:
+            cursor = datetime.fromisoformat(store.schedule_revisions()[-1]["cursor_utc"])
+            started = cursor + timedelta(minutes=1, seconds=30)
+            added = scan_due(store, cursor + timedelta(minutes=3),
+                             active_worker=True, active_started_utc=started)
+            before = [row for row in added if datetime.fromisoformat(row["resolved_utc"]) < started]
+            during = [row for row in added if datetime.fromisoformat(row["resolved_utc"]) >= started]
+            self.assertTrue(before)
+            self.assertTrue(during)
+            self.assertTrue(all(row["status"] == "missed" for row in before))
+            self.assertTrue(all(row["status"] == "skipped_active" for row in during))
+            self.assertEqual(len(store.schedule_slots(status="missed")), len(before))
+
+    def test_tick_with_live_claim_does_not_erase_preclaim_misses(self):
+        with tempfile.TemporaryDirectory() as root:
+            SettingsService(root).save({**SETTINGS, "cron_schedule": "* * * * *"},
+                                       expected_revision=0, initialization="fresh")
+            now = datetime.now(timezone.utc).replace(second=30, microsecond=0)
+            before = now - timedelta(minutes=5)
+            claim_start = now - timedelta(minutes=2)
+            with StateStore.open(Path(root) / "state") as store:
+                store._db.execute("UPDATE schedule_revisions SET effective_from_utc=?, cursor_utc=? "
+                                  "WHERE revision=1", (before.isoformat(), before.isoformat()))
+                store._db.commit()
+                store.claim_run("run-existing", "nonce", "boot", 123, "start",
+                                {"settings_revision": 1},
+                                intent_event=run_intent("run-existing"))
+                store._db.execute("UPDATE run_claims SET claimed_utc=? WHERE run_id=?",
+                                  (claim_start.isoformat(), "run-existing"))
+                store._db.commit()
+            coordinator = RunCoordinator(root)
+            with patch("src.run_coordinator.acquire_run_lock", side_effect=RunBusy("held")), patch(
+                    "src.run_coordinator._live_claim_matches", return_value=True):
+                self.assertEqual(coordinator.tick(now_utc=now)["status"], "busy")
+            with StateStore.open(Path(root) / "state") as store:
+                self.assertTrue(store.schedule_slots(status="missed"))
+                self.assertTrue(store.schedule_slots(status="skipped_active"))
+                self.assertTrue(all(datetime.fromisoformat(row["resolved_utc"]) < claim_start
+                                    for row in store.schedule_slots(status="missed")))
+                self.assertTrue(all(datetime.fromisoformat(row["resolved_utc"]) >= claim_start
+                                    for row in store.schedule_slots(status="skipped_active")))
+
+    def test_long_minutely_backlog_advances_one_bounded_chunk_without_dispatch(self):
+        SettingsService(self.root).save({**SETTINGS, "cron_schedule": "* * * * *"},
+                                        expected_revision=1)
+        now = datetime.now(timezone.utc)
+        past = now - timedelta(days=100)
+        with StateStore.open(self.root / "state") as store:
+            store._db.execute("UPDATE schedule_revisions SET effective_from_utc=?, cursor_utc=? "
+                              "WHERE revision=2", (past.isoformat(), past.isoformat()))
+            store._db.commit()
+        coordinator = RunCoordinator(self.root)
+        with patch.object(coordinator, "start_catch_up") as recovery, patch.object(
+                coordinator, "start_scheduled") as scheduled:
+            result = coordinator.tick(now_utc=now)
+        self.assertEqual(result["status"], "scanning_backlog")
+        recovery.assert_not_called()
+        scheduled.assert_not_called()
+        with StateStore.open(self.root / "state") as store:
+            cursor = datetime.fromisoformat(store.schedule_revisions()[-1]["cursor_utc"])
+            self.assertGreater(cursor, past)
+            self.assertLessEqual(cursor, past + timedelta(days=1))
+            misses = store.schedule_slots(status="missed")
+            self.assertTrue(misses)
+        with patch("src.run_coordinator.subprocess.Popen",
+                   side_effect=AssertionError("partial history must not launch")):
+            self.assertEqual(coordinator.start_catch_up(misses)["status"], "blocked")
+
+    def test_near_current_scan_does_not_repeat_days_of_minutely_slots(self):
+        SettingsService(self.root).save({**SETTINGS, "cron_schedule": "* * * * *"},
+                                        expected_revision=1)
+        with StateStore.open(self.root / "state") as store:
+            cursor = datetime.fromisoformat(store.schedule_revisions()[-1]["cursor_utc"])
+            with patch("src.run_coordinator.enumerate_nominal", wraps=enumerate_nominal) as nominal:
+                scan_due(store, cursor + timedelta(seconds=1))
+            self.assertLess(nominal.call_args.args[2] - nominal.call_args.args[1],
+                            timedelta(minutes=5))
+
+    def test_bounded_scan_still_finds_gap_boundary_and_first_fold(self):
+        cases = (
+            ("30 2 * * *", datetime(2024, 3, 10, 6, 59, 59, tzinfo=timezone.utc),
+             datetime(2024, 3, 10, 7, 0, 1, tzinfo=timezone.utc),
+             "2024-03-10T02:30:00", "2024-03-10T07:00:00+00:00", "gap"),
+            ("30 1 * * *", datetime(2024, 11, 3, 5, 29, 59, tzinfo=timezone.utc),
+             datetime(2024, 11, 3, 6, 30, 1, tzinfo=timezone.utc),
+             "2024-11-03T01:30:00", "2024-11-03T05:30:00+00:00", "fold_first"),
+        )
+        for cron, cursor, end, nominal, resolved, disposition in cases:
+            with self.subTest(cron=cron, cursor=cursor):
+                with tempfile.TemporaryDirectory() as root:
+                    SettingsService(root).save({**SETTINGS, "cron_schedule": cron},
+                                               expected_revision=0, initialization="fresh")
+                    with StateStore.open(Path(root) / "state") as store:
+                        store._db.execute("UPDATE schedule_revisions SET effective_from_utc=?, "
+                                          "cursor_utc=? WHERE revision=1",
+                                          (cursor.isoformat(), cursor.isoformat()))
+                        store._db.commit()
+                        added = scan_due(store, end)
+                        self.assertEqual([(row["nominal_local"], row["resolved_utc"],
+                                           row["disposition"]) for row in added],
+                                         [(nominal, resolved, disposition)])
 
     def test_restart_recovers_unclaimed_due_as_confirmed_miss(self):
         SettingsService(self.root).save({**SETTINGS, "cron_schedule": "* * * * *"},
