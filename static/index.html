@@ -1005,7 +1005,7 @@
           </div>
           <div>
             <h3 class="text-sm sm:text-base font-bold text-white">Settings & Retention Policy</h3>
-            <p class="text-[11px] text-slate-400">Configure storage retention, chapter topics, and models</p>
+            <p class="text-[11px] text-slate-400">Configure the saved retention limit and future schedule</p>
           </div>
         </div>
         <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white text-lg font-bold p-1">&times;</button>
@@ -1032,9 +1032,10 @@
         <div class="space-y-1.5">
           <label class="font-semibold text-slate-200 text-xs flex items-center justify-between">
             <span>Episode Retention Limit</span>
-            <span class="text-[10px] text-slate-400 font-mono">Auto-prunes oldest episodes</span>
+            <span class="text-[10px] text-slate-400 font-mono">Applies at the next approved cleanup</span>
           </label>
           <select id="setting-retention" class="w-full bg-black/60 text-white text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 cursor-pointer">
+            <option value="">Choose a retention limit</option>
             <option value="7">Keep Latest 7 Episodes (1 Week)</option>
             <option value="14" selected>Keep Latest 14 Episodes (2 Weeks - Recommended)</option>
             <option value="30">Keep Latest 30 Episodes (1 Month)</option>
@@ -1047,9 +1048,9 @@
         <div class="space-y-1.5">
           <label class="font-semibold text-slate-200 text-xs flex items-center justify-between">
             <span>Chapter Topics per Episode</span>
-            <span class="text-[10px] text-slate-400 font-mono">Podcast breakdown granularity</span>
+            <span class="text-[10px] text-slate-400 font-mono">Managed by later content integration</span>
           </label>
-          <select id="setting-chapters" class="w-full bg-black/60 text-white text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 cursor-pointer">
+          <select id="setting-chapters" disabled class="w-full bg-black/60 text-white text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 cursor-pointer">
             <option value="8" selected>8 Chapters (All 8 Technology Domains)</option>
             <option value="6">6 Chapters (Core Cloud, AI & Data)</option>
             <option value="4">4 Chapters (Compact Executive)</option>
@@ -1059,23 +1060,35 @@
         <!-- AI Synthesis Model -->
         <div class="space-y-1.5">
           <label class="font-semibold text-slate-200 text-xs flex items-center justify-between">
-            <span>AI Synthesis Engine</span>
-            <span class="text-[10px] text-slate-400 font-mono">Google Gemini API</span>
+            <span>Named chat model</span>
+            <span class="text-[10px] text-slate-400 font-mono">Provider calls are disabled pending approval</span>
           </label>
-          <select id="setting-model" class="w-full bg-black/60 text-white text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 cursor-pointer">
-            <option value="gemini-3.6-flash" selected>Gemini 3.6 Flash (Recommended & Fast)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="gemini-flash">Gemini Flash (Auto-Alias)</option>
+          <select id="setting-model" disabled class="w-full bg-black/60 text-white text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 cursor-pointer">
+            <option value="gemini-3.6-flash" selected>Gemini 3.6 Flash (pending approval)</option>
           </select>
         </div>
 
         <!-- Daily Cron Schedule -->
         <div class="space-y-1.5">
           <label class="font-semibold text-slate-200 text-xs flex items-center justify-between">
-            <span>Daily Automated Ingestion Schedule (Cron SGT)</span>
-            <span class="text-[10px] text-slate-400 font-mono">Singapore Time</span>
+            <span>Daily Automated Ingestion Schedule (five-field cron)</span>
+            <span class="text-[10px] text-slate-400 font-mono">Future runs after scheduler integration</span>
           </label>
-          <input id="setting-cron" type="text" value="0 7 * * *" class="w-full bg-black/60 text-white font-mono text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 placeholder:text-slate-500">
+          <input id="setting-cron" type="text" value="" placeholder="Enter a schedule, for example 0 7 * * *" class="w-full bg-black/60 text-white font-mono text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400 placeholder:text-slate-500">
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="setting-timezone" class="font-semibold text-slate-200 text-xs">Business timezone (IANA)</label>
+          <input id="setting-timezone" type="text" value="" placeholder="Asia/Singapore" class="w-full bg-black/60 text-white font-mono text-xs rounded-xl px-3 py-2.5 border border-white/15 focus:outline-none focus:border-cyan-400">
+        </div>
+
+        <div id="setting-init-row" class="space-y-1.5 hidden">
+          <label for="setting-initialization" class="font-semibold text-slate-200 text-xs">Initialize saved Settings</label>
+          <select id="setting-initialization" class="w-full bg-black/60 text-white text-xs rounded-xl px-3 py-2.5 border border-white/15">
+            <option value="">Choose how to initialize</option>
+            <option value="fresh">New installation</option>
+            <option value="migrate">Use retained installation data</option>
+          </select>
         </div>
 
         <!-- Action Button & Emergency Reset -->
@@ -3054,6 +3067,9 @@
     // ==========================================
     // 6. SETTINGS & RETENTION POLICY
     // ==========================================
+    let settingsRevision = null;
+    let settingsInitializationRequired = null;
+
     async function openSettingsModal() {
       const modal = document.getElementById('settings-modal');
       if (modal) {
@@ -3073,27 +3089,37 @@
         if (res.ok) {
           const data = await res.json();
           const cfg = data.config || {};
-          const storage = data.storage || {};
-
-          // Populate inputs
-          const retSel = document.getElementById('setting-retention');
-          if (retSel && cfg.max_episodes_retained) retSel.value = String(cfg.max_episodes_retained);
-
-          const chapSel = document.getElementById('setting-chapters');
-          if (chapSel && cfg.chapters_per_episode) chapSel.value = String(cfg.chapters_per_episode);
-
-          const modelSel = document.getElementById('setting-model');
-          if (modelSel && cfg.gemini_model) modelSel.value = cfg.gemini_model;
-
-          const cronInput = document.getElementById('setting-cron');
-          if (cronInput && cfg.cron_schedule) cronInput.value = cfg.cron_schedule;
-
-          // Populate storage badge
-          const badge = document.getElementById('storage-stats-badge');
-          if (badge) badge.innerText = `${storage.disk_usage_mb || 0} MB Used`;
-
-          const detail = document.getElementById('storage-stats-detail');
-          if (detail) detail.innerText = `Storage active: ${storage.total_episodes || 0} episode datasets, ${storage.total_audio || 0} audio briefs. Retention limit set to ${storage.max_episodes_retained || 14} episodes.`;
+          settingsRevision = data.revision;
+          settingsInitializationRequired = null;
+          document.getElementById('setting-init-row')?.classList.add('hidden');
+          document.getElementById('setting-retention').value = String(cfg.max_episodes_retained);
+          document.getElementById('setting-cron').value = cfg.cron_schedule;
+          document.getElementById('setting-timezone').value = cfg.timezone_id;
+          document.getElementById('setting-model').value = cfg.chat_model;
+          const storage = data.storage;
+          document.getElementById('storage-stats-badge').textContent = storage ?
+            `${storage.disk_usage_mb || 0} MB Used` : 'Storage statistics unavailable';
+          document.getElementById('storage-stats-detail').textContent = storage ?
+            `Storage active: ${storage.total_episodes || 0} episode datasets, ${storage.total_audio || 0} audio briefs. Saved retention limit: ${cfg.max_episodes_retained} episodes; cleanup is separate.` :
+            'Saved Settings are available; storage statistics could not be read.';
+        } else if (res.status === 409) {
+          const body = await res.json();
+          const detail = body.detail || {};
+          settingsRevision = detail.initialization === 'fresh' || detail.initialization === 'migrate' ? 0 : null;
+          settingsInitializationRequired = settingsRevision === 0 ? detail.initialization : null;
+          if (settingsInitializationRequired) {
+            document.getElementById('setting-init-row')?.classList.remove('hidden');
+            document.getElementById('setting-initialization').value = '';
+            document.getElementById('setting-cron').value = '';
+            document.getElementById('setting-timezone').value = detail.fresh_defaults?.timezone_id || '';
+            document.getElementById('setting-retention').value = detail.fresh_defaults ?
+              String(detail.fresh_defaults.max_episodes_retained) : '';
+          }
+          document.getElementById('settings-status-msg').textContent =
+            settingsInitializationRequired ? 'Choose initialization and enter a schedule before saving.' :
+              'Saved Settings are unavailable; repair is required before saving.';
+        } else {
+          document.getElementById('settings-status-msg').textContent = 'Settings could not be loaded.';
         }
       } catch (e) {
         console.error("Error loading settings:", e);
@@ -3105,12 +3131,35 @@
       const msg = document.getElementById('settings-status-msg');
       try {
         if (btn) btn.innerHTML = 'Saving...';
-        const payload = {
-          max_episodes_retained: parseInt(document.getElementById('setting-retention').value, 10),
-          chapters_per_episode: parseInt(document.getElementById('setting-chapters').value, 10),
-          gemini_model: document.getElementById('setting-model').value,
-          cron_schedule: document.getElementById('setting-cron').value.trim()
+        if (settingsRevision === null) {
+          if (msg) msg.textContent = 'Saved Settings are unavailable; repair is required.';
+          return;
+        }
+        const initialization = document.getElementById('setting-initialization').value;
+        const cron = document.getElementById('setting-cron').value.trim();
+        if (settingsInitializationRequired && initialization !== settingsInitializationRequired) {
+          if (msg) msg.textContent = `Choose ${settingsInitializationRequired} initialization to continue.`;
+          return;
+        }
+        if (!cron) {
+          if (msg) msg.textContent = 'Enter a five-field cron schedule.';
+          return;
+        }
+        if (!document.getElementById('setting-retention').value ||
+            !document.getElementById('setting-timezone').value.trim()) {
+          if (msg) msg.textContent = 'Choose a retention limit and enter an IANA timezone.';
+          return;
+        }
+        const payload = { expected_revision: settingsRevision,
+          config: {
+            max_episodes_retained: Number.parseInt(document.getElementById('setting-retention').value, 10),
+            cron_schedule: cron,
+            timezone_id: document.getElementById('setting-timezone').value.trim(),
+            chat_provider: 'gemini',
+            chat_model: document.getElementById('setting-model').value || 'gemini-3.6-flash'
+          }
         };
+        if (settingsInitializationRequired) payload.initialization = initialization;
 
         const res = await apiFetch('/api/settings', {
           method: 'POST',
@@ -3119,16 +3168,25 @@
         });
 
         if (res.ok) {
-          if (msg) {
-            msg.innerText = '✓ Settings Saved & Retention Enforced!';
-            setTimeout(() => { msg.innerText = ''; }, 3000);
+          const saved = await res.json();
+          settingsRevision = saved.revision;
+          settingsInitializationRequired = null;
+          document.getElementById('setting-init-row')?.classList.add('hidden');
+          if (msg) msg.textContent = `Settings revision ${saved.revision} saved. Retention cleanup and scheduler activation are separate.`;
+        } else {
+          const body = await res.json();
+          const detail = body.detail;
+          if (res.status === 422 && detail?.fields) {
+            if (msg) msg.textContent = `Invalid Settings: ${Object.keys(detail.fields).join(', ')}. Correct the fields and retry.`;
+          } else if (res.status === 409) {
+            if (msg) msg.textContent = 'Settings changed or are unavailable. Your entries are preserved; reopen Settings to review the current revision.';
+          } else {
+            if (msg) msg.textContent = `Settings were not saved (HTTP ${res.status}).`;
           }
-          await loadSettings();
-          await loadEpisodesFromBackend();
         }
       } catch (e) {
         console.error("Save settings error:", e);
-        if (msg) msg.innerText = '⚠️ Failed to save settings';
+        if (msg) msg.textContent = 'Settings save failed; your entries are preserved.';
       } finally {
         if (btn) btn.innerHTML = 'Save Settings';
       }

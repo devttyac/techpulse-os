@@ -45,6 +45,18 @@ class StateStoreTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_settings_snapshot_cannot_use_unaudited_control_writer(self):
+        with StateStore.create(self.root) as store:
+            with self.assertRaises(ValueError):
+                store.write_control("settings_public", "settings_snapshot", 0, b"{}")
+            self.assertIsNone(store.read_control("settings_public", "settings_snapshot"))
+
+    def test_freshness_check_detects_existing_evidence(self):
+        with StateStore.create(self.root) as store:
+            self.assertFalse(store.has_retained_records())
+            store.put_artifact("article-1", "article", b"body", {})
+            self.assertTrue(store.has_retained_records())
+
     def test_explicit_creation_and_restart_preserve_blob_and_versioned_control(self):
         with StateStore.create(self.root) as store:
             digest = store.put_artifact("source-v1", "article", b"full source body", {"url": "https://example.test/a"})

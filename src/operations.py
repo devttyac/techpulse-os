@@ -45,7 +45,7 @@ _ENUM_FIELDS = {
     "control_key": frozenset({"schedule", "cron_schedule", "timezone",
                               "max_episodes_retained", "chapters_per_episode",
                               "gemini_model", "source_policy", "provider_source",
-                              "retention_policy"}),
+                              "retention_policy", "settings_snapshot"}),
 }
 _COMPONENTS = {
     "settings": frozenset({"settings"}),

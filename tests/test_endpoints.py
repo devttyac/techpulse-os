@@ -59,11 +59,11 @@ async def run_asgi_tests():
         print(f"✓ /api/episodes/ep-142 returned: '{ep['title'][:35]}...'")
 
         # 4. Test /api/chat
-        r_chat = await client.post("/api/chat", json={"query": "Explain SPIFFE in banking", "episode_id": "ep-142"})
-        assert r_chat.status_code == 200, f"Chat API failed: {r_chat.status_code}"
-        chat_data = r_chat.json()
-        assert "response" in chat_data
-        print(f"✓ /api/chat returned grounded model response ({len(chat_data['response'])} bytes)")
+        with patch.object(app_main, "process_grounded_chat", new_callable=AsyncMock) as legacy_chat:
+            r_chat = await client.post("/api/chat", json={"query": "Explain SPIFFE in banking", "episode_id": "ep-142"})
+            assert r_chat.status_code == 503, f"Unapproved chat must be blocked: {r_chat.status_code}"
+            legacy_chat.assert_not_awaited()
+        print("✓ /api/chat blocks unapproved legacy model/provider calls")
 
         # 5. Test /api/export-vault and /api/export-markdown/{episode_id}
         r_export_json = await client.post("/api/export-vault", json={"episode_id": "ep-142"})
@@ -82,10 +82,35 @@ async def run_asgi_tests():
 
         # 6. Test /api/settings and /api/refresh/status
         r_settings = await client.get("/api/settings")
-        assert r_settings.status_code == 200, f"Settings API failed: {r_settings.status_code}"
-        s_data = r_settings.json()
-        assert "config" in s_data and "storage" in s_data
-        print(f"✓ /api/settings returned config and storage stats ({s_data['storage']['disk_usage_mb']} MB)")
+        assert r_settings.status_code == 409, "Retained legacy Settings require explicit migration"
+        assert "migration" in str(r_settings.json()).lower()
+        print("✓ /api/settings refuses implicit legacy migration")
+        retained_before = {p: p.read_bytes() for p in Path(app_main.EPISODES_DIR).glob("ep-*.json")}
+        desired = {"max_episodes_retained": 14, "cron_schedule": "0 7 * * *",
+                   "timezone_id": "Asia/Singapore", "chat_provider": "gemini",
+                   "chat_model": "gemini-3.6-flash"}
+        with patch.object(app_main, "enforce_retention_policy",
+                          side_effect=AssertionError("Settings save must not clean up")):
+            saved = await client.post("/api/settings", json={
+                "config": desired, "expected_revision": 0, "initialization": "migrate"})
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["revision"] == 1
+        assert saved.json()["selected_model_status"] == "disabled"
+        assert saved.json()["application_status"]["schedule"] == "pending_tp05_scheduler_integration"
+        assert {p: p.read_bytes() for p in Path(app_main.EPISODES_DIR).glob("ep-*.json")} == retained_before
+        assert (await client.get("/api/settings")).json()["revision"] == 1
+        stale = await client.post("/api/settings", json={
+            "config": desired, "expected_revision": 0})
+        assert stale.status_code == 409 and (await client.get("/api/settings")).json()["revision"] == 1
+        with patch.object(app_main, "get_storage_stats", side_effect=OSError("stats unavailable")):
+            saved_without_stats = await client.post("/api/settings", json={
+                "config": {**desired, "max_episodes_retained": 30},
+                "expected_revision": 1})
+        assert saved_without_stats.status_code == 200, saved_without_stats.text
+        assert saved_without_stats.json()["revision"] == 2
+        assert saved_without_stats.json()["storage"] is None
+        assert saved_without_stats.json()["storage_status"] == "unavailable"
+        assert (await client.get("/api/settings")).json()["revision"] == 2
 
         r_status = await client.get("/api/refresh/status")
         assert r_status.status_code == 200, f"Refresh status API failed: {r_status.status_code}"

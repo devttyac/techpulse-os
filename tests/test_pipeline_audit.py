@@ -258,13 +258,26 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(main.pipeline_state["provenance_error"], "audit_write_failed")
 
     async def test_privileged_actions_have_bounded_records(self):
-        await main.update_settings(main.SettingsUpdate(gemini_model="SECRET_SENTINEL"))
+        from src.state_store import StateStore
+        config = {"max_episodes_retained": 14, "cron_schedule": "0 7 * * *",
+                  "timezone_id": "Asia/Singapore", "chat_provider": "gemini",
+                  "chat_model": "gemini-3.6-flash"}
+        saved = await main.update_settings(main.SettingsUpdate(
+            config=config, expected_revision=0, initialization="fresh"))
+        self.assertEqual(saved["revision"], 1)
+        self.assertEqual(saved["selected_model_status"], "disabled")
         await main.cancel_refresh()
         rows = self.rows("audit.jsonl")
-        self.assertEqual([r["action"] for r in rows], ["settings_update", "refresh_cancel"])
-        self.assertEqual(rows[0]["changed_fields"], ["gemini_model"])
-        self.assertEqual(rows[1]["outcome"], "no_active_task")
-        self.assertNotIn("SECRET_SENTINEL", json.dumps(rows))
+        self.assertEqual([r["action"] for r in rows], ["refresh_cancel"])
+        self.assertEqual(rows[0]["outcome"], "no_active_task")
+        with StateStore.open(self.root / "state") as store:
+            events = store.operation_events("settings-revision-1")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["fields"]["control_key"], "settings_snapshot")
+        self.assertEqual(events[0]["fields"]["control_revision"], 1)
+        self.assertEqual(events[0]["fields"]["outcome"], "committed")
+        self.assertEqual(len(events[0]["fields"]["evidence_digest"]), 64)
+        self.assertNotIn("SECRET_SENTINEL", json.dumps((rows, events, saved)))
 
     async def test_legacy_episode_read_is_unchanged(self):
         path = self.root / "episodes" / "ep-9.json"
@@ -477,15 +490,28 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.rows()), 1)
         self.assertEqual(self.rows()[0]['status'], 'cancelled')
 
-    async def test_failed_privileged_handlers_audit_then_reraise(self):
+    async def test_failed_cleanup_audits_but_failed_required_settings_audit_blocks_save(self):
+        from fastapi import HTTPException
+        from src.settings import SettingsService
+        from src.state_store import StateStore
+        config = {"max_episodes_retained": 14, "cron_schedule": "0 7 * * *",
+                  "timezone_id": "Asia/Singapore", "chat_provider": "gemini",
+                  "chat_model": "gemini-3.6-flash"}
+        await main.update_settings(main.SettingsUpdate(
+            config=config, expected_revision=0, initialization="fresh"))
         with patch.object(main, "enforce_retention_policy", side_effect=ValueError("fixture failure")):
             with self.assertRaises(ValueError):
                 await main.trigger_storage_cleanup()
-            with self.assertRaises(ValueError):
-                await main.update_settings(main.SettingsUpdate())
+            with patch.object(StateStore, "_insert_required_event", side_effect=OSError("audit failed")):
+                with self.assertRaises(HTTPException) as failure:
+                    await main.update_settings(main.SettingsUpdate(
+                        config={**config, "max_episodes_retained": 30}, expected_revision=1))
+        self.assertEqual(failure.exception.status_code, 503)
+        self.assertEqual(SettingsService(self.root).read()["revision"], 1)
+        self.assertEqual(SettingsService(self.root).read()["config"], config)
         rows = self.rows("audit.jsonl")
-        self.assertEqual([r["action"] for r in rows], ["settings_cleanup", "settings_update"])
-        self.assertEqual([r["outcome"] for r in rows], ["handler_failed", "handler_failed"])
+        self.assertEqual([r["action"] for r in rows], ["settings_cleanup"])
+        self.assertEqual(rows[0]["outcome"], "handler_failed")
 
     async def test_manual_acceptance_exposes_new_pending_run_before_task_entry(self):
         main.pipeline_state.update(run_id="prior-run", provenance_status="recorded")
