@@ -104,11 +104,24 @@ def capture_zone_rules(zone_id):
     except ZoneInfoNotFoundError as exc:
         raise ValueError("IANA timezone unavailable") from exc
     for root in TZPATH:
-        path = Path(root) / zone_id
-        if path.is_file() and not path.is_symlink():
-            data = path.read_bytes()
-            if data.startswith(b"TZif"):
-                return ZoneRules(zone_id, data, hashlib.sha256(data).hexdigest(), str(root))
+        try:
+            root_path = Path(root).resolve(strict=True)
+        except FileNotFoundError:
+            continue
+        path = root_path / zone_id
+        if not path.exists() and not path.is_symlink():
+            continue
+        try:
+            resolved = path.resolve(strict=True)
+            resolved.relative_to(root_path)
+            if not resolved.is_file():
+                raise ValueError("IANA timezone rule path is invalid")
+            data = resolved.read_bytes()
+        except (OSError, ValueError) as exc:
+            raise ValueError("IANA timezone rule path is invalid") from exc
+        if not data.startswith(b"TZif"):
+            raise ValueError("IANA timezone rule bytes are invalid")
+        return ZoneRules(zone_id, data, hashlib.sha256(data).hexdigest(), str(root))
     try:
         from importlib.resources import files
         node = files("tzdata.zoneinfo")

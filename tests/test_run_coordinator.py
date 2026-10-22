@@ -58,6 +58,37 @@ class CalendarResolutionTests(unittest.TestCase):
         self.assertEqual(resolve_wall(datetime(2026, 10, 22, 7), rules).instant,
                          datetime(2026, 10, 21, 23, tzinfo=timezone.utc))
 
+    def test_in_root_utc_symlink_captures_rules_without_tzdata_package(self):
+        source = capture_zone_rules("Etc/UTC").data
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Etc").mkdir()
+            (root / "Etc" / "UTC").write_bytes(source)
+            (root / "UTC").symlink_to("Etc/UTC")
+            with patch("src.run_coordinator.TZPATH", (directory,)), \
+                    patch("importlib.resources.files", side_effect=ModuleNotFoundError("tzdata")):
+                rules = capture_zone_rules("UTC")
+            self.assertEqual(rules.data, source)
+            self.assertEqual(rules.provider, directory)
+            self.assertEqual(rules.zone().utcoffset(datetime(2026, 10, 22)), timedelta(0))
+
+    def test_zone_link_outside_root_and_traversal_fail_closed(self):
+        source = capture_zone_rules("Etc/UTC").data
+        with tempfile.TemporaryDirectory() as directory, \
+                tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            target = Path(outside) / "UTC"
+            target.write_bytes(source)
+            (root / "UTC").symlink_to(target)
+            (root / "Etc").symlink_to(outside, target_is_directory=True)
+            with patch("src.run_coordinator.TZPATH", (directory,)):
+                with self.assertRaises(ValueError):
+                    capture_zone_rules("UTC")
+                with self.assertRaises(ValueError):
+                    capture_zone_rules("Etc/UTC")
+                with self.assertRaises(ValueError):
+                    capture_zone_rules("../UTC")
+
     def test_nominal_cron_enumeration_does_not_use_zone_wakeup_policy(self):
         slots = enumerate_nominal("30 1 * * *", datetime(2024, 11, 3, 0),
                                   datetime(2024, 11, 4, 0))
