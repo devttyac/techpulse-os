@@ -73,3 +73,25 @@ test('conflict preserves the entered values and explains revision failure', asyn
   assert.equal(r.elements.get('setting-cron').value, '0 9 * * *');
   assert.match(r.elements.get('settings-status-msg').textContent, /stale|conflict|changed/i);
 });
+
+test('cleanup displays blocked legacy and pending audit without a false success', async () => {
+  const cleanup = html.slice(html.indexOf('async function runStorageCleanup()'),
+                             html.indexOf('async function exportToVault()'));
+  const elements = new Map();
+  for (const id of ['btn-purge-storage', 'settings-status-msg']) {
+    elements.set(id, { innerHTML: '', innerText: '', textContent: '' });
+  }
+  const context = vm.createContext({
+    document: { getElementById: id => elements.get(id) },
+    apiFetch: async () => reply(200, { status: 'pending', cleanup: {
+      status: 'pending', removed: 0, blocked_legacy: 2, blocked: 0, pending: 1,
+      freed_bytes: 0 }, storage: {} }),
+    loadSettings: async () => {}, loadEpisodesFromBackend: async () => {},
+    console: { error() {} }, setTimeout: () => 1,
+  });
+  vm.runInContext(cleanup, context);
+  await context.runStorageCleanup();
+  assert.match(elements.get('settings-status-msg').innerText, /pending/i);
+  assert.match(elements.get('settings-status-msg').innerText, /2.*legacy/i);
+  assert.doesNotMatch(elements.get('settings-status-msg').innerText, /cleaned|purged/i);
+});

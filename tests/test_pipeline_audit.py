@@ -217,7 +217,7 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
         main.enforce_retention_policy(1)
         self.assertEqual((self.root / "runs.jsonl").read_bytes(), before)
 
-    async def test_retention_diagnostic_matches_real_episode_purges(self):
+    async def test_retention_reports_legacy_ownership_block_without_deletion(self):
         episodes = self.root / "episodes"
         legacy_paths = []
         for number in (140, 141):
@@ -239,14 +239,36 @@ class PipelineAuditTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(main, "enforce_retention_policy", capture_retention):
             await main.run_daily_pipeline()
         actual_removed = sum(not path.exists() for path in legacy_paths)
-        self.assertEqual(actual_removed, 2)
-        self.assertEqual([path.name for path in episodes.glob("*.json")], ["ep-143.json"])
+        self.assertEqual(actual_removed, 0)
+        self.assertTrue((episodes / "ep-143.json").exists())
         self.assertEqual(len(retained_results), 1)
         reported = self.rows()[0]["stages"]["retention"]["reported_deleted"]
-        self.assertEqual(reported, actual_removed)
+        self.assertEqual(reported, 0)
         self.assertEqual(reported, retained_results[0]["purged_episodes"])
+        self.assertGreaterEqual(retained_results[0]["blocked_legacy"], 2)
         episode = json.loads((episodes / "ep-143.json").read_text())
         self.assertEqual(episode["pipeline_run"]["stages"]["retention"]["reported_deleted"], reported)
+
+    async def test_mixed_legacy_and_managed_count_blocks_unsafe_retirement(self):
+        from src.state_store import StateStore
+        legacy = []
+        for number in range(100, 114):
+            path = self.root / "episodes" / f"ep-{number}.json"
+            path.write_text(json.dumps({"id": f"ep-{number}"}))
+            legacy.append(path)
+        with StateStore.create(self.root / "state") as store:
+            for number in (201, 202):
+                store.put_artifact(f"audio-{number}", "main_audio", f"audio {number}".encode(), {})
+                store.publish_episode(f"ep-{number}", [f"audio-{number}"],
+                                      [f"coverage-{number}"], {"episode_number": number})
+            managed_files = [store.artifact_file(f"audio-{number}") for number in (201, 202)]
+
+        result = main.enforce_retention_policy(14)
+        self.assertEqual(result["status"], "blocked_unknown_ownership")
+        self.assertEqual(result["blocked_legacy"], 2)
+        self.assertEqual(result["managed_active"], 2)
+        self.assertEqual(result["purged_episodes"], 0)
+        self.assertTrue(all(path.exists() for path in legacy + managed_files))
 
     async def test_append_failure_is_visible_without_claiming_audit_success(self):
         (self.root / "runs.jsonl").mkdir()

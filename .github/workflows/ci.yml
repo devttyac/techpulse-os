@@ -29,7 +29,7 @@ jobs:
 
       - name: Syntax & PyCompile Check
         run: |
-          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py src/story_manifest.py src/state_store.py src/operations.py src/settings.py src/run_coordinator.py src/evidence_contracts.py src/evidence_store.py src/legacy_reader.py
+          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py src/story_manifest.py src/state_store.py src/operations.py src/settings.py src/run_coordinator.py src/evidence_contracts.py src/evidence_store.py src/legacy_reader.py src/lifecycle.py
 
       - name: Run Complete Source Contract Tests
         run: python tests/test_evidence_contracts.py
@@ -42,6 +42,9 @@ jobs:
 
       - name: Run State Store Tests
         run: python tests/test_state_store.py
+
+      - name: Run Retained Lifecycle Tests
+        run: python tests/test_lifecycle.py
 
       - name: Run Settings Tests
         run: python tests/test_settings.py

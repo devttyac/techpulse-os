@@ -43,6 +43,7 @@ from src.settings import (SettingsConflict, SettingsIntegrityError, SettingsServ
                           SettingsValidationError)
 from src.run_coordinator import RunCoordinator
 from src.state_store import StateStore, StoreIntegrityError
+from src.lifecycle import LifecycleService, measure_storage
 
 load_dotenv()
 
@@ -336,72 +337,50 @@ def sanitize_existing_episodes():
         logger.warning(f"Could not write migration marker: {e}")
 
 def enforce_retention_policy(custom_limit: Optional[int] = None) -> Dict[str, Any]:
-    """Purges older episodes and audio files beyond the configured retention limit."""
+    """Retire only committed managed media; leave unknown legacy files intact."""
     cfg = load_config()
-    limit = int(custom_limit if custom_limit is not None else cfg.get("max_episodes_retained", 14))
-    if limit <= 0 or not os.path.exists(EPISODES_DIR):
-        return {"purged_episodes": 0, "freed_bytes": 0}
-
-    files = [f for f in os.listdir(EPISODES_DIR) if f.startswith("ep-") and f.endswith(".json")]
-    def sort_key(fn: str) -> int:
-        try:
-            return int(fn.replace("ep-", "").replace(".json", ""))
-        except:
-            return 0
-    sorted_files = sorted(files, key=sort_key, reverse=True)
-
-    freed_bytes = 0
-    purged_count = 0
-
-    if len(sorted_files) > limit:
-        to_purge = sorted_files[limit:]
-        for fn in to_purge:
-            fp = os.path.join(EPISODES_DIR, fn)
-            try:
-                freed_bytes += os.path.getsize(fp)
-                os.remove(fp)
-                purged_count += 1
-                logger.info(f"Retention policy: purged old episode JSON {fn}")
-            except Exception as e:
-                logger.error(f"Failed to purge episode {fn}: {e}")
-
-            audio_fn = fn.replace(".json", ".mp3")
-            audio_fp = os.path.join(AUDIO_DIR, audio_fn)
-            if os.path.exists(audio_fp):
-                try:
-                    freed_bytes += os.path.getsize(audio_fp)
-                    os.remove(audio_fp)
-                    logger.info(f"Retention policy: purged old episode audio {audio_fn}")
-                except Exception as e:
-                    logger.error(f"Failed to purge audio {audio_fn}: {e}")
-
-    return {"purged_episodes": purged_count, "freed_bytes": freed_bytes}
+    limit = custom_limit if custom_limit is not None else cfg.get("max_episodes_retained", 14)
+    if type(limit) is not int or limit < 1:
+        raise ValueError("retention limit must be a positive integer")
+    legacy = [name for name in os.listdir(EPISODES_DIR)
+              if re.fullmatch(r"ep-[0-9]+\.json", name)]
+    legacy_ids = {name[:-5] for name in legacy}
+    result = {"purged_episodes": 0, "freed_bytes": 0, "blocked_legacy": max(0, len(legacy_ids) - limit),
+              "blocked": 0, "pending": 0, "managed_active": 0}
+    state_root = os.path.join(STORAGE_DIR, "state")
+    if not os.path.isdir(state_root):
+        result["status"] = "blocked_unknown_store" if result["blocked_legacy"] else "no_managed_store"
+        return result
+    try:
+        if legacy_ids:
+            # The direct publisher has no committed lifecycle identity. Until
+            # it is migrated, a mixed cohort has no safe oldest-first order.
+            with StateStore.open(state_root) as store:
+                managed_ids = set(store.active_episode_ids())
+                result["managed_active"] = len(managed_ids)
+                result["pending"] = len(store.pending_lifecycle())
+            result["blocked_legacy"] = max(0, len(legacy_ids | managed_ids) - limit)
+            result["status"] = ("pending" if result["pending"] else
+                                "blocked_unknown_ownership" if result["blocked_legacy"] or legacy_ids & managed_ids else
+                                "completed")
+            return result
+        managed = LifecycleService(state_root).retire_to_limit(limit)
+    except (StoreIntegrityError, OSError) as exc:
+        logger.warning("Managed retention unavailable (%s)", type(exc).__name__)
+        result["status"] = "blocked_unknown_store"
+        result["blocked"] += 1
+        return result
+    result.update(managed)
+    result["purged_episodes"] = managed["removed"]
+    result["status"] = ("pending" if managed["pending"] else
+                        "blocked" if result["blocked_legacy"] or managed["blocked"] else
+                        "completed")
+    return result
 
 def get_storage_stats(retention_limit: Optional[int] = None) -> Dict[str, Any]:
-    episodes_count = 0
-    audio_count = 0
-    total_bytes = 0
-
-    if os.path.exists(EPISODES_DIR):
-        for f in os.listdir(EPISODES_DIR):
-            if f.endswith(".json"):
-                episodes_count += 1
-                total_bytes += os.path.getsize(os.path.join(EPISODES_DIR, f))
-
-    if os.path.exists(AUDIO_DIR):
-        for f in os.listdir(AUDIO_DIR):
-            if f.endswith(".mp3"):
-                audio_count += 1
-                total_bytes += os.path.getsize(os.path.join(AUDIO_DIR, f))
-
+    measured = measure_storage(STORAGE_DIR)
     cfg = load_config() if retention_limit is None else {"max_episodes_retained": retention_limit}
-    return {
-        "total_episodes": episodes_count,
-        "total_audio": audio_count,
-        "disk_usage_bytes": total_bytes,
-        "disk_usage_mb": round(total_bytes / (1024 * 1024), 2),
-        "max_episodes_retained": cfg.get("max_episodes_retained", 14)
-    }
+    return {**measured, "max_episodes_retained": cfg.get("max_episodes_retained", 14)}
 
 def _safe_url(value: Any) -> str:
     """Return value only if it is an absolute http(s) URL; otherwise an empty string.
@@ -1037,7 +1016,7 @@ async def get_settings(auth: bool = Depends(require_auth)):
     try:
         current["storage"] = get_storage_stats(current["config"]["max_episodes_retained"])
         current["storage_status"] = "available"
-    except OSError as exc:
+    except (OSError, StoreIntegrityError) as exc:
         logger.warning("Settings readable; storage statistics unavailable: %s", type(exc).__name__)
         current["storage"] = None
         current["storage_status"] = "unavailable"
@@ -1073,7 +1052,7 @@ async def update_settings(payload: SettingsUpdate, auth: bool = Depends(require_
     try:
         result["storage"] = get_storage_stats(result["config"]["max_episodes_retained"])
         result["storage_status"] = "available"
-    except OSError as exc:
+    except (OSError, StoreIntegrityError) as exc:
         logger.warning("Settings committed; storage statistics unavailable: %s", type(exc).__name__)
         result["storage"] = None
         result["storage_status"] = "unavailable"
@@ -1083,12 +1062,19 @@ async def update_settings(payload: SettingsUpdate, auth: bool = Depends(require_
 @_audit_handler_failures("settings_cleanup")
 async def trigger_storage_cleanup(auth: bool = Depends(require_auth)):
     cleanup_res = enforce_retention_policy()
-    stats = get_storage_stats()
+    try:
+        stats = get_storage_stats()
+        storage_status = "available"
+    except (OSError, StoreIntegrityError) as exc:
+        logger.warning("Cleanup observed; storage statistics unavailable: %s", type(exc).__name__)
+        stats = None
+        storage_status = "unavailable"
     _audit_action("settings_cleanup", "handler_returned")
     return {
-        "status": "success",
+        "status": cleanup_res["status"],
         "cleanup": cleanup_res,
-        "storage": stats
+        "storage": stats,
+        "storage_status": storage_status,
     }
 
 def _export_url(value):

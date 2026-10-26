@@ -307,6 +307,9 @@ class DueLedgerTests(unittest.TestCase):
 
     def test_migrated_tp23_settings_start_future_schedule_without_invented_history(self):
         with StateStore.open(self.root / "state") as store:
+            store._db.execute("DROP TABLE lifecycle_tombstones")
+            store._db.execute("DROP TABLE lifecycle_leases")
+            store._db.execute("DROP TABLE lifecycle_episode_status")
             store._db.execute("DROP TABLE schedule_slots")
             store._db.execute("DROP TABLE run_claims")
             store._db.execute("DROP TABLE schedule_revisions")

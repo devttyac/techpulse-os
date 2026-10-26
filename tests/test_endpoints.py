@@ -111,6 +111,20 @@ async def run_asgi_tests():
         assert saved_without_stats.json()["storage"] is None
         assert saved_without_stats.json()["storage_status"] == "unavailable"
         assert (await client.get("/api/settings")).json()["revision"] == 2
+        stats = (await client.get("/api/settings")).json()["storage"]
+        assert "bytes_by_class" in stats and "evidence" in stats["bytes_by_class"]
+        retained_before_cleanup = {p: p.read_bytes() for p in Path(app_main.EPISODES_DIR).glob("ep-*.json")}
+        cleanup_response = await client.post("/api/settings/cleanup")
+        assert cleanup_response.status_code == 200
+        cleanup = cleanup_response.json()
+        assert cleanup["status"] in ("completed", "blocked", "pending", "blocked_unknown_ownership")
+        assert cleanup["cleanup"]["purged_episodes"] == 0
+        assert {p: p.read_bytes() for p in Path(app_main.EPISODES_DIR).glob("ep-*.json")} == retained_before_cleanup
+        with patch.object(app_main, "get_storage_stats", side_effect=OSError("stat failed")):
+            cleanup_without_stats = await client.post("/api/settings/cleanup")
+        assert cleanup_without_stats.status_code == 200
+        assert cleanup_without_stats.json()["cleanup"]["purged_episodes"] == 0
+        assert cleanup_without_stats.json()["storage_status"] == "unavailable"
         with patch.object(app_main, "scheduler", MagicMock(running=True)), patch.dict(
                 app_main.scheduler_status, {"status": "ready", "bound_revision": 2}):
             assert (await client.get("/api/settings")).json()["application_status"]["schedule"] == "applied"
