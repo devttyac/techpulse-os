@@ -22,12 +22,18 @@ _FIELD_NAMES = frozenset({
     "outcome", "reason", "error_category", "status_code", "count",
     "duration_ms", "byte_count", "control_revision", "control_key",
     "evidence_digest", "coverage_digest", "episode_revision", "evidence_count", "coverage_count",
-    "observed_state", "trigger",
+    "observed_state", "trigger", "prior_reference_count", "prior_lease_count",
+    "current_reference_count", "current_lease_count", "current_digest_owners",
+    "file_device", "file_inode", "file_mtime_ns", "safe_path_digest",
+    "intended_effect", "evidence_limit",
 })
 _NUMERIC_FIELDS = frozenset({"status_code", "count", "duration_ms", "byte_count",
-                            "control_revision", "evidence_count", "coverage_count"})
+                            "control_revision", "evidence_count", "coverage_count",
+                            "prior_reference_count", "prior_lease_count",
+                            "current_reference_count", "current_lease_count",
+                            "current_digest_owners", "file_device", "file_inode", "file_mtime_ns"})
 _DIGEST_FIELDS = frozenset({"source_revision", "recipe_revision", "evidence_digest",
-                           "coverage_digest", "episode_revision"})
+                           "coverage_digest", "episode_revision", "safe_path_digest"})
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _ENUM_FIELDS = {
     "outcome": frozenset({"committed", "failed", "verified_removed", "verified_present",
@@ -41,6 +47,8 @@ _ENUM_FIELDS = {
     "source_kind": frozenset({"rss", "html", "api", "manual", "unknown"}),
     "model_id": frozenset({"gemini-3.6-flash", "unknown_model"}),
     "observed_state": frozenset({"observed_absent", "observed_present", "ambiguous", "unknown"}),
+    "intended_effect": frozenset({"unlink_owned_main_audio"}),
+    "evidence_limit": frozenset({"current_inspection_only"}),
     "trigger": frozenset({"scheduled", "manual", "recovery"}),
     "control_key": frozenset({"schedule", "cron_schedule", "timezone",
                               "max_episodes_retained", "chapters_per_episode",

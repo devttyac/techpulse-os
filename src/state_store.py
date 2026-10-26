@@ -12,12 +12,14 @@ from pathlib import Path
 import re
 import sqlite3
 import tempfile
+import uuid
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 from src.operations import OperationEvent, OperationPolicy, membership_digest
 
 
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 _APPLICATION_ID = 0x54504F53
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _TABLES = frozenset({
@@ -26,6 +28,7 @@ _TABLES = frozenset({
 })
 _TABLES_V2 = _TABLES | frozenset({"operation_events", "effect_intents", "diagnostic_events"})
 _TABLES_V3 = _TABLES_V2 | frozenset({"schedule_revisions", "schedule_slots", "run_claims"})
+_TABLES_V4 = _TABLES_V3 | frozenset({"lifecycle_episode_status", "lifecycle_leases", "lifecycle_tombstones"})
 _EXPECTED_COLUMNS = {
     "artifacts": ("artifact_id", "kind", "content_sha256", "byte_length", "metadata_json"),
     "episodes": ("episode_id", "metadata_json"),
@@ -43,6 +46,12 @@ _EXPECTED_COLUMNS = {
                        "status", "run_id"),
     "run_claims": ("run_id", "nonce", "boot_id", "process_id", "process_start",
                    "context_json", "status", "claimed_utc", "finished_utc"),
+    "lifecycle_episode_status": ("episode_id", "status"),
+    "lifecycle_leases": ("lease_id", "artifact_id", "acquired_at"),
+    "lifecycle_tombstones": ("operation_id", "episode_id", "artifact_id", "content_sha256",
+                             "byte_length", "file_device", "file_inode", "file_mtime_ns",
+                             "safe_path_digest", "prior_reference_count", "prior_lease_count",
+                             "intended_effect"),
 }
 
 
@@ -113,6 +122,8 @@ class StateStore:
             db.executescript(schema_v2)
             schema_v3 = (Path(__file__).parent / "storage" / "schema_v3.sql").read_text(encoding="utf-8")
             db.executescript(schema_v3)
+            schema_v4 = (Path(__file__).parent / "storage" / "schema_v4.sql").read_text(encoding="utf-8")
+            db.executescript(schema_v4)
             db.execute(f"PRAGMA application_id = {_APPLICATION_ID}")
             db.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             db.commit()
@@ -143,6 +154,9 @@ class StateStore:
             if db.execute("PRAGMA user_version").fetchone()[0] == 2:
                 store._migrate_v2()
                 store._verify()
+            if db.execute("PRAGMA user_version").fetchone()[0] == 3:
+                store._migrate_v3()
+                store._verify()
             return store
         except sqlite3.Error as exc:
             raise StoreIntegrityError("retained database is unreadable") from exc
@@ -166,7 +180,8 @@ class StateStore:
             app_id = self._db.execute("PRAGMA application_id").fetchone()[0]
             tables = {row[0] for row in self._db.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'")}
-            expected = _TABLES if version == 1 else _TABLES_V2 if version == 2 else _TABLES_V3 if version == 3 else None
+            expected = (_TABLES if version == 1 else _TABLES_V2 if version == 2 else
+                        _TABLES_V3 if version == 3 else _TABLES_V4 if version == 4 else None)
             if expected is None or app_id != _APPLICATION_ID or not expected <= tables:
                 raise StoreIntegrityError("retained schema is missing or incompatible")
             for table in expected:
@@ -177,8 +192,10 @@ class StateStore:
                 raise StoreIntegrityError("retained database has broken references")
             if version >= 2:
                 self._verify_effects()
-            if version == 3:
+            if version >= 3:
                 self._verify_schedule()
+            if version >= 4:
+                self._verify_lifecycle()
         except sqlite3.Error as exc:
             raise StoreIntegrityError("retained database failed integrity check") from exc
 
@@ -244,6 +261,15 @@ class StateStore:
             self._db.rollback()
             raise StoreIntegrityError("retained schedule migration failed") from exc
 
+    def _migrate_v3(self):
+        schema = (Path(__file__).parent / "storage" / "schema_v4.sql").read_text(encoding="utf-8")
+        try:
+            self._db.executescript("BEGIN IMMEDIATE;\n" + schema +
+                                   "\nPRAGMA user_version = 4;\nCOMMIT;")
+        except sqlite3.Error as exc:
+            self._db.rollback()
+            raise StoreIntegrityError("retained lifecycle migration failed") from exc
+
     def schema_version(self):
         return self._db.execute("PRAGMA user_version").fetchone()[0]
 
@@ -256,6 +282,30 @@ class StateStore:
                 raise StoreIntegrityError("retained timezone rules are invalid")
         for raw in self._db.execute("SELECT context_json FROM run_claims"):
             _read_json_object(raw[0])
+
+    def _verify_lifecycle(self):
+        for op, episode_id, artifact_id, digest, size, device, inode, mtime, path_digest, refs, leases, effect in self._db.execute(
+            "SELECT operation_id, episode_id, artifact_id, content_sha256, byte_length, "
+            "file_device, file_inode, file_mtime_ns, safe_path_digest, "
+            "prior_reference_count, prior_lease_count, intended_effect FROM lifecycle_tombstones"):
+            row = self._db.execute(
+                "SELECT e.status, i.fields_json FROM effect_intents e JOIN operation_events i "
+                "ON i.event_id=e.intent_event_id WHERE e.operation_id=? AND e.kind='deletion'", (op,)).fetchone()
+            fields = _read_json_object(row[1]) if row else {}
+            expected_path = hashlib.sha256(f"objects/{digest}".encode()).hexdigest()
+            if (row is None or not isinstance(digest, str) or not _DIGEST.fullmatch(digest)
+                    or not isinstance(path_digest, str) or path_digest != expected_path
+                    or not all(type(value) is int and value >= 0 for value in
+                               (size, device, inode, mtime, refs, leases))
+                    or effect != "unlink_owned_main_audio" or refs != 1 or leases != 0
+                    or any(fields.get(key) != value for key, value in {
+                        "artifact_id": artifact_id, "episode_id": episode_id,
+                        "evidence_digest": digest, "byte_count": size,
+                        "file_device": device, "file_inode": inode,
+                        "file_mtime_ns": mtime, "safe_path_digest": path_digest,
+                        "prior_reference_count": refs, "prior_lease_count": leases,
+                        "intended_effect": effect}.items())):
+                raise StoreIntegrityError("lifecycle tombstone binding is invalid")
 
     def close(self):
         self._db.close()
@@ -335,6 +385,10 @@ class StateStore:
             raise StoreIntegrityError("staged object checksum mismatch")
 
     def read_artifact(self, artifact_id):
+        if self.schema_version() >= 4 and self._db.execute(
+                "SELECT 1 FROM lifecycle_tombstones WHERE artifact_id=?",
+                (_id(artifact_id),)).fetchone() is not None:
+            return None
         row = self._db.execute(
             "SELECT content_sha256, byte_length, metadata_json FROM artifacts WHERE artifact_id = ?",
             (_id(artifact_id),),
@@ -345,7 +399,11 @@ class StateStore:
         return self._verify_blob(digest, size), _read_json_object(metadata)
 
     def list_artifact_ids(self):
-        ids = [row[0] for row in self._db.execute("SELECT artifact_id FROM artifacts ORDER BY artifact_id")]
+        query = ("SELECT artifact_id FROM artifacts WHERE artifact_id NOT IN "
+                 "(SELECT artifact_id FROM lifecycle_tombstones) ORDER BY artifact_id"
+                 if self.schema_version() >= 4 else
+                 "SELECT artifact_id FROM artifacts ORDER BY artifact_id")
+        ids = [row[0] for row in self._db.execute(query)]
         for artifact_id in ids:
             self.read_artifact(artifact_id)
         return ids
@@ -408,7 +466,10 @@ class StateStore:
             "SELECT artifact_id FROM episode_artifacts WHERE episode_id = ? ORDER BY position",
             (episode_id,),
         )]
-        if not ids:
+        retired = (self.schema_version() >= 4 and self._db.execute(
+            "SELECT 1 FROM lifecycle_episode_status WHERE episode_id=? AND status='retired'",
+            (episode_id,)).fetchone() is not None)
+        if not ids and not retired:
             raise StoreIntegrityError("published episode has no evidence")
         for item in ids:
             if self.read_artifact(item) is None:
@@ -422,6 +483,152 @@ class StateStore:
         if self.episode(row[0]) is None:
             raise StoreIntegrityError("coverage episode unavailable")
         return row[0]
+
+    def artifact_file(self, artifact_id):
+        row = self._db.execute("SELECT content_sha256 FROM artifacts WHERE artifact_id=?",
+                               (_id(artifact_id),)).fetchone()
+        if row is None:
+            raise StoreIntegrityError("managed artifact is unknown")
+        return self._blob_path(row[0])
+
+    def active_episode_ids(self):
+        rows = [row[0] for row in self._db.execute(
+            "SELECT e.episode_id FROM episodes e LEFT JOIN lifecycle_episode_status l "
+            "ON l.episode_id=e.episode_id WHERE l.episode_id IS NULL")]
+        if any(re.fullmatch(r"ep-[0-9]+", item) is None for item in rows):
+            raise StoreIntegrityError("committed episode order is unknown")
+        for episode_id in rows:
+            self.episode(episode_id)
+        return sorted(rows, key=lambda item: int(item[3:]))
+
+    def acquire_lifecycle_lease(self, lease_id, artifact_id):
+        with self._transaction():
+            if self._db.execute("SELECT 1 FROM artifacts WHERE artifact_id=?",
+                                (_id(artifact_id),)).fetchone() is None:
+                raise StoreIntegrityError("lease target is unknown")
+            if self._db.execute("SELECT 1 FROM lifecycle_tombstones WHERE artifact_id=?",
+                                (artifact_id,)).fetchone() is not None:
+                raise StoreIntegrityError("retired media cannot be leased")
+            self._db.execute("INSERT INTO lifecycle_leases VALUES (?, ?, ?)",
+                             (_id(lease_id), artifact_id, datetime.now(timezone.utc).isoformat()))
+
+    def release_lifecycle_lease(self, lease_id):
+        with self._transaction():
+            self._db.execute("DELETE FROM lifecycle_leases WHERE lease_id=?", (_id(lease_id),))
+
+    def plan_lifecycle_retirement(self, episode_id):
+        """Commit one exact media tombstone and visibility change with required audit."""
+        episode_id = _id(episode_id)
+        with self._transaction():
+            if episode_id not in self.active_episode_ids():
+                raise StoreIntegrityError("episode is not an active committed member")
+            rows = self._db.execute(
+                "SELECT a.artifact_id, a.content_sha256, a.byte_length FROM episode_artifacts ea "
+                "JOIN artifacts a ON a.artifact_id=ea.artifact_id "
+                "WHERE ea.episode_id=? AND a.kind='main_audio'", (episode_id,)).fetchall()
+            if len(rows) != 1:
+                raise StoreIntegrityError("exact managed main audio is not established")
+            artifact_id, digest, size = rows[0]
+            prior_refs = self._db.execute("SELECT COUNT(*) FROM episode_artifacts WHERE artifact_id=?",
+                                          (artifact_id,)).fetchone()[0]
+            prior_leases = self._db.execute("SELECT COUNT(*) FROM lifecycle_leases WHERE artifact_id=?",
+                                            (artifact_id,)).fetchone()[0]
+            if (prior_refs != 1 or self._db.execute(
+                    "SELECT COUNT(*) FROM artifacts WHERE content_sha256=?", (digest,)).fetchone()[0] != 1
+                    or prior_leases):
+                raise StoreIntegrityError("media is shared or actively leased")
+            path = self._blob_path(digest)
+            if path.is_symlink() or not path.is_file():
+                raise StoreIntegrityError("managed media path is unavailable")
+            self._verify_blob(digest, size)
+            stat = path.stat(follow_symlinks=False)
+            path_digest = hashlib.sha256(f"objects/{digest}".encode()).hexdigest()
+            operation_id = f"retire-{uuid.uuid4().hex}"
+            intent = OperationEvent.build("deletion", operation_id, "intent",
+                {"artifact_id": artifact_id, "episode_id": episode_id,
+                 "evidence_digest": digest, "byte_count": size,
+                 "file_device": stat.st_dev, "file_inode": stat.st_ino,
+                 "file_mtime_ns": stat.st_mtime_ns, "safe_path_digest": path_digest,
+                 "prior_reference_count": prior_refs, "prior_lease_count": prior_leases,
+                 "intended_effect": "unlink_owned_main_audio"}, component="lifecycle")
+            self._insert_required_event(intent)
+            self._db.execute("INSERT INTO effect_intents VALUES (?, 'deletion', 'pending', 'unknown', ?, NULL)",
+                             (operation_id, intent.event_id))
+            self._db.execute("INSERT INTO lifecycle_tombstones VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                             (operation_id, episode_id, artifact_id, digest, size,
+                              stat.st_dev, stat.st_ino, stat.st_mtime_ns,
+                              path_digest, prior_refs, prior_leases, "unlink_owned_main_audio"))
+            self._db.execute("INSERT INTO lifecycle_episode_status VALUES (?, 'retired')", (episode_id,))
+            self._db.execute("DELETE FROM episode_artifacts WHERE episode_id=? AND artifact_id=?",
+                             (episode_id, artifact_id))
+        return {"operation_id": operation_id, "episode_id": episode_id,
+                "artifact_id": artifact_id, "digest": digest, "bytes": size,
+                "device": stat.st_dev, "inode": stat.st_ino, "mtime_ns": stat.st_mtime_ns,
+                "safe_path_digest": path_digest, "prior_reference_count": prior_refs,
+                "prior_lease_count": prior_leases, "intended_effect": "unlink_owned_main_audio"}
+
+    def pending_lifecycle(self):
+        return [dict(zip(("operation_id", "episode_id", "artifact_id", "digest", "bytes",
+                          "device", "inode", "mtime_ns", "safe_path_digest",
+                          "prior_reference_count", "prior_lease_count", "intended_effect"), row)) for row in self._db.execute(
+            "SELECT t.operation_id,t.episode_id,t.artifact_id,t.content_sha256,t.byte_length,"
+            "t.file_device,t.file_inode,t.file_mtime_ns,t.safe_path_digest,"
+            "t.prior_reference_count,t.prior_lease_count,t.intended_effect FROM lifecycle_tombstones t "
+            "JOIN effect_intents e ON e.operation_id=t.operation_id WHERE e.status='pending' "
+            "ORDER BY t.rowid")]
+
+    def lifecycle_effect_eligible(self, tombstone):
+        artifact_id = tombstone["artifact_id"]
+        state = self.lifecycle_reference_state(tombstone)
+        return not any(state.values())
+
+    def lifecycle_reference_state(self, tombstone):
+        artifact_id, digest = tombstone["artifact_id"], tombstone["digest"]
+        return {
+            "current_reference_count": self._db.execute(
+                "SELECT COUNT(*) FROM episode_artifacts WHERE artifact_id=?", (artifact_id,)).fetchone()[0],
+            "current_lease_count": self._db.execute(
+                "SELECT COUNT(*) FROM lifecycle_leases WHERE artifact_id=?", (artifact_id,)).fetchone()[0],
+            "current_digest_owners": self._db.execute(
+                "SELECT COUNT(*) FROM artifacts WHERE content_sha256=? AND artifact_id<>?",
+                (digest, artifact_id)).fetchone()[0],
+        }
+
+    def record_lifecycle_result(self, tombstone, outcome):
+        event = OperationEvent.build("deletion", tombstone["operation_id"], "result",
+            {"artifact_id": tombstone["artifact_id"], "episode_id": tombstone["episode_id"],
+             "outcome": outcome, "byte_count": tombstone["bytes"]}, component="lifecycle")
+        self.record_effect_result(tombstone["operation_id"], outcome, event)
+
+    def record_lifecycle_observation(self, tombstone, inspect):
+        """Inspect and record one current observation under the same store lock."""
+        with self._transaction():
+            row = self._db.execute(
+                "SELECT intent_event_id FROM effect_intents WHERE operation_id=? "
+                "AND kind='deletion' AND status='pending'", (tombstone["operation_id"],)).fetchone()
+            if row is None:
+                raise StoreIntegrityError("lifecycle intent is no longer pending")
+            inspected = inspect()
+            state = self.lifecycle_reference_state(tombstone)
+            outcome = "ambiguous" if any(state.values()) else inspected["status"]
+            fields = {"artifact_id": tombstone["artifact_id"], "episode_id": tombstone["episode_id"],
+                      "outcome": outcome, "observed_state": outcome,
+                      "safe_path_digest": tombstone["safe_path_digest"],
+                      "evidence_limit": "current_inspection_only", **state}
+            fields.update({key: inspected[key] for key in ("file_device", "file_inode", "file_mtime_ns")
+                           if key in inspected})
+            event = OperationEvent.build("deletion", tombstone["operation_id"], "reconciliation",
+                                         fields, component="lifecycle")
+            self._require_event(event, "deletion", "reconciliation")
+            self._check_effect_binding("deletion", row[0], event, outcome)
+            event_id = self._insert_required_event(event)
+            self._db.execute(
+                "UPDATE effect_intents SET status=?,effect_status=?,resolution_event_id=? "
+                "WHERE operation_id=? AND status='pending'",
+                ("pending" if outcome == "ambiguous" else "resolved", outcome,
+                 event_id, tombstone["operation_id"]),
+            )
+        return outcome
 
     def write_control(self, namespace, key, expected_revision, value):
         """Commit non-secret public settings or restoration control bytes by CAS."""

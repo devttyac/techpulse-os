@@ -45,12 +45,12 @@ class StateStoreTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_v3_run_tables_and_schedule_history_survive_restart(self):
+    def test_v4_run_tables_and_schedule_history_survive_restart(self):
         with StateStore.create(self.root) as store:
-            self.assertEqual(store.schema_version(), 3)
+            self.assertEqual(store.schema_version(), 4)
             self.assertEqual(store.schedule_revisions(), [])
         with StateStore.open(self.root) as store:
-            self.assertEqual(store.schema_version(), 3)
+            self.assertEqual(store.schema_version(), 4)
             self.assertEqual(store.schedule_revisions(), [])
 
     def test_singleton_run_claim_is_durable_and_compare_and_set(self):
@@ -220,7 +220,7 @@ class StateStoreTests(unittest.TestCase):
             self.assertEqual(store.pending_operations(), [
                 {"id": "restore-198", "kind": "restoration", "metadata": {"episode_id": "ep-198"}}
             ])
-            self.assertEqual(store._db.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(store._db.execute("PRAGMA user_version").fetchone()[0], 4)
             self.assertEqual(store.operation_events("restore-198"), [])
         self.assertGreaterEqual((self.root / "state.sqlite3").stat().st_size, before)
         with StateStore.open(self.root) as store:
@@ -237,6 +237,20 @@ class StateStoreTests(unittest.TestCase):
             db.execute("PRAGMA user_version = 2")
         with self.assertRaises(StoreIntegrityError):
             StateStore.open(self.root)
+
+    def test_v3_migration_preserves_run_and_episode_bytes(self):
+        with StateStore.create(self.root) as store:
+            store.put_artifact("article-1", "article", b"body", {})
+            store.publish_episode("ep-1", ["article-1"], ["coverage-1"], {"title": "saved"})
+            before = store.episode("ep-1")
+        with sqlite3.connect(self.root / "state.sqlite3") as db:
+            for table in ("lifecycle_tombstones", "lifecycle_leases", "lifecycle_episode_status"):
+                db.execute(f"DROP TABLE {table}")
+            db.execute("PRAGMA user_version = 3")
+        with StateStore.open(self.root) as store:
+            self.assertEqual(store.schema_version(), 4)
+            self.assertEqual(store.episode("ep-1"), before)
+            self.assertEqual(store.coverage_owner("coverage-1"), "ep-1")
 
     def test_v2_table_shape_corruption_fails_closed(self):
         with StateStore.create(self.root):

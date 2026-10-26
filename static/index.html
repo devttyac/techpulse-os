@@ -3200,16 +3200,24 @@
         const res = await apiFetch('/api/settings/cleanup', { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
-          const purged = data.cleanup?.purged_episodes || 0;
+          const cleanup = data.cleanup || {};
+          const removed = cleanup.removed || 0;
+          const blockedLegacy = cleanup.blocked_legacy || 0;
+          const blocked = cleanup.blocked || 0;
+          const pending = cleanup.pending || 0;
           if (msg) {
-            msg.innerText = `✓ Cleaned! Purged ${purged} excess episodes.`;
-            setTimeout(() => { msg.innerText = ''; }, 3500);
+            const observed = cleanup.observed_removed || 0;
+            const pendingDetail = pending && observed ? ` ${observed} file(s) observed absent with incomplete audit.` : '';
+            msg.innerText = `Retention ${data.status || 'unknown'}: ${removed} completed removal(s), ${blockedLegacy} excess episode(s) blocked by unknown legacy ownership, ${blocked} managed blocked, ${pending} pending.${pendingDetail} ${cleanup.freed_bytes || 0} audited bytes freed.`;
           }
           await loadSettings();
           await loadEpisodesFromBackend();
+        } else if (msg) {
+          msg.innerText = 'Retention request failed; no completion was confirmed.';
         }
       } catch (e) {
         console.error("Cleanup error:", e);
+        if (msg) msg.innerText = 'Retention request failed; inspect status before retry.';
       } finally {
         if (btn) btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg> Purge Excess Episodes';
       }

@@ -408,3 +408,37 @@ TLDR/editorial synthesis, full-article acquisition, broader RAG, source-health
 redesign, history/player fixes and live injection verification remain future work.
 Local Python 3.14/Node 26 results do not substitute for CI Python 3.11/Node 24,
 Docker build results or Aaron's live acceptance.
+
+## TP26 retained lifecycle boundary
+
+The Settings cleanup action now uses the versioned lifecycle store for committed,
+exclusively owned `main_audio` objects. It counts committed active episode IDs,
+records a required intent and pending tombstone before an unlink, verifies the
+same file and active leases immediately before the effect, and records the observed
+result afterward. The intent binds the prior reference/lease counts, the
+intended unlink, safe relative-path digest and measured file identity. A late
+same-digest owner blocks the effect. Reconciliation records the inspected file
+identity, current references/leases and the fact that it establishes only the
+current state. Shared evidence, coverage and audit history remain retained.
+An interrupted effect remains pending and stops further managed deletion. Its
+recovery inspection records present, absent or ambiguous state without repeating
+an unlink. A still-present file requires a new, separately authorized maintenance
+action before any later retirement.
+
+The current direct JSON/audio publisher has not yet bound its outputs to this
+managed lifecycle. Its historical and newly produced direct files are therefore
+**unknown ownership** and are never deleted by Settings cleanup or by a run.
+The cleanup response reports `blocked_legacy` as excess episodes whose oldest
+eligible member cannot be established across direct and managed records,
+alongside managed `blocked`, `pending`, `removed` and observed `freed_bytes`.
+Storage figures include physical managed main-audio objects as audio, separate
+from evidence and audit/control bytes. When both direct and managed records exist,
+cleanup counts their distinct active
+IDs against the one Settings limit and leaves both cohorts untouched. It reports
+`blocked_unknown_ownership` if the combined count exceeds the limit or the IDs
+overlap. A completed request with zero removed means no managed artifact was
+retired; it does not mean that all legacy storage was reclaimed. Do not manually
+delete a pending or unknown file to clear the status.
+TP06 and TP22 must bind publication and readers to committed managed identities
+before current pipeline media can become eligible. TP34 separately owns deployment
+and runtime verification; local task tests do not establish installed acceptance.
