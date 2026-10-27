@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "purpose": "TP43 historical cohort observations; no episode record or audio bytes are reproduced here",
+  "sources": {
+    "historical_inventory": "Sourcing and Curation Validation.md, Operator evidence, 2026-10-12T23:46:14Z through 2026-10-12T23:52:55Z",
+    "audio_diagnostic": "Sourcing and Curation Validation.md, Main-audio cohort and direct diagnostic, operator supplied 2026-10-21",
+    "record_hashes_198_203": "Sourcing and Curation Validation.md, Installed-image binding and disposable version probe, operator supplied 2026-10-21"
+  },
+  "historical_inventory": {
+    "observed_at": "2026-10-12T23:51:23.154432Z",
+    "episode_ids": "ep-183 through ep-196",
+    "episode_records": 14,
+    "direct_audio_files": 282,
+    "declared_audio_regular_files_present": 72,
+    "unclassified_direct_audio_files": 210,
+    "unclassified_files_are_orphans": null,
+    "current_installation_state": null
+  },
+  "cohorts": [
+    {
+      "name": "ep-183–188",
+      "source": "historical_inventory",
+      "observed_structure": {
+        "full_articles_field_entries": 8,
+        "chapters": 8,
+        "script_segments": {"ep-183": 16, "ep-184": 16, "ep-185": 16, "ep-186": 12, "ep-187": 16, "ep-188": 16},
+        "story_manifest_present": false,
+        "episode_and_recipe_fingerprints_present": false,
+        "recognized_audio_declarations": 0,
+        "physical_audio_absent": null,
+        "pipeline_run_fields": {"ep-183": null, "ep-184": null, "ep-185": null, "ep-186": null, "ep-187": 13, "ep-188": 13}
+      },
+      "episodes": [
+        {"id": "ep-183", "record_sha256": "08fbb670677b0209fc12689c3dea13576fa1fde453820d276bc6966d2d5acd3a"},
+        {"id": "ep-184", "record_sha256": "39a8478b01f4621670809a0a58e6df8aee4a9b5aea972432ee67836818b34a53"},
+        {"id": "ep-185", "record_sha256": "821a1bcff265a12632b96005e2521df73be70154ec702a2d9e0bfbf321424678"},
+        {"id": "ep-186", "record_sha256": "055189b4f33a4494ada6f8ce390928cc9e96a95229a0045d2458213a9dea4a93"},
+        {"id": "ep-187", "record_sha256": "b824a74c7106d0796cf39d561ebc6b716d7778f3d1ddce3bff568a22f160de62"},
+        {"id": "ep-188", "record_sha256": "bb530218e9a5db9ff4f647569b9c5f2ab0adb8483759bddc5db831eec2dd4e82"}
+      ]
+    },
+    {
+      "name": "ep-189",
+      "source": "historical_inventory",
+      "observed_structure": {
+        "full_articles_field_entries": 8,
+        "chapters": 8,
+        "script_segments": 10,
+        "story_manifest_present": false,
+        "episode_and_recipe_fingerprints_present": false,
+        "pipeline_run_fields": 14,
+        "declared_audio": "main plus eight domain MP3 paths",
+        "declared_audio_regular_files_present": 9,
+        "audio_decodable_or_playable": null
+      },
+      "episodes": [
+        {"id": "ep-189", "record_sha256": "31c5b6689687a87a255851e0ce3508918fefbfc7b628147a667ee3336583dada"}
+      ]
+    },
+    {
+      "name": "ep-190–196",
+      "source": "historical_inventory",
+      "observed_structure": {
+        "full_articles_field_present": false,
+        "chapters": 24,
+        "script_segments": 46,
+        "story_manifest_top_level_keys": 4,
+        "episode_and_recipe_fingerprints_present": true,
+        "pipeline_run_fields": 14,
+        "declared_audio": "main plus eight domain MP3 paths per episode",
+        "declared_audio_regular_files_present_per_episode": 9,
+        "audio_decodable_or_playable": null,
+        "saved_full_body_admitted": null
+      },
+      "episodes": [
+        {"id": "ep-190", "record_sha256": "7bb7b391eae5fa57657ccd3b1cf3793d6207069e3ddb8485a93c0ce41281fbd8"},
+        {"id": "ep-191", "record_sha256": "7423e2d3e5a10fa1568b2a55a99206504d3cdbb49c2dde67d6ac05c17548b21e"},
+        {"id": "ep-192", "record_sha256": "750e96954a2c554c590d36805571f1fc097660bfdacbff899f92c8e3558c60cc"},
+        {"id": "ep-193", "record_sha256": "488659c2a43a3797185cab6476e68c518bca1701715af3b37b70532bf0873524"},
+        {"id": "ep-194", "record_sha256": "04735f108032637425d016edc9a8558d930352f784333742696037210101aa7f"},
+        {"id": "ep-195", "record_sha256": "d8be8e1ff2087d433850293519f73516587b8ac039efff5e2b5238ad9deb0071"},
+        {"id": "ep-196", "record_sha256": "d2c0cb7a6ce8b16d39a28f0199a222f911a298cda45d918fe87e66bb667de301"}
+      ]
+    },
+    {
+      "name": "ep-197",
+      "source": "audio_diagnostic",
+      "observed_structure": {
+        "date": "Oct 14, 2026",
+        "duration": "05:19",
+        "audio_url": "/audio/ep-197.mp3",
+        "podcast_status": "available",
+        "chapters": 24,
+        "timed_chapters": 24,
+        "audio_stage_status": "call_returned",
+        "audio_validated": true,
+        "main_audio_file_bytes": 1919756,
+        "main_audio_sha256": null,
+        "audio_decodable_or_playable": null
+      },
+      "episodes": [
+        {"id": "ep-197", "record_sha256": null}
+      ]
+    },
+    {
+      "name": "ep-198–203",
+      "source": "audio_diagnostic",
+      "observed_structure": {
+        "duration": "00:00",
+        "audio_url": "",
+        "podcast_status": "unavailable",
+        "chapters": 24,
+        "timed_chapters": 0,
+        "audio_stage_status": "call_returned",
+        "audio_validated": false,
+        "main_audio_candidates": 0,
+        "script_segments": 46,
+        "story_contract_and_fingerprints_reported_valid": true,
+        "full_script_render_test_status": "stopped_before_synthesis",
+        "current_installation_state": null
+      },
+      "episodes": [
+        {"id": "ep-198", "date": "Oct 15, 2026", "record_sha256": "d0193b0cd8c0e7c32b8d376246bcdeb7424476f36208ea9bb62285e43ace2fbd"},
+        {"id": "ep-199", "date": "Oct 16, 2026", "record_sha256": "0b3b2deb1e32649424a5082d2f0bc5f1456388f5aed22c1cc9a84669a7d7c3"},
+        {"id": "ep-200", "date": "Oct 17, 2026", "record_sha256": "b2a95a750c9f6de9ce63d5268f36fd229a4d635e9a9292370ba7ea2f01872f70"},
+        {"id": "ep-201", "date": "Oct 19, 2026", "record_sha256": "7118792e7113ff843be6e4a3d084b3467b2b2f6070aaa48f179ff6dbdf62f5c5"},
+        {"id": "ep-202", "date": "Oct 20, 2026", "record_sha256": "f4942d72076bea00f2016a42ae1e616207ed0d67a31d0ffba01bc9c65fdbc114"},
+        {"id": "ep-203", "date": "Oct 21, 2026", "record_sha256": "e44049a9be860028763cf21f71e154e48d56558c685bd0ec8dcd39468672730e"}
+      ]
+    }
+  ],
+  "unobserved_per_episode_fields": [
+    "hosts", "zone", "publisher_links", "complete_saved_article_body",
+    "audio_hash", "current_file_ownership", "current_artifact_state"
+  ],
+  "synthetic_reader_inputs_are_not_operator_records": true
+}

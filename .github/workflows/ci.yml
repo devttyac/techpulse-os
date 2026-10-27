@@ -40,6 +40,9 @@ jobs:
       - name: Run Retained Episode Reader Tests
         run: python tests/test_legacy_reader.py
 
+      - name: Run Retained Cohort Tests
+        run: python tests/test_retained_cohorts.py
+
       - name: Run State Store Tests
         run: python tests/test_state_store.py
 
