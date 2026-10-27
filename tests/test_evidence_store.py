@@ -1,11 +1,14 @@
 """TP03 immutable typed source storage and legacy/new-story boundary."""
 
 from dataclasses import replace
+from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -14,6 +17,7 @@ from src.evidence_store import EvidenceStore, EvidenceUnavailable
 from src.state_store import StateStore, StoreIntegrityError
 from src.story_manifest import require_complete_story_sources
 from test_evidence_contracts import complete_unit, completion_for
+from test_source_readiness import FIXTURE
 
 
 RAW_BYTES = b"publisher response"
@@ -27,13 +31,81 @@ class CompleteSourceStoreTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def save_synthetic(self, evidence, unit, raw, members=(), mutate_registry=None):
+        """Storage regression setup only; review/admission oracles live elsewhere."""
+        profile = deepcopy(FIXTURE["profile"])
+        binding = deepcopy(FIXTURE["current_binding"])
+        observation = deepcopy(FIXTURE["observation"])
+        profile["revision"] = unit.completion.profile_revision
+        profile["source_kind"] = unit.source_kind
+        profile["structural_rule_revision"] = "synthetic-storage-structure-v1"
+        profile["connector"] = {"id": unit.acquisition.client,
+                                "revision": unit.acquisition.configuration_revision,
+                                "extraction_policy_revision": unit.acquisition.extraction_policy_revision}
+        profile["rights"].update(
+            evidence_sha256="638fdebf06f65e788c9727d2df2eca2dd842396dac7243cf2bb79620e13d1853",
+            profile_revision=unit.completion.profile_revision,
+            connector_revision=unit.acquisition.configuration_revision)
+        profile["completeness"].update(source_kind=unit.source_kind,
+                                       profile_revision=unit.completion.profile_revision,
+                                       connector_revision=unit.acquisition.configuration_revision)
+        binding.update(profile_revision=unit.completion.profile_revision,
+                       connector_id=unit.acquisition.client,
+                       connector_revision=unit.acquisition.configuration_revision,
+                       extraction_policy_revision=unit.acquisition.extraction_policy_revision,
+                       structural_rule_revision="synthetic-storage-structure-v1")
+        observation.update(source_kind=unit.source_kind,
+                           profile_revision=unit.completion.profile_revision,
+                           connector_id=unit.acquisition.client,
+                           connector_revision=unit.acquisition.configuration_revision,
+                           extraction_policy_revision=unit.acquisition.extraction_policy_revision)
+        record = {"current_binding": binding, "profile": profile,
+                  "rights_document": FIXTURE["synthetic_rights_document"],
+                  "fixture_raw_text": FIXTURE["raw_fixture_text"],
+                  "fixture_body_text": FIXTURE["expected_complete_body"],
+                  "fixture_observation": observation}
+        registry = {"schema_version": 1, "synthetic_test_only": True, "profiles": [record]}
+        if mutate_registry is not None:
+            mutate_registry(registry)
+        path = Path(self.temp.name) / "synthetic-profiles.json"
+        path.write_text(json.dumps(registry))
+        # This stub tests storage after an admission; it is not a TP09 oracle.
+        receipt = {"decision": "complete", "rule_revision": "synthetic-storage-structure-v1",
+                   "source_structure_ref": "synthetic://storage-regression-only",
+                   "source_url": unit.publication.source_url, "unit_scope": unit.unit_scope,
+                   "raw_sha256": hashlib.sha256(raw).hexdigest(),
+                   "body_sha256": unit.completion.represented_body_sha256,
+                   "member_ids": [item.member_id for item in unit.acquisition.members],
+                   "member_sha256s": [item.sha256 for item in unit.acquisition.members],
+                   "checks": ["synthetic-storage-only"]}
+        with patch("src.acquisition.readiness._REGISTRY_PATH", path), patch(
+                "src.acquisition.readiness._load_structural_validator",
+                return_value=lambda *args: receipt):
+            return evidence.save(unit, raw, members)
+
+    def test_shipped_empty_registry_denies_save_before_any_artifact(self):
+        unit = complete_unit()
+        with StateStore.create(self.root) as state:
+            with self.assertRaisesRegex(ValueError, "unregistered_profile"):
+                EvidenceStore(state).save(unit, RAW_BYTES)
+            self.assertEqual(state.list_artifact_ids(), [])
+
+    def test_tampered_rights_evidence_denies_save_before_any_artifact(self):
+        unit = complete_unit()
+        with StateStore.create(self.root) as state:
+            with self.assertRaisesRegex(ValueError, "bound_evidence_mismatch"):
+                self.save_synthetic(EvidenceStore(state), unit, RAW_BYTES,
+                    mutate_registry=lambda r: r["profiles"][0].update(
+                        rights_document="tampered synthetic grant"))
+            self.assertEqual(state.list_artifact_ids(), [])
+
     def test_exact_version_and_passage_survive_restart_and_publisher_edit(self):
         first = complete_unit()
         edited = complete_unit(text="Alder updated PineDB. Migration is stable.")
         with StateStore.create(self.root) as state:
             evidence = EvidenceStore(state)
-            evidence.save(first, RAW_BYTES)
-            evidence.save(edited, RAW_BYTES)
+            self.save_synthetic(evidence, first, RAW_BYTES)
+            self.save_synthetic(evidence, edited, RAW_BYTES)
         with StateStore.open(self.root) as state:
             evidence = EvidenceStore(state)
             self.assertEqual(evidence.read(first.version_id), first)
@@ -59,7 +131,7 @@ class CompleteSourceStoreTests(unittest.TestCase):
     def test_missing_or_changed_saved_blob_never_resolves_complete_evidence(self):
         unit = complete_unit()
         with StateStore.create(self.root) as state:
-            digest = EvidenceStore(state).save(unit, RAW_BYTES)
+            digest = self.save_synthetic(EvidenceStore(state), unit, RAW_BYTES)
         blob = self.root / "objects" / digest
         blob.write_bytes(b"corrupt")
         with StateStore.open(self.root) as state:
@@ -74,7 +146,7 @@ class CompleteSourceStoreTests(unittest.TestCase):
         unit = complete_unit()
         with StateStore.create(self.root) as state:
             evidence = EvidenceStore(state)
-            evidence.save(unit, RAW_BYTES)
+            self.save_synthetic(evidence, unit, RAW_BYTES)
             with self.assertRaises(ValueError):
                 require_complete_story_sources({"source_url": unit.publication.source_url,
                                                 "source_summary": "RSS excerpt"}, evidence)
@@ -100,7 +172,7 @@ class CompleteSourceStoreTests(unittest.TestCase):
         unit = build_source_unit(unit.article_id, unit.source_kind, unit.unit_scope,
                                  unit.publication, recipe, completion, unit.blocks)
         with StateStore.create(self.root) as state:
-            EvidenceStore(state).save(unit, RAW_BYTES, (member,))
+            self.save_synthetic(EvidenceStore(state), unit, RAW_BYTES, (member,))
         with StateStore.open(self.root) as state:
             evidence = EvidenceStore(state)
             self.assertEqual(evidence.read(unit.version_id), unit)
@@ -114,7 +186,7 @@ class CompleteSourceStoreTests(unittest.TestCase):
         import hashlib
         unit = complete_unit()
         with StateStore.create(self.root) as state:
-            EvidenceStore(state).save(unit, RAW_BYTES)
+            self.save_synthetic(EvidenceStore(state), unit, RAW_BYTES)
         (self.root / "objects" / hashlib.sha256(RAW_BYTES).hexdigest()).unlink()
         with StateStore.open(self.root) as state:
             with self.assertRaises(StoreIntegrityError):
@@ -126,7 +198,7 @@ class CompleteSourceStoreTests(unittest.TestCase):
         with StateStore.create(self.root) as state:
             with patch("src.state_store.os.replace", side_effect=OSError("interrupted")):
                 with self.assertRaises(OSError):
-                    EvidenceStore(state).save(unit, RAW_BYTES)
+                    self.save_synthetic(EvidenceStore(state), unit, RAW_BYTES)
             with self.assertRaises(EvidenceUnavailable):
                 EvidenceStore(state).read(unit.version_id)
 
@@ -145,8 +217,8 @@ class CompleteSourceStoreTests(unittest.TestCase):
         other = complete_unit(text="A later correction to the original story.")
         with StateStore.create(self.root) as state:
             evidence = EvidenceStore(state)
-            evidence.save(unit, RAW_BYTES)
-            evidence.save(other, RAW_BYTES)
+            self.save_synthetic(evidence, unit, RAW_BYTES)
+            self.save_synthetic(evidence, other, RAW_BYTES)
             refs = {"schema_version": 2, "story_id": "story-1", "sources": [
                 {"version_id": unit.version_id,
                  "passage_ids": [unit.passages[0].passage_id]}]}
@@ -175,7 +247,7 @@ class CompleteSourceStoreTests(unittest.TestCase):
                                               SourceLocator("transcript", {})),))
         with StateStore.create(self.root) as state:
             evidence = EvidenceStore(state)
-            evidence.save(unit, RAW_BYTES)
+            self.save_synthetic(evidence, unit, RAW_BYTES)
             self.assertEqual(evidence.read(unit.version_id).publication.events[0].status, "unknown")
             with self.assertRaises(ValueError):
                 require_complete_story_sources({"schema_version": 2, "story_id": "story-1",

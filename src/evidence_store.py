@@ -5,6 +5,7 @@ import json
 import re
 
 from src.evidence_contracts import source_unit_from_dict, source_unit_to_dict
+from src.acquisition.readiness import admit_source_unit
 
 
 _VERSION = re.compile(r"[0-9a-f]{64}\Z")
@@ -52,8 +53,10 @@ class EvidenceStore:
     def save(self, unit, raw_representation, members=()):
         """Flush verified raw/member bytes before exposing the normalized unit.
 
-        A failed write can leave unreferenced representation artifacts. It can
-        never leave an admitted complete unit with unavailable source bytes.
+        The fixed profile registry and independent structural validator must
+        admit this exact unit and received bytes before any artifact write.
+        A later failed write can leave unreferenced representation artifacts.
+        It can never leave an admitted unit with unavailable source bytes.
         """
         value = source_unit_to_dict(unit)
         if (type(raw_representation) is not bytes
@@ -64,6 +67,9 @@ class EvidenceStore:
                 or any(type(body) is not bytes or hashlib.sha256(body).hexdigest() != member.sha256
                        for body, member in zip(members, unit.acquisition.members))):
             raise ValueError("member representation digest mismatch")
+        admission = admit_source_unit(unit, raw_representation, members)
+        if not admission.admitted or admission.version_id != unit.version_id:
+            raise ValueError("source admission denied: " + admission.reason)
         artifact_id = "source-unit:" + unit.version_id
         if self._state.read_artifact(artifact_id) is not None:
             raise ValueError("source version already exists")

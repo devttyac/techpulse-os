@@ -1,0 +1,82 @@
+{
+  "fixture_notice": "Invented text and grants for a policy test only; no real publisher is approved.",
+  "raw_fixture_text": "RAW: fictional Alder article page including complete story",
+  "expected_complete_body": "Alder Labs introduced PineDB 2.0. Migration remains beta.",
+  "preview_body": "PREVIEW: Alder Labs introduced PineDB 2.0.",
+  "wrong_article_body": "UNRELATED: A story about a different product.",
+  "synthetic_rights_document": "Synthetic grant for Alder Labs fixture. Automated discovery, full body retrieval, storage and processing are allowed only in this test.",
+  "admission_article": {
+    "article_id": "article-1",
+    "source_url": "https://alder.example/news/pinedb",
+    "raw_text": "publisher response",
+    "expected_body": "Alder released PineDB. Migration remains beta.",
+    "raw_sha256": "3378bd42d76a7b518fb38ee29e02bbb6c2c887ff8ae2dcdb65eff6766bfef839",
+    "body_sha256": "10fcf9b1b9f879216dd84e40f6f122a199c4e8af3414963c9467ff2aa1eaecab",
+    "unit_scope": "whole_article",
+    "member_ids": [],
+    "member_sha256s": []
+  },
+  "current_binding": {
+    "profile_id": "alder-article",
+    "profile_revision": "profile-3",
+    "connector_id": "controlled-http-html",
+    "connector_revision": "connector-2",
+    "extraction_policy_revision": "extract-v1",
+    "structural_rule_revision": "html-structure-v1",
+    "rights_revision": "rights-4",
+    "oracle_revision": "oracle-5"
+  },
+  "profile": {
+    "schema_version": 1,
+    "profile_id": "alder-article",
+    "revision": "profile-3",
+    "publisher_host": "alder.example",
+    "source_kind": "publisher_article",
+    "structural_rule_revision": "html-structure-v1",
+    "connector": {
+      "id": "controlled-http-html",
+      "revision": "connector-2",
+      "extraction_policy_revision": "extract-v1"
+    },
+    "rights": {
+      "revision": "rights-4",
+      "decision": "approved",
+      "grantor": "Alder Labs (fictional)",
+      "reviewer": "fixture-reviewer",
+      "evidence_ref": "fixture://invented-rights-record",
+      "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "publisher_host": "alder.example",
+      "actions": ["automated_discovery", "full_body_retrieval", "storage", "processing"],
+      "profile_revision": "profile-3",
+      "connector_revision": "connector-2"
+    },
+    "completeness": {
+      "revision": "oracle-5",
+      "decision": "passed",
+      "prepared_by": "fixture-extractor-author",
+      "reviewer": "independent-fixture-reviewer",
+      "oracle_ref": "fixture://invented-complete-page",
+      "publisher_host": "alder.example",
+      "source_kind": "publisher_article",
+      "profile_revision": "profile-3",
+      "connector_revision": "connector-2",
+      "raw_sha256": "942aeeae5284bbadf65b905c1e97b9c12ec5d341e5446aabcd2c21cb346a4061",
+      "body_sha256": "8c088e3d5fbb86b7dffbf9e9faf2c2222269e360ea3ce4267cbd682671489734",
+      "unit_scope": "one complete publisher article",
+      "required_members": ["main", "continuation"]
+    }
+  },
+  "observation": {
+    "publisher_host": "alder.example",
+    "source_kind": "publisher_article",
+    "profile_revision": "profile-3",
+    "connector_id": "controlled-http-html",
+    "connector_revision": "connector-2",
+    "extraction_policy_revision": "extract-v1",
+    "content_state": "full_body",
+    "raw_sha256": "942aeeae5284bbadf65b905c1e97b9c12ec5d341e5446aabcd2c21cb346a4061",
+    "body_sha256": "8c088e3d5fbb86b7dffbf9e9faf2c2222269e360ea3ce4267cbd682671489734",
+    "unit_scope": "one complete publisher article",
+    "observed_members": ["main", "continuation"]
+  }
+}
