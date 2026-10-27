@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from mutagen.mp3 import MP3
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -128,19 +129,22 @@ class RetainedCohortTests(unittest.TestCase):
             self.assertEqual(synthetic, before)
             self.assertEqual(list(self.audio.iterdir()), [])
 
-    def test_only_a_real_decodable_synthetic_audio_fixture_enables_main_audio(self):
-        # The byte source is repository seed ep-139, renamed solely for this test.
-        # It says nothing about the operator's ep-189 file or current playback.
+    def test_mismatched_audio_declaration_stays_unplayable_without_mutation(self):
+        # A decodable test MP3 at the episode-shaped path is insufficient when
+        # the saved declaration names another episode. This does not prove that
+        # correctly named legacy bytes belong to an episode; TP22/TP48 must
+        # establish that association from actual retained records and media.
         target = self.audio / "ep-189.mp3"
         shutil.copyfile(ROOT / "seed_data" / "audio" / "ep-139.mp3", target)
-        synthetic = {"id": "ep-189", "audio_url": "/audio/ep-189.mp3",
+        self.assertGreater(MP3(target).info.length, 0)
+        synthetic = {"id": "ep-189", "audio_url": "/audio/ep-190.mp3",
                      "audio_availability": {"podcast": {"status": "available"}}}
         before = target.read_bytes()
         view = self.view(synthetic)
-        self.assertEqual(view["audio_url"], "/audio/ep-189.mp3")
-        self.assertEqual(view["audio_availability"]["podcast"]["status"], "available")
+        self.assertEqual(view["audio_url"], "")
+        self.assertEqual(view["audio_availability"]["podcast"]["status"], "unavailable")
         self.assertEqual(target.read_bytes(), before)
-        self.assertEqual(synthetic["audio_url"], "/audio/ep-189.mp3")
+        self.assertEqual(synthetic["audio_url"], "/audio/ep-190.mp3")
 
     def test_mismatched_saved_identity_is_rejected_without_rewriting_record(self):
         record = self.episodes / "ep-198.json"
