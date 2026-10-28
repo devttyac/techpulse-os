@@ -12,6 +12,7 @@ from src.acquisition.tldr import discover_live
 from src.acquisition.http import fetch_publisher
 from src.acquisition.html import HtmlExtractionResult, extract_html
 from src.acquisition.readiness import _load_registry
+from src.acquisition.publication import PublicationAssessment, assess_publication, unavailable
 from src.content_availability import DOMAIN_ORDER, LEGACY_SOURCE_NAMES
 from src.provenance import discovery_record
 
@@ -75,6 +76,62 @@ async def fetch_and_extract_candidate(url, profile_id, **transport_options):
         return FetchExtractionCandidate("unreviewed_rules", fetched)
     extracted = extract_html(fetched.raw_bytes, fetched.final_url, matches[0]["html_rules"])
     return FetchExtractionCandidate(extracted.reason, fetched, extracted)
+
+
+@dataclass(frozen=True)
+class FetchPublicationCandidate:
+    """Same-byte extraction and date evidence, still outside source admission."""
+
+    reason: str
+    fetch: object | None
+    extraction: HtmlExtractionResult | None
+    publication: PublicationAssessment
+
+
+async def fetch_and_assess_candidate(url, profile_id, window, zone_rules,
+                                     **transport_options):
+    """Resolve date only after TP09 validated the exact TP08 response bytes.
+
+    The profile comes from the fixed shipped registry, not caller supplied
+    rules. This result never enters ingest_all_domains or evidence storage.
+    """
+    extracted = await fetch_and_extract_candidate(url, profile_id,
+                                                   **transport_options)
+    if extracted.reason != "validated":
+        return FetchPublicationCandidate(extracted.reason, extracted.fetch,
+                                         extracted.extraction,
+                                         unavailable(extracted.reason, source_url=url))
+    fetched = extracted.fetch
+    registry = _load_registry()
+    try:
+        host = urlsplit(fetched.final_url).hostname
+    except (ValueError, TypeError):
+        host = None
+    matches = [] if registry is None else [record["profile"] for record in registry["profiles"]
+        if type(record) is dict and type(record.get("profile")) is dict
+        and record["profile"].get("profile_id") == profile_id
+        and record["profile"].get("publisher_host") == host
+        and record["profile"].get("revision") == fetched.profile_revision
+        and type(record["profile"].get("connector")) is dict
+        and type(record["profile"].get("html_rules")) is dict
+        and type(record["profile"].get("date_rules")) is dict
+        and record["profile"]["connector"].get("id") == fetched.client
+        and record["profile"]["connector"].get("revision") == fetched.client_revision
+        and type(record["profile"].get("date_rule_revision")) is str
+        and bool(record["profile"]["date_rule_revision"])
+        and record["profile"]["date_rule_revision"]
+            == record["profile"]["date_rules"].get("revision")
+        and record["profile"]["date_rules"].get("article_xpath")
+            == record["profile"]["html_rules"].get("article_xpath")]
+    if len(matches) != 1:
+        publication = unavailable("unreviewed_rules", source_url=fetched.final_url)
+    else:
+        profile = matches[0]
+        publication = assess_publication(fetched.raw_bytes, fetched.final_url,
+            profile["date_rules"], window, zone_rules,
+            source_kind=profile.get("source_kind", "publisher_article"))
+    return FetchPublicationCandidate(extracted.reason, fetched,
+                                     extracted.extraction, publication)
 
 
 async def ingest_all_domains(*, diagnostics=None):
