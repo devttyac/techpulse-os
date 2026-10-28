@@ -29,7 +29,7 @@ jobs:
 
       - name: Syntax & PyCompile Check
         run: |
-          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py src/story_manifest.py src/state_store.py src/operations.py src/settings.py src/run_coordinator.py src/evidence_contracts.py src/evidence_store.py src/legacy_reader.py src/lifecycle.py src/acquisition/readiness.py
+          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py src/story_manifest.py src/state_store.py src/operations.py src/settings.py src/run_coordinator.py src/evidence_contracts.py src/evidence_store.py src/legacy_reader.py src/lifecycle.py src/acquisition/readiness.py src/acquisition/catalogue.py src/acquisition/tldr.py
 
       - name: Run Complete Source Contract Tests
         run: python tests/test_evidence_contracts.py
@@ -39,6 +39,9 @@ jobs:
 
       - name: Run Source Readiness Policy Tests
         run: python tests/test_source_readiness.py
+
+      - name: Run TLDR Discovery Contract Tests
+        run: python tests/test_tldr_discovery.py
 
       - name: Run Retained Episode Reader Tests
         run: python tests/test_legacy_reader.py

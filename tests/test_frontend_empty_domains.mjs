@@ -88,11 +88,40 @@ function health(status = 'healthy', extra = {}) {
     { name: 'Cloud publisher', domain: 'cloud', outcome: status === 'partial' || status === 'unavailable' ? 'unavailable' : 'quiet', accepted: 0, parse_warning: true },
   ], latest_run: null, last_completed_at: '2026-10-07T01:02:03Z', last_attempt_at: '2026-10-07T01:02:03Z', ...extra };
 }
+test('disabled TLDR discovery names six editions without claiming a news check', async () => {
+  const editionIds = ['ai', 'infosec', 'data', 'devops', 'it', 'dev'];
+  const sourceHealth = { schema_version: 2, catalogue_revision: 1, status: 'disabled',
+    checked_at: null, available_sources: 0, total_sources: 6, body_acquisition: 'not_checked',
+    sources: editionIds.map(edition_id => ({ edition_id, name: `TLDR ${edition_id}`, outcome: 'disabled', accepted: 0 })),
+    latest_run: { status: 'failed', finished_at: '2026-10-28T10:00:00Z', episode_id: null } };
+  const r = runtime([episode('ep-900')]);
+  r.state({ running: false, stage: 'error', source_health: sourceHealth }); await r.startup();
+  assert.match(r.text('source-health-summary'), /Discovery disabled.*0\/6 editions checked/i);
+  assert.match(r.text('source-health-details'), /TLDR ai.*Disabled/i);
+  assert.doesNotMatch(r.text('latest-check-banner'), /No articles available from checked sources/i);
+  assert.match(r.text('source-health-note'), /interface.*use rights/i);
+});
+test('partial TLDR discovery distinguishes sponsor exclusion from unresolved placement', async () => {
+  const editionIds = ['ai', 'infosec', 'data', 'devops', 'it', 'dev'];
+  const sourceHealth = { schema_version: 2, catalogue_revision: 1, status: 'partial',
+    checked_at: '2026-10-28T10:00:00Z', available_sources: 1, total_sources: 6,
+    sources: editionIds.map((edition_id, index) => ({ edition_id, name: `TLDR ${edition_id}`,
+      outcome: index === 0 ? 'candidate_partial' : index === 1 ? 'placement_unresolved' : 'not_checked',
+      accepted: index === 0 ? 1 : 0, sponsor_excluded: index === 0 ? 1 : 2,
+      placement_unresolved: index < 2 ? 1 : 0 })) };
+  const r = runtime([episode('ep-900')]);
+  r.state({ running: false, stage: 'idle', source_health: sourceHealth }); await r.startup();
+  assert.match(r.text('source-health-summary'), /Discovery partial/);
+  const details = r.text('source-health-details');
+  assert.match(details, /Candidates with unresolved placement.*1 sponsors excluded.*1 placement unresolved/);
+  assert.match(details, /Placement unresolved; no editorial candidate.*2 sponsors excluded.*1 placement unresolved/);
+});
 test('captured health and quiet/warnings remain independent of historical selection and downstream error', async () => {
   const r = runtime([episode('ep-900'), episode('ep-899',['data'])]);
   r.state({ running: false, stage: 'error', source_health: health() }); await r.startup();
   assert.match(r.text('source-health-summary'), /Healthy.*2\/2/); assert.match(r.text('source-health-time'), /2026-10-07T01:02:03Z/);
   assert.match(r.text('source-health-details'), /quiet|Quiet/); assert.match(r.text('source-health-details'), /warning/i); assert.match(r.text('source-health-body'), /Not checked/i);
+  assert.match(r.text('source-health-note'), /Historical RSS.*not.*TLDR discovery readiness/i);
   const before = r.text('source-health-time'); r.select('ep-899'); assert.equal(r.text('source-health-time'), before); assert.match(r.text('source-health-summary'), /Healthy/);
 });
 test('mixed/unavailable/never-checked health uses captured outcomes without poll timestamps', async () => {
@@ -183,7 +212,7 @@ test('manual Run supersedes an in-flight startup idle response and tracks a fres
     releaseFresh({ok:true,status:200,json:async () => ({running:true,stage:'ingesting',progress:25,source_health:health()})});
     await run; assert.equal(r.elements.get('manual-run-btn').disabled,true); assert.equal(r.intervals.size,1);
     assert.equal(r.calls.filter(([url,options]) => url === '/api/refresh' && options.method === 'POST').length,1);
-    assert.match(r.text('manual-run-btn'), /Ingesting feeds/);
+    assert.match(r.text('manual-run-btn'), /Checking discovery/);
   } finally { releaseFresh({ok:true,status:200,json:async () => ({running:false,stage:'idle'})}); await run; }
 });
 test('malformed fresh status unlocks Run safely and cannot be overwritten by a stale running response', async () => {

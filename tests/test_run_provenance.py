@@ -16,6 +16,7 @@ os.environ["API_SECRET_KEY"] = ""
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src import ingestion, synthesizer
+from src.acquisition.tldr import discover_from_fixtures
 
 
 class FeedClient:
@@ -39,25 +40,36 @@ def fixture():
 
 
 class RunProvenanceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_feed_records_rejections_without_persisting_raw_content(self):
+    async def test_disabled_discovery_records_reason_without_article_content(self):
         stats = {}
-        kwargs = {"diagnostics": stats} if "diagnostics" in inspect.signature(ingestion.fetch_feed_items).parameters else {}
-        items = await ingestion.fetch_feed_items(FeedClient(text=rss()), "ai", {"name": "Fixture", "url": "https://example.test/feed"}, **kwargs)
-        self.assertEqual(len(items), 1)
-        self.assertEqual(stats.get("entries_considered"), 3, "Feed result needs diagnostic counts")
-        self.assertEqual(stats["accepted"], 1)
-        self.assertEqual(stats["rejected_links"], 1)
-        self.assertEqual(stats["missing_fields"], 1)
-        self.assertNotIn("javascript", json.dumps(stats))
+        corpus = await ingestion.ingest_all_domains(diagnostics=stats)
+        self.assertTrue(all(not rows for rows in corpus.values()))
+        self.assertEqual(stats["discovery"]["status"], "disabled")
+        self.assertEqual(stats["discovery"]["reason"], "tldr_interface_and_discovery_use_unverified")
+        self.assertNotIn("https://example.test", json.dumps(stats))
 
-    async def test_http_failure_differs_from_empty_success(self):
-        failed, empty = {}, {}
-        for client, stats in ((FeedClient(status=503), failed), (FeedClient(text='<rss version="2.0"><channel><title>Empty</title></channel></rss>'), empty)):
-            kwargs = {"diagnostics": stats} if "diagnostics" in inspect.signature(ingestion.fetch_feed_items).parameters else {}
-            await ingestion.fetch_feed_items(client, "ai", {"name": "Fixture", "url": "https://example.test/feed"}, **kwargs)
-        self.assertEqual(failed.get("outcome"), "http_error")
-        self.assertEqual(failed["http_status"], 503)
-        self.assertEqual(empty["outcome"], "success")
+    async def test_malformed_issue_differs_from_valid_empty(self):
+        base = {"edition_id":"ai", "issue_id":"2026-10-28",
+                "issue_url":"https://tldr.tech/ai/issues/2026-10-28"}
+        malformed = discover_from_fixtures({"ai":{**base, "links":None}})
+        valid_empty = discover_from_fixtures({"ai":{**base, "links":[]}})
+        self.assertEqual(malformed["editions"][0]["outcome"], "parse_error")
+        self.assertEqual(valid_empty["editions"][0]["outcome"], "valid_empty")
+
+    def test_discovery_audit_has_counts_and_issue_identity_without_candidate_text(self):
+        from src.provenance import discovery_record
+        base = {"edition_id":"ai", "issue_id":"2026-10-28",
+                "issue_url":"https://tldr.tech/ai/issues/2026-10-28",
+                "links":[{"url":"https://publisher.example/article?secret=SECRET_SENTINEL",
+                          "title":"SECRET_SENTINEL headline", "placement":"editorial"}]}
+        result = discover_from_fixtures({"ai":base})
+        record = discovery_record(result)
+        self.assertEqual(record["catalogue_revision"],1)
+        self.assertEqual(record["editions"][0]["issue_id"],"2026-10-28")
+        self.assertEqual(record["editions"][0]["candidates"],1)
+        self.assertEqual(record["candidate_count"],1)
+        self.assertNotIn("SECRET_SENTINEL",json.dumps(record))
+        self.assertNotIn("publisher.example",json.dumps(record))
 
     async def synthesize(self, responses, stats):
         corpus = {'ai': [{'title': 'Fixture story', 'summary': 'Fixture summary.',
@@ -132,32 +144,12 @@ class RunProvenanceTests(unittest.IsolatedAsyncioTestCase):
             article = article_identity("https://example.test/SECRET_SENTINEL?key=SECRET_SENTINEL")
         self.assertNotIn("SECRET_SENTINEL", json.dumps([model, article]))
 
-    async def test_cancelled_ingestion_preserves_partial_counts_and_feed_identity(self):
-        started = asyncio.Event()
-        class Client:
-            async def __aenter__(self):
-                return self
-            async def __aexit__(self, *args):
-                return False
-            async def get(self, url, **kwargs):
-                if "second" in url:
-                    started.set()
-                    await asyncio.Event().wait()
-                return types.SimpleNamespace(status_code=200, text=rss())
-        feeds = {"ai": [{"name": "First", "url": "https://example.test/first?token=SECRET_SENTINEL"},
-                        {"name": "Second", "url": "https://example.test/second"}]}
+    async def test_runtime_discovery_never_starts_an_http_client(self):
         stats = {}
-        with patch.object(ingestion, "DOMAIN_FEEDS", feeds), patch.object(ingestion.httpx, "AsyncClient", lambda **kwargs: Client()):
-            task = asyncio.create_task(ingestion.ingest_all_domains(diagnostics=stats))
-            await started.wait()
-            task.cancel()
-            with self.assertRaises(asyncio.CancelledError):
-                await task
-        self.assertEqual(stats["per_domain"].get("ai"), 1)
-        self.assertEqual(stats["links_rejected"], 1)
-        self.assertEqual(stats["feeds"][0]["name"], "First")
-        self.assertEqual(stats["feeds"][0]["source"]["url"], "https://example.test/first")
-        self.assertNotIn("SECRET_SENTINEL", json.dumps(stats))
+        with patch("httpx.AsyncClient", side_effect=AssertionError("No newsletter request")):
+            await ingestion.ingest_all_domains(diagnostics=stats)
+        self.assertEqual(stats["discovery"]["status"], "disabled")
+        self.assertNotIn("feeds", stats)
 
     async def test_auth_and_quota_errors_remain_distinct_in_attempt_history(self):
         stats = {}

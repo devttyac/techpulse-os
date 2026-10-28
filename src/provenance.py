@@ -71,6 +71,114 @@ def article_identity(url):
         return None
 
 
+def discovery_row_consistent(outcome, candidates, sponsor_excluded, placement_unresolved,
+                             received=None, rejected=None):
+    """Reject impossible discovery claims before status reduction or recovery."""
+    counts = (candidates, sponsor_excluded, placement_unresolved)
+    if any(type(count) is not int or count < 0 or count > 500 for count in counts):
+        return False
+    if received is not None or rejected is not None:
+        if (type(received) is not int or type(rejected) is not int or
+                not (0 <= received <= 500 and 0 <= rejected <= received) or
+                sponsor_excluded + placement_unresolved > rejected or
+                candidates + rejected > received):
+            return False
+    if outcome in ('disabled', 'not_checked', 'parse_error'):
+        return not any(counts) and (received in (None, 0)) and (rejected in (None, 0))
+    if outcome == 'valid_empty':
+        return candidates == 0 and placement_unresolved == 0
+    if outcome == 'candidate':
+        return candidates > 0 and placement_unresolved == 0
+    if outcome == 'candidate_partial':
+        return candidates > 0 and placement_unresolved > 0
+    if outcome == 'placement_unresolved':
+        return candidates == 0 and placement_unresolved > 0
+    return False
+
+
+def expected_discovery_status(rows):
+    outcomes = [row['outcome'] for row in rows]
+    if outcomes and all(outcome == 'disabled' for outcome in outcomes):
+        return 'disabled'
+    if outcomes and all(outcome == 'parse_error' for outcome in outcomes):
+        return 'failed'
+    if any(outcome in ('not_checked', 'parse_error', 'candidate_partial',
+                       'placement_unresolved', 'disabled') for outcome in outcomes):
+        return 'partial'
+    return 'fixture_only'
+
+
+def discovery_issue_identity_consistent(edition_id, outcome, issue_id, issue_source):
+    """Use the fixture parser's exact issue route for checked discoveries."""
+    from src.acquisition.tldr import _issue_ok
+    if outcome in ('disabled', 'not_checked', 'parse_error'):
+        return issue_id is None and issue_source is None
+    if not isinstance(issue_source, (str, dict)):
+        return False
+    url = issue_source if isinstance(issue_source, str) else issue_source.get('url')
+    if not _issue_ok({'edition_id': edition_id, 'issue_id': issue_id, 'issue_url': url}, edition_id):
+        return False
+    return isinstance(issue_source, str) or issue_source == article_identity(url)
+
+
+def discovery_record(result):
+    """Keep bounded discovery diagnostics, never newsletter text or candidate URLs."""
+    from src.acquisition.catalogue import CATALOGUE_REVISION, EDITION_IDS
+    value = result if isinstance(result, dict) else {}
+    allowed_status = {'disabled', 'fixture_only', 'partial', 'failed'}
+    allowed_outcome = {'disabled', 'candidate', 'candidate_partial', 'valid_empty',
+                       'placement_unresolved', 'parse_error', 'not_checked'}
+    rows = value.get('editions') if isinstance(value.get('editions'), list) else []
+    by_id = {row.get('edition_id'): row for row in rows
+             if isinstance(row, dict) and isinstance(row.get('edition_id'), str) and row['edition_id'] in EDITION_IDS}
+    malformed_rows = len(rows) != len(EDITION_IDS) or [row.get('edition_id') if isinstance(row, dict) else None for row in rows] != list(EDITION_IDS)
+    editions = []
+    invalid = (malformed_rows or type(value.get('schema_version')) is not int or
+               value.get('schema_version') != 1 or
+               type(value.get('catalogue_revision')) is not int or
+               value.get('catalogue_revision') != CATALOGUE_REVISION)
+    for selected in EDITION_IDS:
+        row = by_id.get(selected, {})
+        issue_id = row.get('issue_id')
+        outcome = row.get('outcome')
+        counts_valid = (type(row.get('received')) is int and type(row.get('rejected')) is int and
+            discovery_row_consistent(outcome, row.get('candidates'),
+            row.get('sponsor_excluded'), row.get('placement_unresolved'),
+            row.get('received'), row.get('rejected')))
+        if not counts_valid:
+            invalid = True
+        identity_valid = discovery_issue_identity_consistent(selected, outcome, issue_id, row.get('issue_url'))
+        if not identity_valid:
+            invalid = True
+        editions.append({
+            'edition_id': selected,
+            'outcome': outcome if counts_valid and identity_valid and outcome in allowed_outcome else 'not_checked',
+            'reason': 'inconsistent_outcome_counts' if not counts_valid else 'invalid_issue_identity' if not identity_valid else None,
+            'issue_id': issue_id if isinstance(issue_id, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,80}', issue_id) else None,
+            'issue_source': article_identity(row.get('issue_url')),
+            'received': row['received'] if counts_valid else 0,
+            'rejected': row['rejected'] if counts_valid else 0,
+            'sponsor_excluded': row['sponsor_excluded'] if counts_valid else 0,
+            'placement_unresolved': row['placement_unresolved'] if counts_valid else 0,
+            'candidates': row['candidates'] if counts_valid else 0,
+        })
+    candidates = value.get('candidates')
+    candidate_count = min(3000, len(candidates)) if isinstance(candidates, list) else 0
+    recorded_candidates = sum(row['candidates'] for row in editions)
+    if candidate_count > recorded_candidates or bool(candidate_count) != bool(recorded_candidates):
+        invalid = True
+    status = value.get('status')
+    if not isinstance(status, str) or status not in allowed_status or status != expected_discovery_status(editions):
+        invalid = True
+    return {
+        'catalogue_revision': CATALOGUE_REVISION,
+        'status': ('failed' if not isinstance(status, str) or status not in allowed_status or status == 'disabled' else 'partial') if invalid else status,
+        'reason': 'invalid_discovery_state' if invalid else 'tldr_interface_and_discovery_use_unverified' if status == 'disabled' else None,
+        'candidate_count': candidate_count if not invalid else 0,
+        'editions': editions,
+    }
+
+
 def selection_record(corpus, episode, path, *, provider_attempted=False):
     if isinstance(episode, dict) and 'story_manifest' in episode:
         from src.story_manifest import manifest_from_dict, validate_story_episode

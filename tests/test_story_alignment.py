@@ -57,7 +57,7 @@ class OfflineTests(unittest.TestCase):
         # Guard external boundaries; no provider/audio/ingestion can run by accident.
         for target in ('google.genai.Client', 'src.tts_engine.generate_segment_audio',
                        'src.grounded_chat.call_gemini_llm', 'src.ingestion.ingest_all_domains',
-                       'src.ingestion.fetch_feed_items'):
+                       'src.acquisition.tldr.discover_live'):
             guard = patch(target, side_effect=AssertionError('Unexpected external call'))
             guard.start()
             self.addCleanup(guard.stop)
@@ -398,7 +398,7 @@ class SelectionTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         for target in ('google.genai.Client', 'src.tts_engine.generate_segment_audio',
                        'src.grounded_chat.call_gemini_llm', 'src.ingestion.ingest_all_domains',
-                       'src.ingestion.fetch_feed_items'):
+                       'src.acquisition.tldr.discover_live'):
             guard = patch(target, side_effect=AssertionError('Unexpected external call'))
             guard.start()
             self.addCleanup(guard.stop)

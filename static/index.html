@@ -854,7 +854,7 @@
               <button onclick="triggerManualRun()" id="manual-run-btn" class="tap-target flex-1 py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-xl theme-card-bg border text-slate-200 hover:text-white flex items-center justify-between transition group active:scale-95">
                 <span class="flex items-center gap-2 font-medium text-xs">
                   <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                  <span>Force Re-Fetch Feeds Now</span>
+                  <span>Check Source Readiness</span>
                 </span>
                 <span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>
               </button>
@@ -3276,28 +3276,32 @@
     }
 
     function renderSourceHealth(snapshot, loadFailed = false) {
-      if (snapshot && snapshot.schema_version === 1 && !Array.isArray(snapshot)) latestSourceHealth = snapshot;
+      if (snapshot && (snapshot.schema_version === 1 || snapshot.schema_version === 2) && !Array.isArray(snapshot)) latestSourceHealth = snapshot;
       const health = latestSourceHealth;
-      const names = { healthy: 'Healthy', partial: 'Partially unavailable', unavailable: 'Unavailable', not_checked: 'Not yet checked', cancelled: 'Check cancelled', unknown: 'Unknown' };
+      const discovery = health && health.schema_version === 2;
+      const names = { healthy: 'Healthy', partial: 'Partially unavailable', unavailable: 'Unavailable', not_checked: 'Not yet checked', cancelled: 'Check cancelled', unknown: 'Unknown', disabled: 'Discovery disabled' };
       const summary = document.getElementById('source-health-summary');
       const countsValid = health && Number.isInteger(health.total_sources) && health.total_sources >= 0 && Number.isInteger(health.available_sources) && health.available_sources >= 0 && health.available_sources <= health.total_sources;
-      if (summary) summary.textContent = 'Source health: ' + (health ? (names[health.status] || 'Unknown') : (loadFailed ? 'Unknown — could not be loaded' : 'Not yet checked')) + (countsValid ? ` · ${health.available_sources}/${health.total_sources} sources available` : '');
+      if (summary) summary.textContent = 'Source health: ' + (health ? (discovery && health.status === 'partial' ? 'Discovery partial' : names[health.status] || 'Unknown') : (loadFailed ? 'Unknown — could not be loaded' : 'Not yet checked')) + (countsValid ? ` · ${health.available_sources}/${health.total_sources} ${discovery ? 'editions checked' : 'sources available'}` : '');
       const time = document.getElementById('source-health-time');
       if (time) time.textContent = 'Last captured check: ' + capturedTime(health && health.checked_at);
-      const body = document.getElementById('source-health-body'); if (body) body.textContent = 'Article bodies: Not checked';
+      const body = document.getElementById('source-health-body'); if (body) body.textContent = discovery ? 'Publisher article bodies: Not acquired' : 'Article bodies: Not checked';
       const note = document.getElementById('source-health-note');
-      if (note) note.textContent = loadFailed ? 'Source status could not be loaded. Any displayed check is the last captured snapshot.' : health && health.status === 'cancelled' ? 'Check cancelled; showing the last complete check when available.' : 'Latest captured source check; selected episode coverage is historical and independent.';
+      if (note) note.textContent = loadFailed ? 'Source status could not be loaded. Any displayed check is the last captured snapshot.' : discovery && health.status === 'disabled' ? 'TLDR discovery awaits verified interface and use rights; no live edition or publisher request was made.' : health && health.status === 'cancelled' ? 'Check cancelled; showing the last complete check when available.' : health && health.schema_version === 1 ? 'Historical RSS source check; this does not describe current TLDR discovery readiness.' : 'Latest captured discovery check; selected episode coverage is historical and independent.';
       const details = document.getElementById('source-health-details');
       if (details) {
         details.textContent = '';
-        const outcomes = { available: 'Available', quiet: 'Quiet — no candidates received', unavailable: 'Unavailable', not_checked: 'Not checked' };
+        const outcomes = { available: 'Available', quiet: 'Quiet — no candidates received', unavailable: 'Unavailable', not_checked: 'Not checked', disabled: 'Disabled', candidate: 'Candidates discovered', candidate_partial: 'Candidates with unresolved placement', valid_empty: 'Valid empty issue', placement_unresolved: 'Placement unresolved; no editorial candidate', parse_error: 'Parse failed' };
         const sources = health && Array.isArray(health.sources) ? health.sources.slice(0, 100) : [];
         sources.forEach(source => {
           if (!source || typeof source !== 'object') return;
           const row = document.createElement('li');
           const name = typeof source.name === 'string' ? source.name.slice(0, 120) : 'Source';
           const accepted = Number.isInteger(source.accepted) && source.accepted >= 0 ? source.accepted : 0;
-          row.textContent = `${name} (${DOMAIN_IDS.includes(source.domain) ? source.domain.toUpperCase() : 'Unknown domain'}): ${outcomes[source.outcome] || 'Unknown'} · ${accepted} received` + (source.parse_warning === true ? ' · Parse warning' : '');
+          const sponsors = Number.isInteger(source.sponsor_excluded) && source.sponsor_excluded >= 0 ? source.sponsor_excluded : 0;
+          const unresolved = Number.isInteger(source.placement_unresolved) && source.placement_unresolved >= 0 ? source.placement_unresolved : 0;
+          const group = discovery ? (typeof source.edition_id === 'string' ? source.edition_id : 'Unknown edition') : (DOMAIN_IDS.includes(source.domain) ? source.domain.toUpperCase() : 'Unknown domain');
+          row.textContent = `${name} (${group}): ${outcomes[source.outcome] || 'Unknown'} · ${accepted} ${discovery ? 'discovery candidates' : 'received'}` + (discovery ? ` · ${sponsors} sponsors excluded · ${unresolved} placement unresolved` : '') + (source.parse_warning === true ? ' · Parse warning' : '');
           details.appendChild(row);
         });
       }
@@ -3305,8 +3309,8 @@
       if (banner) {
         const run = health && health.latest_run;
         const empty = run && run.status === 'no_content';
-        banner.textContent = empty ? 'Latest check (' + capturedTime(run.finished_at) + '): No articles available from checked sources. Previous dated episodes remain available in history.' : '';
-        banner.classList[empty ? 'remove' : 'add']('hidden');
+        banner.textContent = empty && !discovery ? 'Latest check (' + capturedTime(run.finished_at) + '): No articles available from checked sources. Previous dated episodes remain available in history.' : '';
+        banner.classList[empty && !discovery ? 'remove' : 'add']('hidden');
       }
     }
 
@@ -3319,13 +3323,14 @@
       if (cancel) cancel.classList[state.running ? 'remove' : 'add']('hidden');
       if (!btn) return;
       if (state.running) {
-        const stage = { checking: 'Scanning feeds', ingesting: 'Ingesting feeds', synthesizing: 'Synthesizing', audio_tts: 'Generating audio' }[state.stage] || 'Processing';
+        const stage = { checking: 'Checking sources', ingesting: 'Checking discovery', synthesizing: 'Synthesizing', audio_tts: 'Generating audio' }[state.stage] || 'Processing';
         btn.textContent = stage + ' (' + (Number.isFinite(state.progress) ? state.progress : 0) + '%)…';
         btn.disabled = true;
       } else {
         const messages = { no_content: 'No articles available from checked sources. History retained.', up_to_date: 'Received articles are already in episode history.', complete: 'Episode ready. Run again', error: 'Pipeline failed. Run again', cancelled: 'Pipeline cancelled. Run again' };
-        btn.textContent = messages[state.stage] || 'Force Re-Fetch Feeds Now';
-        btn.disabled = false;
+        const disabled = state.source_health && state.source_health.schema_version === 2 && state.source_health.status === 'disabled';
+        btn.textContent = disabled ? 'TLDR discovery disabled' : (messages[state.stage] || 'Check Source Readiness');
+        btn.disabled = !!disabled;
       }
     }
 
@@ -3362,7 +3367,7 @@
       // Invalidate them before awaiting the refresh, then fetch a fresh status.
       refreshStatusToken++; refreshStatusPending = false;
       stopStatusPolling();
-      btn.disabled = true; btn.textContent = 'Scanning feeds…';
+      btn.disabled = true; btn.textContent = 'Checking source readiness…';
       try {
         const response = await apiFetch('/api/refresh', { method: 'POST' });
         if (!response.ok) { renderRefreshState({ running: false }); return; }
@@ -3390,7 +3395,7 @@
               cancelBtn.classList.add('hidden');
               cancelBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg> <span>Stop</span>';
             }
-            btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Force Re-Fetch Feeds Now</span></span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
+            btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Check Source Readiness</span></span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
           }, 2000);
         }
       } catch (e) {
@@ -3414,7 +3419,7 @@
         if (cancelBtn) cancelBtn.classList.add('hidden');
         const btn = document.getElementById('manual-run-btn');
         if (btn) {
-          btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Force Re-Fetch Feeds Now</span></span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
+          btn.innerHTML = `<span class="flex items-center gap-2 font-medium text-xs"><svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> <span>Check Source Readiness</span></span><span class="font-mono text-[10px] sm:text-[11px] text-amber-400 font-bold group-hover:text-amber-300">Run</span>`;
         }
       } catch (e) {
         console.error("Error resetting pipeline:", e);
