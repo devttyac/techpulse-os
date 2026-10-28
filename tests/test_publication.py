@@ -224,7 +224,7 @@ class PublicationFixtureTests(unittest.TestCase):
         self.assertEqual(denied.fetch.raw_bytes, raw)
 
     def test_validated_html_and_date_share_one_fetched_representation(self):
-        from src.ingestion import fetch_and_assess_candidate
+        from src.ingestion import fetch_and_assess_candidate, admit_assessed_candidate
         from datetime import datetime
         rules = capture_zone_rules(FIXTURE["timezone"])
         window = frozen_window(datetime.fromisoformat(FIXTURE["run_start_utc"]), rules)
@@ -261,6 +261,10 @@ class PublicationFixtureTests(unittest.TestCase):
                     self.assertEqual(result.publication.local_date.isoformat(), "2026-10-06")
                 else:
                     self.assertEqual(result.publication.reason, "unreviewed_rules")
+                    stored = admit_assessed_candidate(result, "alder-article",
+                        "alder-story", window, rules, object())
+                    self.assertFalse(stored.admitted)
+                    self.assertIsNone(stored.version_id)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from src.acquisition.http import fetch_publisher
 from src.acquisition.html import HtmlExtractionResult, extract_html
 from src.acquisition.readiness import _load_registry
 from src.acquisition.publication import PublicationAssessment, assess_publication, unavailable
+from src.acquisition.types import prepare_complete_unit
 from src.content_availability import DOMAIN_ORDER, LEGACY_SOURCE_NAMES
 from src.provenance import discovery_record
 
@@ -86,6 +87,28 @@ class FetchPublicationCandidate:
     fetch: object | None
     extraction: HtmlExtractionResult | None
     publication: PublicationAssessment
+
+
+@dataclass(frozen=True)
+class StoredCandidateResult:
+    admitted: bool
+    reason: str
+    version_id: str | None = None
+
+
+def admit_assessed_candidate(candidate, profile_id, article_id, window, zone_rules,
+                             evidence_store):
+    """Store only a TP11 complete unit; report denial without a partial save."""
+    prepared = prepare_complete_unit(candidate, profile_id, article_id,
+                                     window, zone_rules)
+    if not prepared.ready:
+        return StoredCandidateResult(False, prepared.reason)
+    try:
+        evidence_store.save(prepared.unit, prepared.raw_representation,
+                            prepared.members)
+    except (ValueError, TypeError, AttributeError):
+        return StoredCandidateResult(False, "store_admission_denied")
+    return StoredCandidateResult(True, prepared.reason, prepared.unit.version_id)
 
 
 async def fetch_and_assess_candidate(url, profile_id, window, zone_rules,

@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.acquisition.readiness import assess_profile_fixture, admit_source_unit, authorize_fetch
 from src.acquisition.html import extract_html
-from src.evidence_contracts import SourceLocator, build_source_unit
+from src.evidence_contracts import CompletionCheck, SourceLocator, build_source_unit
 from test_evidence_contracts import complete_unit
 
 
@@ -235,6 +235,30 @@ class BoundAdmissionTests(unittest.TestCase):
         self.assertEqual(self.assess(self.registry(), unit=wrong).reason, "wrong_body")
         self.assertEqual(self.assess(self.registry(), raw=b"different response").reason,
                          "raw_mismatch")
+
+    def test_html_admission_rejects_non_http_acquisition_mode(self):
+        unit = self.unit()
+        altered = build_source_unit(unit.article_id, unit.source_kind, unit.unit_scope,
+            unit.publication, replace(unit.acquisition, mode="browser"),
+            unit.completion, unit.blocks)
+        self.assertEqual(self.assess(self.registry(), unit=altered).reason,
+                         "unsupported_transport")
+
+    def test_direct_documentation_unit_cannot_claim_unverified_page_set(self):
+        base = self.unit()
+        checks = (CompletionCheck("identity", "passed", "fixture-identity"),
+                  CompletionCheck("page_set", "passed", "invented-page-set"),
+                  CompletionCheck("structure", "passed", "fixture-structure"))
+        completion = replace(base.completion, checks=checks)
+        unit = build_source_unit(base.article_id, "technical_documentation",
+            base.unit_scope, base.publication, base.acquisition, completion, base.blocks)
+        registry = self.registry()
+        record = registry["profiles"][0]
+        record["profile"]["source_kind"] = "technical_documentation"
+        record["profile"]["completeness"]["source_kind"] = "technical_documentation"
+        record["fixture_observation"]["source_kind"] = "technical_documentation"
+        self.assertEqual(self.assess(registry, unit=unit).reason,
+                         "page_set_validator_unavailable")
 
     def test_unavailable_production_structural_validator_denies_dynamic_article(self):
         registry = self.registry()
