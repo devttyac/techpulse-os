@@ -255,6 +255,10 @@ def admit_source_unit(unit, raw_representation, members=()) -> AdmissionDecision
             or any(type(body) is not bytes or _sha(body) != member.sha256
                    for body, member in zip(members, unit.acquisition.members))):
         return _admission("incomplete_unit")
+    if unit.source_kind == "technical_documentation":
+        # The HTML structural slot checks one page only. A page-set member and
+        # context validator is required before this kind can enter storage.
+        return _admission("page_set_validator_unavailable")
 
     registry = _load_registry()
     if registry is None:
@@ -283,6 +287,10 @@ def admit_source_unit(unit, raw_representation, members=()) -> AdmissionDecision
             or not _text_matches(record.get("fixture_body_text"),
                                  profile["completeness"]["body_sha256"])):
         return _admission("bound_evidence_mismatch")
+    if (unit.source_kind == "publisher_article"
+            and profile["connector"]["id"] == _CONTROLLED_HTTP_CONNECTOR
+            and unit.acquisition.mode != "controlled_http"):
+        return _admission("unsupported_transport")
     if (unit.acquisition.client != profile["connector"]["id"]
             or unit.acquisition.configuration_revision != profile["connector"]["revision"]
             or unit.acquisition.extraction_policy_revision

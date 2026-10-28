@@ -29,7 +29,7 @@ jobs:
 
       - name: Syntax & PyCompile Check
         run: |
-          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py src/story_manifest.py src/state_store.py src/operations.py src/settings.py src/run_coordinator.py src/evidence_contracts.py src/evidence_store.py src/legacy_reader.py src/lifecycle.py src/acquisition/readiness.py src/acquisition/catalogue.py src/acquisition/tldr.py src/acquisition/http.py src/acquisition/html.py src/acquisition/html_validation.py src/acquisition/publication.py
+          python -m py_compile src/main.py src/ingestion.py src/synthesizer.py src/tts_engine.py src/grounded_chat.py src/provenance.py src/content_availability.py src/story_manifest.py src/state_store.py src/operations.py src/settings.py src/run_coordinator.py src/evidence_contracts.py src/evidence_store.py src/legacy_reader.py src/lifecycle.py src/acquisition/readiness.py src/acquisition/catalogue.py src/acquisition/tldr.py src/acquisition/http.py src/acquisition/html.py src/acquisition/html_validation.py src/acquisition/publication.py src/acquisition/types.py
 
       - name: Run Complete Source Contract Tests
         run: python tests/test_evidence_contracts.py
@@ -48,6 +48,9 @@ jobs:
 
       - name: Run Publication Date Fixture Tests
         run: python tests/test_publication.py
+
+      - name: Run Typed Source Admission Fixture Tests
+        run: python tests/test_acquisition_types.py
 
       - name: Run TLDR Discovery Contract Tests
         run: python tests/test_tldr_discovery.py

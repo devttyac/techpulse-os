@@ -90,6 +90,18 @@ class CompleteSourceStoreTests(unittest.TestCase):
                 EvidenceStore(state).save(unit, RAW_BYTES)
             self.assertEqual(state.list_artifact_ids(), [])
 
+    def test_typed_unready_candidate_cannot_create_a_source_artifact(self):
+        from src.acquisition.publication import unavailable
+        from src.ingestion import FetchPublicationCandidate, admit_assessed_candidate
+        candidate = FetchPublicationCandidate("preview", None, None,
+                                              unavailable("preview"))
+        with StateStore.create(self.root) as state:
+            result = admit_assessed_candidate(candidate, "alder-article", "article-1",
+                                              None, None, EvidenceStore(state))
+            self.assertFalse(result.admitted)
+            self.assertEqual(result.reason, "preview")
+            self.assertEqual(state.list_artifact_ids(), [])
+
     def test_tampered_rights_evidence_denies_save_before_any_artifact(self):
         unit = complete_unit()
         with StateStore.create(self.root) as state:
