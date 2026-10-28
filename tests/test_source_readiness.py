@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.acquisition.readiness import assess_profile_fixture, admit_source_unit
+from src.acquisition.readiness import assess_profile_fixture, admit_source_unit, authorize_fetch
 from src.evidence_contracts import build_source_unit
 from test_evidence_contracts import complete_unit
 
@@ -132,6 +132,33 @@ class BoundAdmissionTests(unittest.TestCase):
             "fixture_observation": deepcopy(FIXTURE["observation"])
         }
         return {"schema_version": 1, "synthetic_test_only": True, "profiles": [record]}
+
+    def test_fetch_authorization_uses_bound_registry_and_exact_host(self):
+        with tempfile.TemporaryDirectory(prefix="tp44-synthetic-") as folder:
+            path = Path(folder) / "profiles.json"
+            path.write_text(json.dumps(self.registry()))
+            with patch("src.acquisition.readiness._REGISTRY_PATH", path):
+                allowed = authorize_fetch("alder-article", "alder.example")
+                wrong_host = authorize_fetch("alder-article", "other.example")
+        self.assertTrue(allowed.ready)
+        self.assertEqual(allowed.profile_revision, "profile-3")
+        self.assertEqual(allowed.client, "controlled-http-html")
+        self.assertFalse(wrong_host.ready)
+        self.assertEqual(wrong_host.reason, "unregistered_profile")
+
+    def test_fetch_authorization_rejects_non_http_connector_even_with_consistent_bindings(self):
+        registry = self.registry()
+        record = registry["profiles"][0]
+        record["profile"]["connector"]["id"] = "reviewed-browser"
+        record["current_binding"]["connector_id"] = "reviewed-browser"
+        record["fixture_observation"]["connector_id"] = "reviewed-browser"
+        with tempfile.TemporaryDirectory(prefix="tp44-synthetic-") as folder:
+            path = Path(folder) / "profiles.json"
+            path.write_text(json.dumps(registry))
+            with patch("src.acquisition.readiness._REGISTRY_PATH", path):
+                result = authorize_fetch("alder-article", "alder.example")
+        self.assertFalse(result.ready)
+        self.assertEqual(result.reason, "unsupported_transport")
 
     def structural_result(self):
         article = FIXTURE["admission_article"]

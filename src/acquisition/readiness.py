@@ -24,6 +24,7 @@ _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _REQUIRED_ACTIONS = frozenset({"automated_discovery", "full_body_retrieval", "storage", "processing"})
 _SOURCE_KINDS = frozenset({"publisher_article", "technical_documentation", "research_paper",
                            "repository", "discussion", "publisher_transcript"})
+_CONTROLLED_HTTP_CONNECTOR = "controlled-http-html"
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,50 @@ class AdmissionDecision:
     admitted: bool
     reason: str
     version_id: str | None = None
+
+
+@dataclass(frozen=True)
+class FetchProfileDecision:
+    ready: bool
+    reason: str
+    profile_revision: str | None = None
+    client: str | None = None
+    client_revision: str | None = None
+
+
+def authorize_fetch(profile_id: str, host: str) -> FetchProfileDecision:
+    """Resolve a publisher request against the fixed, reviewed registry.
+
+    The caller cannot supply a rights assertion or a profile object. This
+    authorizes only an HTTP attempt; extraction and admission remain separate.
+    """
+    registry = _load_registry()
+    if registry is None:
+        return FetchProfileDecision(False, "registry_unavailable")
+    matches = [record for record in registry["profiles"]
+               if type(record) is dict and type(record.get("profile")) is dict
+               and record["profile"].get("profile_id") == profile_id
+               and record["profile"].get("publisher_host") == host]
+    if len(matches) != 1:
+        return FetchProfileDecision(False, "unregistered_profile")
+    record = matches[0]
+    profile = record["profile"]
+    decision = assess_profile_fixture(profile, record.get("current_binding"),
+                                      record.get("fixture_observation"))
+    if not decision.fixture_policy_passed:
+        return FetchProfileDecision(False, decision.reason)
+    if profile["connector"]["id"] != _CONTROLLED_HTTP_CONNECTOR:
+        return FetchProfileDecision(False, "unsupported_transport")
+    if (not _text_matches(record.get("rights_document"),
+                          profile["rights"]["evidence_sha256"])
+            or not _text_matches(record.get("fixture_raw_text"),
+                                 profile["completeness"]["raw_sha256"])
+            or not _text_matches(record.get("fixture_body_text"),
+                                 profile["completeness"]["body_sha256"])):
+        return FetchProfileDecision(False, "bound_evidence_mismatch")
+    return FetchProfileDecision(True, "ready", profile["revision"],
+                                profile["connector"]["id"],
+                                profile["connector"]["revision"])
 
 
 def _decision(reason: str) -> ProfileFixtureDecision:
