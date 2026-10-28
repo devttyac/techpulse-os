@@ -473,7 +473,13 @@ def _publish_source_check(run):
 def _finish_source_run(run):
     snapshot = dict(source_health)
     if run.data["stages"]["ingestion"]["status"] != "completed":
-        attempt = build_source_health(run.data["ingestion"], run.data["run_id"], run.data["finished_at"])
+        discovery = run.data["ingestion"].get("discovery")
+        if isinstance(discovery, dict) and isinstance(discovery.get("editions"), list):
+            attempt = build_source_health(run.data["ingestion"], run.data["run_id"], run.data["finished_at"])
+        else:
+            # Old feed diagnostics cannot be relabeled as a TLDR edition check.
+            attempt = empty_source_health("unknown")
+            attempt["run_id"] = run.data["run_id"]
         snapshot["status"] = "cancelled" if run.data["status"] == "cancelled" else "unknown"
         snapshot["last_attempt_at"] = run.data["finished_at"]
         snapshot["last_attempt"] = {key: attempt[key] for key in ("run_id", "checked_at", "status", "available_sources", "sources")}
@@ -626,7 +632,7 @@ async def run_daily_pipeline(*, run_record=None):
     pipeline_state["running"] = True
     pipeline_state["stage"] = "checking"
     pipeline_state["progress"] = 15
-    pipeline_state["message"] = "Checking configured RSS sources for available articles..."
+    pipeline_state["message"] = "Checking source discovery readiness..."
     pipeline_state["error"] = None
 
     try:
@@ -636,14 +642,30 @@ async def run_daily_pipeline(*, run_record=None):
         # Keep counts truthful even when an existing caller supplies a custom
         # ingestion function which does not populate optional feed diagnostics.
         run.data["ingestion"]["per_domain"] = {d: len(items) for d, items in corpus.items()}
-        _publish_source_check(run)
+        discovery = run.data["ingestion"].get("discovery")
+        discovery_status = discovery.get("status") if isinstance(discovery, dict) and isinstance(discovery.get("status"), str) else None
+        # TP07 has discovery candidates only. There is no accepted complete-body
+        # admission path yet, including for callers that omit diagnostics.
+        if discovery_status == "disabled":
+            _publish_source_check(run)
+        terminal_status = "failed"
+        terminal_error = ("source_not_ready" if discovery_status == "disabled" else
+                          "source_discovery_failed" if discovery_status == "failed" else
+                          "source_not_admitted")
+        message = ("TLDR discovery is disabled pending interface and use-rights verification." if discovery_status == "disabled" else
+                   "TLDR discovery failed; no publisher articles were admitted." if discovery_status == "failed" else
+                   "Discovery candidates require complete publisher article admission before episode creation.")
+        pipeline_state.update(stage="error", progress=100,
+            message=message + " Previous episodes remain available in history.",
+            error=terminal_error, last_run=datetime.now(timezone.utc).isoformat())
+        return
         availability = build_content_availability(corpus, run.data["ingestion"])
         run.data["content_availability"] = availability
         if not any(state["candidate_count"] for state in availability["domains"].values()):
             feeds = run.data["ingestion"].get("feeds", [])
             expected_ids = {f"{domain}:{i}" for domain, values in DOMAIN_FEEDS.items() for i in range(len(values))}
             checked_ids = {feed.get("feed_id") for feed in feeds if isinstance(feed, dict)}
-            all_failed = checked_ids == expected_ids and all(feed.get("outcome") in SOURCE_FAILURES for feed in feeds)
+            all_failed = bool(expected_ids) and checked_ids == expected_ids and all(feed.get("outcome") in SOURCE_FAILURES for feed in feeds)
             terminal_status = "failed" if all_failed else "no_content"
             terminal_error = "sources_unavailable" if all_failed else None
             pipeline_state.update(stage="error" if all_failed else "no_content", progress=100,

@@ -19,7 +19,7 @@ APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
-from src import ingestion  # noqa: E402
+from src.acquisition.tldr import discover_from_fixtures  # noqa: E402
 from src import synthesizer  # noqa: E402
 from src.synthesizer import DOMAIN_ORDER, enforce_corpus_urls  # noqa: E402
 
@@ -256,38 +256,18 @@ def test_new_selection_uses_source_owned_citations_without_url_repairs():
     assert synthesizer.validate_synthesis(result)[0]
 
 
-# --- ingestion --------------------------------------------------------------
+# --- discovery candidate URL boundary --------------------------------------
 
-class _FakeFeedResponse:
-    status_code = 200
-
-    def __init__(self, text):
-        self.text = text
-
-
-class _FakeClient:
-    def __init__(self, text):
-        self._text = text
-
-    async def get(self, url, **kwargs):
-        return _FakeFeedResponse(self._text)
-
-
-def _rss(links):
-    items = "".join(
-        f"<item><title>Item {i}</title><link>{l}</link><description>d</description></item>"
-        for i, l in enumerate(links)
-    )
-    return f'<?xml version="1.0"?><rss version="2.0"><channel><title>t</title>{items}</channel></rss>'
-
-
-def _ingest(links):
-    feed = {"name": "Test Feed", "url": "https://feed.example.test/rss"}
-    return asyncio.run(ingestion.fetch_feed_items(_FakeClient(_rss(links)), "ai", feed))
+def _discover(links):
+    issue = {"edition_id": "ai", "issue_id": "2026-10-28",
+             "issue_url": "https://tldr.tech/ai/issues/2026-10-28",
+             "links": [{"url": value, "title": "Fixture article", "placement": "editorial"}
+                       for value in links]}
+    return discover_from_fixtures({"ai": issue})["candidates"]
 
 
 def test_ingestion_rejects_javascript_link_and_keeps_https():
-    items = _ingest([JS_URL, "https://ok.example.test/a"])
+    items = _discover([JS_URL, "https://ok.example.test/a"])
     urls = [i["url"] for i in items]
     assert JS_URL not in urls
     assert urls == ["https://ok.example.test/a"], urls
@@ -295,7 +275,7 @@ def test_ingestion_rejects_javascript_link_and_keeps_https():
 
 def test_ingestion_rejects_3000_char_link():
     long_link = "https://ok.example.test/" + "a" * 3000
-    items = _ingest([long_link, "https://ok.example.test/b"])
+    items = _discover([long_link, "https://ok.example.test/b"])
     urls = [i["url"] for i in items]
     assert long_link not in urls
     assert urls == ["https://ok.example.test/b"], urls
@@ -303,20 +283,18 @@ def test_ingestion_rejects_3000_char_link():
 
 def test_ingestion_rejects_other_unsafe_links():
     bad = ["data:text/html,x", "file:///etc/passwd", "ftp://ok.example.test/x", "//ok.example.test/x"]
-    items = _ingest(bad)
+    items = _discover(bad)
     assert items == [], [i["url"] for i in items]
 
 
 def test_is_safe_link_rejects_hostless_and_non_string():
-    # feedparser rewrites some hostless links before our check, so exercise
-    # the predicate directly for those shapes.
     for bad in ("https://", "https:///nohost", "http://:80/x", "", None, 5, b"https://a.test"):
-        assert ingestion.is_safe_link(bad) is False, f"expected rejection of {bad!r}"
-    assert ingestion.is_safe_link("https://a.test/x") is True
+        assert _discover([bad]) == [], f"expected rejection of {bad!r}"
+    assert [item['url'] for item in _discover(["https://a.test/x"])] == ["https://a.test/x"]
 
 
 def test_ingestion_keeps_normal_http_and_https_links():
-    items = _ingest(["https://ok.example.test/a", "http://ok.example.test/b"])
+    items = _discover(["https://ok.example.test/a", "http://ok.example.test/b"])
     assert [i["url"] for i in items] == ["https://ok.example.test/a", "http://ok.example.test/b"]
 
 
@@ -325,28 +303,13 @@ def test_ingestion_link_at_2048_chars_kept_and_2049_rejected():
     at_limit = prefix + "a" * (2048 - len(prefix))
     over = prefix + "b" * (2049 - len(prefix))
     assert len(at_limit) == 2048 and len(over) == 2049
-    items = _ingest([at_limit, over])
+    items = _discover([at_limit, over])
     assert [i["url"] for i in items] == [at_limit]
 
 
-def test_ingestion_logs_rejection_with_truncated_value():
-    import logging
-
-    records = []
-
-    class _H(logging.Handler):
-        def emit(self, record):
-            records.append(record.getMessage())
-
-    h = _H()
-    ingestion.logger.addHandler(h)
-    try:
-        _ingest(["https://ok.example.test/" + "z" * 3000])
-    finally:
-        ingestion.logger.removeHandler(h)
-    msgs = [m for m in records if "Test Feed" in m]
-    assert msgs, f"no rejection log naming the source: {records}"
-    assert all(len(m) < 400 for m in msgs), "offending value not truncated in log"
+def test_rejected_link_does_not_enter_discovery_result():
+    result = _discover(["https://ok.example.test/" + "z" * 3000])
+    assert result == [], result
 
 
 def test_explicit_domain_sources_cannot_cross_middle_gap():

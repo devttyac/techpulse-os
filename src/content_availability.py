@@ -2,6 +2,18 @@
 DOMAIN_ORDER = ('ai', 'cloud', 'data', 'sec', 'devops', 'arch', 'finops', 'gov')
 SOURCE_FAILURES = frozenset({'http_error', 'failed', 'parse_error'})
 
+# Historical v1 source-health identities only. No URL or fetch path is retained.
+LEGACY_SOURCE_NAMES = {
+    'ai': ('Simon Willison (AI Architecture)', 'OpenAI News', 'Hugging Face'),
+    'cloud': ('Microsoft Azure Architecture', 'AWS Architecture Blog', 'Google Cloud Blog'),
+    'data': ('Microsoft Fabric Blog', 'Databricks Blog'),
+    'sec': ('Cloudflare Engineering', 'CNCF Security', 'Krebs on Security'),
+    'devops': ('Kubernetes Official Blog', 'SRE Weekly'),
+    'arch': ('Martin Fowler', 'InfoQ Architecture'),
+    'finops': ('FinOps Foundation', 'AWS Compute Blog'),
+    'gov': ('NIST AI & Cybersecurity',),
+}
+
 
 def build_content_availability(corpus, diagnostics=None):
     """Keep eight status panels independently of the active content count."""
@@ -53,19 +65,23 @@ import tempfile
 from datetime import datetime
 
 MAX_HEALTH_BYTES = 64 * 1024
-HEALTH_STATUSES = frozenset({'not_checked', 'healthy', 'partial', 'unavailable', 'cancelled', 'unknown'})
+HEALTH_STATUSES = frozenset({'not_checked', 'healthy', 'partial', 'unavailable', 'cancelled', 'unknown', 'disabled'})
+LEGACY_HEALTH_STATUSES = HEALTH_STATUSES - {'disabled'}
 RUN_STATUSES = frozenset({'no_content', 'completed', 'failed', 'cancelled', 'skipped'})
 SOURCE_OUTCOMES = frozenset({'available', 'quiet', 'unavailable', 'not_checked'})
 
 
 def _catalogue():
-    from src.ingestion import DOMAIN_FEEDS
-    return [(f'{domain}:{i}', domain, feed['name']) for domain, feeds in DOMAIN_FEEDS.items()
-            for i, feed in enumerate(feeds)]
+    return [(f'{domain}:{i}', domain, name) for domain, names in LEGACY_SOURCE_NAMES.items()
+            for i, name in enumerate(names)]
 
 
 def _count(value):
     return min(5, max(0, value)) if type(value) is int else 0
+
+
+def _discovery_count(value):
+    return min(500, max(0, value)) if type(value) is int else 0
 
 
 def _identifier(value):
@@ -84,8 +100,27 @@ def _timestamp(value):
 
 
 def empty_source_health(status='not_checked'):
-    return {'schema_version': 1, 'check_id': None, 'run_id': None, 'checked_at': None,
+    from src.acquisition.catalogue import CATALOGUE_REVISION, catalogue
+    sources = catalogue()
+    return {'schema_version': 2, 'catalogue_revision': CATALOGUE_REVISION,
+            'check_id': None, 'run_id': None, 'checked_at': None,
             'status': status if status in HEALTH_STATUSES else 'unknown',
+            'reason': None,
+            'available_sources': 0, 'total_sources': len(sources),
+            'body_acquisition': 'not_checked',
+            'sources': [{'name': source['name'], 'edition_id': source['id'],
+                         'outcome': 'not_checked', 'accepted': 0,
+                         'issue_id': None, 'issue_source': None,
+                         'sponsor_excluded': 0, 'placement_unresolved': 0,
+                         'reason': None,
+                         'parse_warning': False}
+                        for source in sources],
+            'latest_run': None, 'last_attempt_at': None, 'last_completed_at': None}
+
+
+def _empty_legacy_source_health(status='not_checked'):
+    return {'schema_version': 1, 'check_id': None, 'run_id': None, 'checked_at': None,
+            'status': status if status in LEGACY_HEALTH_STATUSES else 'unknown',
             'available_sources': 0, 'total_sources': len(_catalogue()),
             'body_acquisition': 'not_checked',
             'sources': [{'name': name, 'domain': domain, 'outcome': 'not_checked',
@@ -111,12 +146,14 @@ def _safe_sources(values):
 
 
 def sanitize_source_health(value):
+    if isinstance(value, dict) and type(value.get('schema_version')) is int and value['schema_version'] == 2:
+        return _sanitize_discovery_health(value)
     if not isinstance(value, dict) or type(value.get('schema_version')) is not int or value.get('schema_version') != 1:
         return empty_source_health('unknown')
-    result = empty_source_health('unknown')
+    result = _empty_legacy_source_health('unknown')
     result.update(check_id=_identifier(value.get('check_id')), run_id=_identifier(value.get('run_id')),
                   checked_at=_timestamp(value.get('checked_at')),
-                  status=value.get('status') if value.get('status') in HEALTH_STATUSES else 'unknown',
+                  status=value.get('status') if isinstance(value.get('status'), str) and value['status'] in LEGACY_HEALTH_STATUSES else 'unknown',
                   sources=_safe_sources(value.get('sources')),
                   last_attempt_at=_timestamp(value.get('last_attempt_at')),
                   last_completed_at=_timestamp(value.get('last_completed_at')))
@@ -145,8 +182,153 @@ def sanitize_source_health(value):
     return result
 
 
+def _sanitize_discovery_health(value):
+    from src.acquisition.catalogue import CATALOGUE_REVISION, EDITION_IDS
+    from src.provenance import discovery_row_consistent, discovery_issue_identity_consistent
+    result = empty_source_health('unknown')
+    if value.get('catalogue_revision') != CATALOGUE_REVISION:
+        return result
+    rows = value.get('sources')
+    if not isinstance(rows, list) or len(rows) != len(EDITION_IDS):
+        return result
+    allowed = {'disabled', 'candidate', 'candidate_partial', 'valid_empty',
+               'placement_unresolved', 'parse_error', 'not_checked'}
+    for index, (source, selected) in enumerate(zip(result['sources'], EDITION_IDS)):
+        row = rows[index]
+        if not isinstance(row, dict) or row.get('edition_id') != selected or not isinstance(row.get('outcome'), str) or row['outcome'] not in allowed:
+            return result
+        if not discovery_row_consistent(row['outcome'], row.get('accepted'),
+                                        row.get('sponsor_excluded'), row.get('placement_unresolved')):
+            result['reason'] = 'inconsistent_outcome_counts'
+            return result
+        if not discovery_issue_identity_consistent(selected, row['outcome'],
+                                                    row.get('issue_id'), row.get('issue_source')):
+            result['reason'] = 'invalid_issue_identity'
+            return result
+        source['outcome'] = row['outcome']
+        source['issue_id'] = row.get('issue_id')
+        source['issue_source'] = row.get('issue_source')
+        source['accepted'] = _discovery_count(row.get('accepted'))
+        source['sponsor_excluded'] = _discovery_count(row.get('sponsor_excluded'))
+        source['placement_unresolved'] = _discovery_count(row.get('placement_unresolved'))
+        source['reason'] = row.get('reason') if row.get('reason') == 'inconsistent_outcome_counts' else None
+    result.update(check_id=_identifier(value.get('check_id')), run_id=_identifier(value.get('run_id')),
+                  checked_at=_timestamp(value.get('checked_at')),
+                  last_attempt_at=_timestamp(value.get('last_attempt_at')),
+                  last_completed_at=_timestamp(value.get('last_completed_at')))
+    completed = sum(s['outcome'] in ('candidate', 'candidate_partial', 'valid_empty') for s in result['sources'])
+    failed = sum(s['outcome'] == 'parse_error' for s in result['sources'])
+    unresolved = any(s['outcome'] in ('candidate_partial', 'placement_unresolved') for s in result['sources'])
+    disabled = sum(s['outcome'] == 'disabled' for s in result['sources'])
+    result['available_sources'] = completed
+    if disabled == len(EDITION_IDS) and not result['checked_at']:
+        result['status'] = 'disabled'
+    elif unresolved and result['checked_at']:
+        result['status'] = 'partial'
+    elif completed == len(EDITION_IDS) and result['checked_at']:
+        result['status'] = 'healthy'
+    elif failed == len(EDITION_IDS) and result['checked_at']:
+        result['status'] = 'unavailable'
+    elif (completed or failed) and result['checked_at']:
+        result['status'] = 'partial'
+    elif all(s['outcome'] == 'not_checked' for s in result['sources']) and not result['checked_at']:
+        result['status'] = 'not_checked' if value.get('status') == 'not_checked' else 'unknown'
+    if value.get('status') in ('cancelled', 'unknown') and result['last_attempt_at']:
+        result['status'] = value['status']
+    if value.get('status') != result['status']:
+        result = empty_source_health('unknown')
+        result['reason'] = ('invalid_disabled_diagnostic' if value.get('status') == 'disabled' or
+                            any(row.get('outcome') == 'disabled' for row in rows) else 'invalid_discovery_state')
+        return result
+    if value.get('reason') == 'invalid_discovery_state':
+        result['reason'] = 'invalid_discovery_state'
+    attempt = value.get('last_attempt')
+    if isinstance(attempt, dict) and isinstance(attempt.get('sources'), list) and len(attempt['sources']) == len(EDITION_IDS):
+        attempt_sources = []
+        for index, selected in enumerate(EDITION_IDS):
+            row = attempt['sources'][index]
+            if (not isinstance(row, dict) or row.get('edition_id') != selected or
+                    not isinstance(row.get('outcome'), str) or row['outcome'] not in allowed):
+                break
+            if not discovery_row_consistent(row['outcome'], row.get('accepted'),
+                                            row.get('sponsor_excluded'), row.get('placement_unresolved')):
+                break
+            attempt_sources.append({'name': result['sources'][index]['name'], 'edition_id': selected,
+                                    'outcome': row['outcome'], 'accepted': _discovery_count(row.get('accepted')),
+                                    'sponsor_excluded': _discovery_count(row.get('sponsor_excluded')),
+                                    'placement_unresolved': _discovery_count(row.get('placement_unresolved')),
+                                    'reason': row.get('reason') if row.get('reason') == 'inconsistent_outcome_counts' else None,
+                                    'parse_warning': False})
+        if len(attempt_sources) == len(EDITION_IDS):
+            result['last_attempt'] = {'run_id': _identifier(attempt.get('run_id')),
+                                      'checked_at': _timestamp(attempt.get('checked_at')),
+                                      'status': attempt.get('status') if attempt.get('status') in ('cancelled', 'unknown') else 'unknown',
+                                      'available_sources': sum(s['outcome'] in ('candidate', 'candidate_partial', 'valid_empty') for s in attempt_sources),
+                                      'sources': attempt_sources}
+    latest = value.get('latest_run')
+    if isinstance(latest, dict) and latest.get('status') in RUN_STATUSES:
+        result['latest_run'] = {'status': latest['status'], 'finished_at': _timestamp(latest.get('finished_at')),
+                                'episode_id': _identifier(latest.get('episode_id'))}
+    return result
+
+
 def build_source_health(diagnostics, run_id, checked_at):
-    result = empty_source_health()
+    if isinstance(diagnostics, dict) and isinstance(diagnostics.get('discovery'), dict):
+        from src.acquisition.catalogue import EDITION_IDS
+        from src.provenance import (article_identity, discovery_issue_identity_consistent,
+                                    discovery_row_consistent, expected_discovery_status)
+        discovery = diagnostics['discovery']
+        result = empty_source_health()
+        rows = discovery.get('editions')
+        if (not isinstance(rows, list) or len(rows) != len(EDITION_IDS) or
+                [row.get('edition_id') if isinstance(row, dict) else None for row in rows] != list(EDITION_IDS)):
+            result['status'] = 'unknown'
+            result['reason'] = 'invalid_disabled_diagnostic' if discovery.get('status') == 'disabled' else 'invalid_discovery_state'
+            return result
+        if discovery.get('reason') == 'invalid_discovery_state':
+            result['status'] = 'unknown'
+            result['reason'] = 'invalid_discovery_state'
+            return result
+        for row in rows:
+            if not discovery_row_consistent(row.get('outcome'), row.get('candidates'),
+                                            row.get('sponsor_excluded'), row.get('placement_unresolved'),
+                                            row.get('received'), row.get('rejected')):
+                result['status'] = 'unknown'
+                result['reason'] = 'inconsistent_outcome_counts'
+                return result
+            source_identity = row.get('issue_source', row.get('issue_url'))
+            if not discovery_issue_identity_consistent(row['edition_id'], row.get('outcome'),
+                                                        row.get('issue_id'), source_identity):
+                result['status'] = 'unknown'
+                result['reason'] = 'invalid_issue_identity'
+                return result
+        if discovery.get('reason') == 'invalid_discovery_state' or discovery.get('status') != expected_discovery_status(rows):
+            result['status'] = 'unknown'
+            result['reason'] = 'invalid_disabled_diagnostic' if discovery.get('status') == 'disabled' else 'invalid_discovery_state'
+            return result
+        if discovery.get('status') == 'disabled':
+            for source in result['sources']:
+                source['outcome'] = 'disabled'
+            result['status'] = 'disabled'
+            return result
+        by_id = {row.get('edition_id'): row for row in rows
+                 if isinstance(row, dict) and isinstance(row.get('edition_id'), str)}
+        for source in result['sources']:
+            row = by_id.get(source['edition_id'], {})
+            source['outcome'] = row.get('outcome') if row.get('outcome') in ('candidate', 'candidate_partial', 'valid_empty', 'placement_unresolved', 'parse_error') else 'not_checked'
+            source['issue_id'] = row.get('issue_id')
+            source['issue_source'] = row.get('issue_source') or article_identity(row.get('issue_url'))
+            source['accepted'] = _discovery_count(row.get('candidates'))
+            source['sponsor_excluded'] = _discovery_count(row.get('sponsor_excluded'))
+            source['placement_unresolved'] = _discovery_count(row.get('placement_unresolved'))
+            source['reason'] = row.get('reason') if row.get('reason') == 'inconsistent_outcome_counts' else None
+        result['status'] = {'fixture_only': 'healthy', 'partial': 'partial',
+                            'failed': 'unavailable'}[discovery['status']]
+        result.update(run_id=_identifier(run_id), check_id=_identifier(run_id),
+                      checked_at=_timestamp(checked_at), last_attempt_at=_timestamp(checked_at),
+                      last_completed_at=_timestamp(checked_at))
+        return _sanitize_discovery_health(result)
+    result = _empty_legacy_source_health()
     feeds = diagnostics.get('feeds', []) if isinstance(diagnostics, dict) else []
     feeds = feeds if isinstance(feeds, list) else []
     by_id = {feed.get('feed_id'): feed for feed in feeds if isinstance(feed, dict)
