@@ -13,7 +13,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.acquisition.readiness import assess_profile_fixture, admit_source_unit, authorize_fetch
-from src.evidence_contracts import build_source_unit
+from src.acquisition.html import extract_html
+from src.evidence_contracts import SourceLocator, build_source_unit
 from test_evidence_contracts import complete_unit
 
 
@@ -242,7 +243,59 @@ class BoundAdmissionTests(unittest.TestCase):
             path.write_text(json.dumps(registry))
             with patch("src.acquisition.readiness._REGISTRY_PATH", path):
                 result = admit_source_unit(self.unit(), b"publisher response", ())
-        self.assertEqual(result.reason, "structural_validator_unavailable")
+        self.assertEqual(result.reason, "structural_validation_failed")
+
+    def test_actual_html_validator_accepts_only_complete_invented_dom(self):
+        cases = json.loads((Path(__file__).parent / "fixtures" /
+                            "html_extraction_cases.json").read_text())
+        raw = cases["complete"].encode()
+        extracted = extract_html(raw, cases["source_url"], cases["rules"])
+        self.assertEqual(extracted.reason, "validated")
+        base = complete_unit()
+        recipe = replace(base.acquisition, client="controlled-http-html",
+                         configuration_revision="connector-2",
+                         raw_representation_sha256=hashlib.sha256(raw).hexdigest())
+        body = "\n".join(block.text for block in extracted.blocks).encode()
+        completion = replace(base.completion, profile_revision="profile-3",
+                             represented_body_sha256=hashlib.sha256(body).hexdigest())
+        publication = replace(base.publication, source_url=cases["source_url"])
+        unit = build_source_unit(base.article_id, base.source_kind, base.unit_scope,
+                                 publication, recipe, completion, extracted.blocks)
+        registry = self.registry()
+        registry["profiles"][0]["profile"]["html_rules"] = cases["rules"]
+        with tempfile.TemporaryDirectory(prefix="tp09-synthetic-") as folder:
+            path = Path(folder) / "profiles.json"
+            path.write_text(json.dumps(registry))
+            with patch("src.acquisition.readiness._REGISTRY_PATH", path):
+                accepted = admit_source_unit(unit, raw, ())
+                denied = admit_source_unit(unit, cases["preview"].encode(), ())
+        self.assertEqual(accepted.reason, "admitted_synthetic_fixture")
+        self.assertEqual(denied.reason, "raw_mismatch")
+
+        bad_locator = list(extracted.blocks)
+        bad_locator[0] = replace(bad_locator[0], source_locator=SourceLocator(
+            "html", {"selector": "/html/body/article/div/p[99]"}))
+        bad_list = list(extracted.blocks)
+        for index in (4, 5):
+            bad_list[index] = replace(bad_list[index], structure=replace(
+                bad_list[index].structure, list_id="wrong-list"))
+        bad_table = list(extracted.blocks)
+        grid = bad_table[7].structure
+        cells = list(grid.cells)
+        cells[0] = replace(cells[0], role="data")
+        bad_table[7] = replace(bad_table[7], structure=replace(grid, cells=tuple(cells)))
+        for name, changed in (("locator", bad_locator), ("list", bad_list),
+                              ("table", bad_table)):
+            with self.subTest(name=name):
+                altered = build_source_unit(base.article_id, base.source_kind,
+                                            base.unit_scope, publication, recipe,
+                                            completion, tuple(changed))
+                with tempfile.TemporaryDirectory(prefix="tp09-synthetic-") as folder:
+                    path = Path(folder) / "profiles.json"
+                    path.write_text(json.dumps(registry))
+                    with patch("src.acquisition.readiness._REGISTRY_PATH", path):
+                        decision = admit_source_unit(altered, raw, ())
+                self.assertEqual(decision.reason, "structural_validation_failed")
 
     def test_stale_binding_is_denied(self):
         registry = self.registry()
